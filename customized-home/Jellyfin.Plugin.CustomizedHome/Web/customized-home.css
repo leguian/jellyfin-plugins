@@ -503,3 +503,128 @@
     opacity: 0.6;
     padding: 2em 1em;
 }
+
+/* ---------- Per-section display formats ---------- */
+/* Card widths mirror jellyfin-web card.scss (overflow cards) so a forced shape keeps the native sizing. */
+.ch-container {
+    --ch-w-portrait: 40vw;
+    --ch-w-landscape: 72vw;
+    --ch-w-square: 40vw;
+}
+
+@media (min-width: 25em) {
+    .ch-container { --ch-w-portrait: 31.2vw; }
+}
+
+@media (min-width: 35em) {
+    .ch-container { --ch-w-square: 31.2vw; --ch-w-landscape: 45.5vw; }
+}
+
+@media (min-width: 43.75em) {
+    .ch-container { --ch-w-portrait: 23.1vw; --ch-w-square: 23.1vw; }
+}
+
+@media (min-width: 48.125em) {
+    .ch-container { --ch-w-landscape: 30vw; }
+}
+
+@media (orientation: landscape) {
+    .ch-container { --ch-w-landscape: 30vw; --ch-w-portrait: 23.1vw; --ch-w-square: 23.1vw; }
+}
+
+@media (orientation: landscape) and (min-width: 48.125em) {
+    .ch-container { --ch-w-landscape: 23.1vw; }
+}
+
+@media (min-width: 50em) {
+    .ch-container { --ch-w-portrait: 18.5vw; --ch-w-square: 18.5vw; }
+}
+
+@media (min-width: 75em) {
+    .ch-container { --ch-w-landscape: 23.1vw; --ch-w-portrait: 15.5vw; --ch-w-square: 15.5vw; }
+}
+
+@media (min-width: 87.5em) {
+    .ch-container { --ch-w-portrait: 13.3vw; --ch-w-square: 13.3vw; }
+}
+
+@media (min-width: 100em) {
+    .ch-container { --ch-w-landscape: 18.7vw; --ch-w-portrait: 11.6vw; --ch-w-square: 11.6vw; }
+}
+
+.ch-size-small { --ch-size: 0.72; }
+.ch-size-large { --ch-size: 1.35; }
+
+/* Forced shapes (more specific than the size-only rules below) */
+.ch-container .ch-shape-portrait .card { width: calc(var(--ch-w-portrait) * var(--ch-size, 1)) !important; }
+.ch-container .ch-shape-portrait .cardPadder { padding-bottom: 150% !important; }
+.ch-container .ch-shape-landscape .card { width: calc(var(--ch-w-landscape) * var(--ch-size, 1)) !important; }
+.ch-container .ch-shape-landscape .cardPadder { padding-bottom: 56.25% !important; }
+.ch-container .ch-shape-square .card { width: calc(var(--ch-w-square) * var(--ch-size, 1)) !important; }
+.ch-container .ch-shape-square .cardPadder { padding-bottom: 100% !important; }
+
+/* Size only (shape left to the renderer) */
+.ch-size-small .overflowPortraitCard,
+.ch-size-large .overflowPortraitCard { width: calc(var(--ch-w-portrait) * var(--ch-size, 1)) !important; }
+.ch-size-small .overflowBackdropCard,
+.ch-size-large .overflowBackdropCard,
+.ch-size-small .overflowSmallBackdropCard,
+.ch-size-large .overflowSmallBackdropCard { width: calc(var(--ch-w-landscape) * var(--ch-size, 1)) !important; }
+.ch-size-small .overflowSquareCard,
+.ch-size-large .overflowSquareCard { width: calc(var(--ch-w-square) * var(--ch-size, 1)) !important; }
+
+.ch-size-small .sectionTitle-cards { font-size: 1.1em; }
+
+/* Titles under the cards */
+.ch-notitle .cardText { display: none !important; }
+.ch-notitle .cardBox-bottompadded { padding-bottom: 0.3em !important; }
+
+/* ---------- Sections rendered by the plugin ---------- */
+.ch-card .cardImageContainer {
+    text-decoration: none;
+    color: inherit;
+}
+
+.ch-card .cardDefaultText {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0.5em;
+    text-align: center;
+    font-size: 1em;
+    overflow: hidden;
+}
+
+.ch-card .itemProgressBar {
+    position: absolute;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    height: 0.3em;
+    background: rgba(0, 0, 0, 0.5);
+}
+
+.ch-card .itemProgressBarForeground {
+    height: 100%;
+    background: #00a4dc;
+}
+
+.ch-card .cardIndicators {
+    position: absolute;
+    top: 0.4em;
+    right: 0.4em;
+    display: flex;
+    gap: 0.3em;
+}
+
+/* Editor: format badge */
+.ch-row-format {
+    font-size: 0.75em;
+    opacity: 0.7;
+    white-space: nowrap;
+    padding: 0.1em 0.5em;
+    border-radius: 1em;
+    background: rgba(255, 255, 255, 0.08);
+}

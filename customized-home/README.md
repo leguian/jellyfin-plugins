@@ -12,6 +12,8 @@ Plugin Jellyfin qui permet de réorganiser la page d'accueil du client web :
 | Par utilisateur | Chaque utilisateur enregistre sa propre disposition côté serveur (suivie sur tous ses appareils) |
 | Disposition par défaut | Définie par l'administrateur, appliquée aux utilisateurs sans disposition, peut être forcée pour tous |
 | Sections inconnues | Toute section ajoutée par un autre plugin est détectée et peut être rangée (clé dérivée de son titre) |
+| Sections intégrées | Sans autre plugin : Continuer à regarder / À suivre (combiné), Derniers films et Dernières séries (date de sortie), Collections, Regarder à nouveau, Parce que vous avez regardé…, Genre |
+| Format par section | Forme des cartes (par défaut, affiche, paysage, carré), taille (petite, normale, grande), titres affichés ou non |
 
 ## Compatibilité
 
@@ -47,6 +49,8 @@ Installation manuelle : dézipper `customized-home_<version>_jellyfin-<abi>.zip`
 - **Nouveau dossier** : nom libre, icône Material au choix.
 - **Masquer les sections absentes de cette liste** : sinon, toute nouvelle section (plugin installé plus tard, nouvelle médiathèque) est ajoutée en fin de page.
 - **Afficher toutes les sections connues** : liste aussi les sections du catalogue non présentes actuellement (utile pour préparer une disposition).
+- Menu `⋮` → **Format d'affichage** : forme, taille et titres de la section. Sur les sections natives ou HSS le changement de forme est appliqué en CSS (recadrage de l'image existante) ; sur les sections intégrées l'image adaptée est chargée (affiche pour portrait, vignette / fond pour paysage).
+- Les sections intégrées (badge « Intégrée à Customized Home ») apparaissent dans la liste, masquées : `👁` pour les activer. Données chargées côté client via l'API Jellyfin, cache 5 minutes.
 - **Réinitialiser** : supprime la disposition personnelle → retour à la disposition par défaut.
 - L'état replié / déplié d'un dossier est mémorisé par appareil (localStorage).
 
@@ -59,6 +63,7 @@ Installation manuelle : dézipper `customized-home_<version>_jellyfin-<abi>.zip`
 | Show a "Customize home" button at the bottom of the home page | Bouton en bas de l'accueil |
 | Add a "Customize home" entry to the user menu | Entrée dans le menu utilisateur (menu MUI et tiroir classique) |
 | Folders can be collapsed and expanded by clicking their header | Sinon les dossiers sont toujours dépliés |
+| Offer the sections rendered by this plugin | Propose les sections intégrées dans l'éditeur |
 | Developer mode | Désactive le cache des assets client |
 
 La disposition par défaut s'édite avec le même éditeur (bouton **Edit default layout**). La liste **User layouts** permet de réinitialiser un utilisateur.
@@ -69,6 +74,8 @@ Clés stables utilisées dans les dispositions (`GET /CustomizedHome/Catalog`) :
 
 | Origine | Clés | Libellé FR |
 | --- | --- | --- |
+| Customized Home | `ch:combined`, `ch:latestMovies`, `ch:latestShows`, `ch:collections`, `ch:watchAgain` | Continuer à regarder / À suivre, Derniers films (date de sortie), Dernières séries (date de sortie), Collections, Regarder à nouveau |
+| Customized Home | `ch:becauseYouWatched`, `ch:genre` (familles) | Parce que vous avez regardé {0} (3 derniers visionnages, items similaires), Genre : {0} (2 genres pondérés par l'historique) |
 | jellyfin-web | `jf:smalllibrarytiles`, `jf:librarybuttons` | Mes médias, Mes médias (petit) |
 | jellyfin-web | `jf:resume`, `jf:resumeaudio`, `jf:resumebook`, `jf:nextup` | Continuer de regarder, Reprendre l'écoute, Reprendre la lecture, À suivre |
 | jellyfin-web | `jf:latestmedia:<idMédiathèque>` | « <Médiathèque>, ajouts récents » (une clé par médiathèque) |
@@ -87,7 +94,8 @@ Les sections « famille » (Parce que vous avez regardé, Genre, Réalisé par, 
 1. **Injection** : au démarrage, un `IHostedService` enregistre une transformation `index.html` auprès de File Transformation (par réflexion, le `JObject` attendu est construit avec le type de FT lui-même : pas de dépendance Newtonsoft). Le callback ajoute `<link>` et `<script>` pointant vers `/CustomizedHome/customized-home.{css,js}` (servis sans authentification, ETag + `no-cache`).
 2. **Détection** : le script observe `#homeTab .sections`. Chaque `.verticalSection` est identifiée : attribut `data-page` + classe d'identifiant pour HSS, classe `sectionN` + préférences `homesectionN` pour les sections natives (repli sur le titre via `web/strings/<lang>.json`), titre normalisé sinon.
 3. **Application** : le conteneur passe en `display:flex; flex-direction:column` et chaque section reçoit un `order`. Aucun nœud n'est déplacé (déplacer un `emby-itemscontainer` réinitialise ses données). Les wrappers natifs (médias récents par médiathèque, TV en direct) passent en `display:contents`. Les dossiers sont des en-têtes insérés dans le conteneur ; leurs membres reçoivent une classe et sont masqués quand le dossier est replié. Un dossier dont tous les membres sont vides est masqué.
-4. **Stockage** : dispositions utilisateur en JSON dans `<config>/plugins/configurations/Jellyfin.Plugin.CustomizedHome/users/<userId>.json` ; disposition par défaut et options dans la configuration XML du plugin.
+4. **Sections intégrées** : rendues par le script (markup identique aux cartes jellyfin-web, `emby-scroller` / `emby-itemscontainer` natifs) à partir des endpoints `UserItems/Resume`, `Shows/NextUp`, `Items` (tri `PremiereDate`, `DatePlayed`, `Random`, filtre `isPlayed`, `BoxSet`), `Items/{id}/Similar`, `Genres`. Section vide → masquée (et le dossier qui la contient s'il n'a plus de membre visible).
+5. **Stockage** : dispositions utilisateur en JSON dans `<config>/plugins/configurations/Jellyfin.Plugin.CustomizedHome/users/<userId>.json` ; disposition par défaut et options dans la configuration XML du plugin.
 
 ### API
 
@@ -102,13 +110,14 @@ Les sections « famille » (Parce que vous avez regardé, Genre, Réalisé par, 
 | GET | `/CustomizedHome/Status`, POST `/CustomizedHome/Status/Retry` | admin | statut File Transformation |
 | GET | `/CustomizedHome/UserLayouts` | admin | utilisateurs ayant une disposition |
 
-Format d'une disposition :
+Format d'une disposition (`Shape` : auto | portrait | landscape | square ; `Size` : small | normal | large) :
 
 ```json
 {
   "Version": 1,
   "HideUnlisted": false,
   "Items": [
+    { "Type": "section", "Key": "ch:combined", "Visible": true, "Shape": "landscape", "Size": "large", "ShowTitle": true },
     { "Type": "section", "Key": "hss:MyMedia", "Visible": true },
     { "Type": "folder", "Id": "f1", "Name": "Séries", "Icon": "tv", "Visible": true, "Collapsed": false,
       "Items": [
@@ -137,4 +146,6 @@ Release : pousser un tag `customized-home-v<version>` ; le workflow `release.yml
 - Le plugin dépend de la structure DOM de jellyfin-web (`#homeTab .sections`, `.verticalSection`, classes `sectionN`) et des classes émises par HSS. Vérifier après une mise à jour majeure de Jellyfin.
 - HSS en mode chargement paresseux (pagination) ajoute des sections au défilement : elles sont réordonnées à l'arrivée ; une section listée en haut de la disposition peut donc apparaître après un chargement.
 - Les apps natives n'exécutent pas le script : leur accueil n'est pas modifié.
+- Forme forcée sur une section native/HSS : l'image reste celle choisie par le rendu d'origine (vignette 16:9 recadrée en affiche, par exemple). Les sections intégrées chargent l'image adaptée.
+- Les sections intégrées ne se rafraîchissent pas en temps réel après un visionnage (cache 5 min, rechargement à la prochaine ouverture de l'accueil).
 - Les assets client sont servis sans authentification (comme HSS / Plugin Pages) : ils ne contiennent aucune donnée sensible.

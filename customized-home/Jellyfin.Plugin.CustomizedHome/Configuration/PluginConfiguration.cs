@@ -36,6 +36,12 @@ public class PluginConfiguration : BasePluginConfiguration
     public bool FoldersCollapsible { get; set; } = true;
 
     /// <summary>
+    /// Gets or sets a value indicating whether the sections rendered by this plugin (combined continue watching,
+    /// latest by release date, collections, watch again, because you watched, genre) are offered to users.
+    /// </summary>
+    public bool EnableIntegratedSections { get; set; } = true;
+
+    /// <summary>
     /// Gets or sets a value indicating whether the client assets are served without caching (development).
     /// </summary>
     public bool DeveloperMode { get; set; }

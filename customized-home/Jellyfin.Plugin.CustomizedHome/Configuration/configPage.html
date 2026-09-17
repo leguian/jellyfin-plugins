@@ -77,6 +77,13 @@
                         </div>
                         <div class="checkboxContainer checkboxContainer-withDescription">
                             <label class="emby-checkbox-label">
+                                <input id="chEnableIntegratedSections" type="checkbox" is="emby-checkbox" />
+                                <span>Offer the sections rendered by this plugin</span>
+                            </label>
+                            <div class="fieldDescription checkboxFieldDescription">Continue Watching / Next Up (combined), Latest Movies and Shows by release date, Collections, Watch Again, Because You Watched, Genre. Users enable them in the editor; no other plugin required.</div>
+                        </div>
+                        <div class="checkboxContainer checkboxContainer-withDescription">
+                            <label class="emby-checkbox-label">
                                 <input id="chDeveloperMode" type="checkbox" is="emby-checkbox" />
                                 <span>Developer mode (client assets are never cached)</span>
                             </label>
@@ -101,7 +108,7 @@
             (function () {
                 var pluginId = '7c99a4bf-cd3b-4bc8-b941-7ddccd816f3c';
                 var page = document.querySelector('#CustomizedHomeConfigPage');
-                var fields = ['AllowUserCustomization', 'ForceDefaultLayout', 'ShowCustomizeButtonOnHome', 'ShowUserMenuEntry', 'FoldersCollapsible', 'DeveloperMode'];
+                var fields = ['AllowUserCustomization', 'ForceDefaultLayout', 'ShowCustomizeButtonOnHome', 'ShowUserMenuEntry', 'FoldersCollapsible', 'EnableIntegratedSections', 'DeveloperMode'];
 
                 function escapeHtml(value) {
                     return String(value == null ? '' : value).replace(/[&<>"']/g, function (c) {

@@ -139,8 +139,22 @@ public static partial class LayoutValidator
             Type = LayoutItemTypes.Section,
             Key = key,
             Label = Truncate(item.Label?.Trim(), MaxLabelLength),
-            Visible = item.Visible
+            Visible = item.Visible,
+            Shape = NormalizeChoice(item.Shape, LayoutFormats.Shapes, LayoutFormats.ShapeAuto),
+            Size = NormalizeChoice(item.Size, LayoutFormats.Sizes, LayoutFormats.SizeNormal),
+            ShowTitle = item.ShowTitle
         };
+    }
+
+    private static string NormalizeChoice(string? value, string[] allowed, string fallback)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            return fallback;
+        }
+
+        string trimmed = value.Trim().ToLowerInvariant();
+        return Array.IndexOf(allowed, trimmed) >= 0 ? trimmed : fallback;
     }
 
     private static string? Truncate(string? value, int maxLength)

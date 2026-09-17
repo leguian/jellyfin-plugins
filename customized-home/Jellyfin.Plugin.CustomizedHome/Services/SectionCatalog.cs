@@ -11,7 +11,7 @@ public sealed class SectionDefinition
     /// Initializes a new instance of the <see cref="SectionDefinition"/> class.
     /// </summary>
     /// <param name="key">The stable section key.</param>
-    /// <param name="origin">The section provider: <c>jellyfin</c> or <c>hss</c>.</param>
+    /// <param name="origin">The section provider: <c>customized</c>, <c>jellyfin</c> or <c>hss</c>.</param>
     /// <param name="category">A category hint used by the editor.</param>
     /// <param name="english">The English label.</param>
     /// <param name="french">The French label.</param>
@@ -35,7 +35,8 @@ public sealed class SectionDefinition
     public string Key { get; }
 
     /// <summary>
-    /// Gets the provider of the section: <c>jellyfin</c> (built-in web client) or <c>hss</c> (Home Screen Sections plugin).
+    /// Gets the provider of the section: <c>customized</c> (rendered by this plugin), <c>jellyfin</c> (built-in web client)
+    /// or <c>hss</c> (Home Screen Sections plugin).
     /// </summary>
     public string Origin { get; }
 
@@ -67,6 +68,15 @@ public static class SectionCatalog
     /// </summary>
     public static IReadOnlyList<SectionDefinition> All { get; } = new List<SectionDefinition>
     {
+        // Sections rendered by this plugin (no other plugin required).
+        new("ch:combined", "customized", "general", "Continue Watching / Next Up", "Continuer à regarder / À suivre"),
+        new("ch:latestMovies", "customized", "movies", "Latest Movies (release date)", "Derniers films (date de sortie)"),
+        new("ch:latestShows", "customized", "series", "Latest Shows (release date)", "Dernières séries (date de sortie)"),
+        new("ch:collections", "customized", "movies", "Collections", "Collections"),
+        new("ch:watchAgain", "customized", "general", "Watch Again", "Regarder à nouveau"),
+        new("ch:becauseYouWatched", "customized", "general", "Because You Watched {0}", "Parce que vous avez regardé {0}", isFamily: true),
+        new("ch:genre", "customized", "general", "Genre: {0}", "Genre : {0}", isFamily: true),
+
         // Built-in jellyfin-web sections (keys mirror the "homesectionN" user setting values).
         new("jf:smalllibrarytiles", "jellyfin", "general", "My Media", "Mes médias"),
         new("jf:librarybuttons", "jellyfin", "general", "My Media (small)", "Mes médias (petit)"),

@@ -63,7 +63,27 @@
             unlisted: 'Sections not in your layout',
             close: 'Close',
             folder: 'Folder',
-            family: 'several rows'
+            family: 'several rows',
+            originCustomized: 'Built into Customized Home',
+            int_combined: 'Continue Watching / Next Up',
+            int_latestMovies: 'Latest Movies',
+            int_latestShows: 'Latest Shows',
+            int_collections: 'Collections',
+            int_watchAgain: 'Watch Again',
+            becauseYouWatched: 'Because you watched {0}',
+            genreTitle: 'Genre: {0}',
+            format: 'Display format',
+            shape: 'Card shape',
+            shapeAuto: 'Default',
+            shapePortrait: 'Poster',
+            shapeLandscape: 'Landscape',
+            shapeSquare: 'Square',
+            size: 'Card size',
+            sizeSmall: 'Small',
+            sizeNormal: 'Normal',
+            sizeLarge: 'Large',
+            showTitles: 'Show titles',
+            noTitles: 'no titles'
         },
         fr: {
             customize: "Personnaliser l'accueil",
@@ -102,7 +122,27 @@
             unlisted: 'Sections absentes de votre disposition',
             close: 'Fermer',
             folder: 'Dossier',
-            family: 'plusieurs lignes'
+            family: 'plusieurs lignes',
+            originCustomized: 'Intégrée à Customized Home',
+            int_combined: 'Continuer à regarder / À suivre',
+            int_latestMovies: 'Derniers films',
+            int_latestShows: 'Dernières séries',
+            int_collections: 'Collections',
+            int_watchAgain: 'Regarder à nouveau',
+            becauseYouWatched: 'Parce que vous avez regardé {0}',
+            genreTitle: 'Genre : {0}',
+            format: "Format d'affichage",
+            shape: 'Forme des cartes',
+            shapeAuto: 'Par défaut',
+            shapePortrait: 'Affiche',
+            shapeLandscape: 'Paysage',
+            shapeSquare: 'Carré',
+            size: 'Taille des cartes',
+            sizeSmall: 'Petite',
+            sizeNormal: 'Normale',
+            sizeLarge: 'Grande',
+            showTitles: 'Afficher les titres',
+            noTitles: 'sans titres'
         }
     };
 
@@ -119,7 +159,8 @@
         applyScheduled: false,
         scanScheduled: false,
         catalog: null,
-        userViews: null
+        userViews: null,
+        integratedCache: {}
     };
 
     /* ------------------------------------------------------------------ */
@@ -364,6 +405,378 @@
     }
 
     /* ------------------------------------------------------------------ */
+    /* Sections rendered by the plugin (no other plugin required)          */
+    /* ------------------------------------------------------------------ */
+
+    const IMAGE_FIELDS = 'PrimaryImageAspectRatio,ProductionYear,PremiereDate';
+    const IMAGE_TYPES = 'Primary,Backdrop,Thumb';
+    const INTEGRATED_CACHE_MS = 5 * 60 * 1000;
+
+    function itemsQuery(params) {
+        const client = apiClient();
+        const query = Object.assign({
+            userId: currentUserId(),
+            fields: IMAGE_FIELDS,
+            imageTypeLimit: 1,
+            enableImageTypes: IMAGE_TYPES,
+            enableTotalRecordCount: false
+        }, params);
+        return client.getJSON(client.getUrl('Items', query)).then(function (result) {
+            return (result && result.Items) || [];
+        });
+    }
+
+    function dedupeItems(items) {
+        const seen = {};
+        return items.filter(function (item) {
+            if (!item || !item.Id || seen[item.Id]) {
+                return false;
+            }
+            seen[item.Id] = true;
+            return true;
+        });
+    }
+
+    function fetchCombined() {
+        const client = apiClient();
+        const common = { userId: currentUserId(), fields: IMAGE_FIELDS, imageTypeLimit: 1, enableImageTypes: IMAGE_TYPES, enableTotalRecordCount: false };
+        return Promise.all([
+            client.getJSON(client.getUrl('UserItems/Resume', Object.assign({ limit: 12, mediaTypes: 'Video' }, common))).catch(function () { return null; }),
+            client.getJSON(client.getUrl('Shows/NextUp', Object.assign({ limit: 24, enableResumable: false }, common))).catch(function () { return null; })
+        ]).then(function (results) {
+            const resume = (results[0] && results[0].Items) || [];
+            const nextUp = (results[1] && results[1].Items) || [];
+            return dedupeItems(resume.concat(nextUp));
+        });
+    }
+
+    function fetchBecauseYouWatched() {
+        return itemsQuery({ includeItemTypes: 'Movie,Series', recursive: true, isPlayed: true, sortBy: 'DatePlayed', sortOrder: 'Descending', limit: 3, fields: 'PrimaryImageAspectRatio' })
+            .then(function (seeds) {
+                return Promise.all(seeds.map(function (seed) {
+                    const client = apiClient();
+                    return client.getJSON(client.getUrl('Items/' + seed.Id + '/Similar', { userId: currentUserId(), limit: 12, fields: IMAGE_FIELDS }))
+                        .then(function (result) {
+                            return { title: t('becauseYouWatched', seed.Name), items: (result && result.Items) || [] };
+                        })
+                        .catch(function () {
+                            return { title: '', items: [] };
+                        });
+                }));
+            })
+            .then(function (list) {
+                return list.filter(function (instance) {
+                    return instance.items.length > 0;
+                });
+            });
+    }
+
+    function fetchGenre() {
+        return itemsQuery({ includeItemTypes: 'Movie,Series', recursive: true, isPlayed: true, sortBy: 'DatePlayed', sortOrder: 'Descending', limit: 100, fields: 'Genres' })
+            .then(function (played) {
+                const counts = {};
+                played.forEach(function (item) {
+                    (item.Genres || []).forEach(function (genre) {
+                        counts[genre] = (counts[genre] || 0) + 1;
+                    });
+                });
+                const weighted = Object.keys(counts).sort(function (a, b) {
+                    return counts[b] - counts[a];
+                }).slice(0, 6);
+                if (weighted.length) {
+                    return weighted;
+                }
+                const client = apiClient();
+                return client.getJSON(client.getUrl('Genres', { userId: currentUserId(), limit: 30, sortBy: 'SortName' }))
+                    .then(function (result) {
+                        return ((result && result.Items) || []).map(function (genre) {
+                            return genre.Name;
+                        });
+                    })
+                    .catch(function () {
+                        return [];
+                    });
+            })
+            .then(function (pool) {
+                const remaining = pool.slice();
+                const chosen = [];
+                while (chosen.length < 2 && remaining.length) {
+                    chosen.push(remaining.splice(Math.floor(Math.random() * remaining.length), 1)[0]);
+                }
+                return Promise.all(chosen.map(function (genre) {
+                    return itemsQuery({ genres: genre, includeItemTypes: 'Movie,Series', recursive: true, sortBy: 'Random', limit: 16 })
+                        .then(function (items) {
+                            return { title: t('genreTitle', genre), items: items };
+                        })
+                        .catch(function () {
+                            return { title: genre, items: [] };
+                        });
+                }));
+            })
+            .then(function (list) {
+                return list.filter(function (instance) {
+                    return instance.items.length > 0;
+                });
+            });
+    }
+
+    const INTEGRATED = {
+        'ch:combined': { titleKey: 'int_combined', shape: 'landscape', fetch: fetchCombined },
+        'ch:latestMovies': { titleKey: 'int_latestMovies', shape: 'portrait', fetch: function () {
+            return itemsQuery({ includeItemTypes: 'Movie', recursive: true, sortBy: 'PremiereDate,SortName', sortOrder: 'Descending', limit: 16 });
+        } },
+        'ch:latestShows': { titleKey: 'int_latestShows', shape: 'portrait', fetch: function () {
+            return itemsQuery({ includeItemTypes: 'Series', recursive: true, sortBy: 'PremiereDate,SortName', sortOrder: 'Descending', limit: 16 });
+        } },
+        'ch:collections': { titleKey: 'int_collections', shape: 'portrait', fetch: function () {
+            return itemsQuery({ includeItemTypes: 'BoxSet', recursive: true, sortBy: 'DateCreated,SortName', sortOrder: 'Descending', limit: 16 });
+        } },
+        'ch:watchAgain': { titleKey: 'int_watchAgain', shape: 'portrait', fetch: function () {
+            return itemsQuery({ includeItemTypes: 'Movie,Series', recursive: true, isPlayed: true, sortBy: 'DatePlayed', sortOrder: 'Descending', limit: 16 });
+        } },
+        'ch:becauseYouWatched': { titleKey: 'becauseYouWatched', shape: 'portrait', family: true, fetchInstances: fetchBecauseYouWatched },
+        'ch:genre': { titleKey: 'genreTitle', shape: 'portrait', family: true, fetchInstances: fetchGenre }
+    };
+
+    function imageUrlFor(item, shape) {
+        const client = apiClient();
+        const tags = item.ImageTags || {};
+        const backdrops = item.BackdropImageTags || [];
+        const parentBackdrops = item.ParentBackdropImageTags || [];
+        const width = shape === 'landscape' ? 600 : 360;
+        function url(id, type, tag) {
+            return client.getImageUrl(id, { type: type, maxWidth: width, tag: tag });
+        }
+        if (shape === 'landscape') {
+            if (item.Type === 'Episode' && item.ParentThumbItemId && item.ParentThumbImageTag) {
+                return url(item.ParentThumbItemId, 'Thumb', item.ParentThumbImageTag);
+            }
+            if (item.Type === 'Episode' && item.ParentBackdropItemId && parentBackdrops.length) {
+                return url(item.ParentBackdropItemId, 'Backdrop', parentBackdrops[0]);
+            }
+            if (tags.Thumb) {
+                return url(item.Id, 'Thumb', tags.Thumb);
+            }
+            if (backdrops.length) {
+                return url(item.Id, 'Backdrop', backdrops[0]);
+            }
+            if (tags.Primary) {
+                return url(item.Id, 'Primary', tags.Primary);
+            }
+            if (item.ParentBackdropItemId && parentBackdrops.length) {
+                return url(item.ParentBackdropItemId, 'Backdrop', parentBackdrops[0]);
+            }
+            return null;
+        }
+        if (item.Type === 'Episode' && item.SeriesId && item.SeriesPrimaryImageTag) {
+            return url(item.SeriesId, 'Primary', item.SeriesPrimaryImageTag);
+        }
+        if (tags.Primary) {
+            return url(item.Id, 'Primary', tags.Primary);
+        }
+        if (item.Type === 'Episode' && item.ParentThumbItemId && item.ParentThumbImageTag) {
+            return url(item.ParentThumbItemId, 'Thumb', item.ParentThumbImageTag);
+        }
+        if (tags.Thumb) {
+            return url(item.Id, 'Thumb', tags.Thumb);
+        }
+        if (backdrops.length) {
+            return url(item.Id, 'Backdrop', backdrops[0]);
+        }
+        return null;
+    }
+
+    function episodeLabel(item) {
+        const parts = [];
+        if (item.ParentIndexNumber != null && item.IndexNumber != null) {
+            parts.push('S' + item.ParentIndexNumber + ':E' + item.IndexNumber);
+        }
+        if (item.Name) {
+            parts.push(item.Name);
+        }
+        return parts.join(' - ');
+    }
+
+    function textHash(text) {
+        let hash = 0;
+        for (let i = 0; i < text.length; i++) {
+            hash = (hash * 31 + text.charCodeAt(i)) | 0;
+        }
+        return Math.abs(hash);
+    }
+
+    function cardHtml(item, shape, showTitle) {
+        const serverId = item.ServerId || apiClient().serverId();
+        const shapeClass = shape === 'landscape' ? 'overflowBackdropCard' : (shape === 'square' ? 'overflowSquareCard' : 'overflowPortraitCard');
+        const padder = shape === 'landscape' ? 'cardPadder-overflowBackdrop' : (shape === 'square' ? 'cardPadder-overflowSquare' : 'cardPadder-overflowPortrait');
+        const image = imageUrlFor(item, shape);
+        const href = '#/details?id=' + encodeURIComponent(item.Id) + '&serverId=' + encodeURIComponent(serverId);
+        const isEpisode = item.Type === 'Episode';
+        const title = isEpisode ? (item.SeriesName || item.Name || '') : (item.Name || '');
+        let secondary = '';
+        if (isEpisode) {
+            secondary = episodeLabel(item);
+        } else if (item.ProductionYear) {
+            secondary = String(item.ProductionYear);
+        } else if (item.PremiereDate) {
+            secondary = String(new Date(item.PremiereDate).getFullYear());
+        }
+        const userData = item.UserData || {};
+        let inner = '';
+        if (userData.PlayedPercentage > 0 && userData.PlayedPercentage < 100) {
+            inner += '<div class="itemProgressBar"><div class="itemProgressBarForeground" style="width:' + Math.round(userData.PlayedPercentage) + '%"></div></div>';
+        }
+        let indicators = '';
+        if (userData.Played && item.Type !== 'BoxSet') {
+            indicators += '<div class="playedIndicator indicator"><span class="material-icons indicatorIcon check" aria-hidden="true"></span></div>';
+        } else if (userData.UnplayedItemCount) {
+            indicators += '<div class="countIndicator indicator">' + userData.UnplayedItemCount + '</div>';
+        }
+        if (indicators) {
+            inner += '<div class="cardIndicators">' + indicators + '</div>';
+        }
+        const imageClass = image
+            ? 'cardImageContainer coveredImage cardContent'
+            : 'cardImageContainer cardContent defaultCardBackground defaultCardBackground' + (textHash(title) % 5 + 1);
+        const imageStyle = image ? ' style="background-image:url(&quot;' + escapeHtml(image) + '&quot;)"' : '';
+        const defaultText = image ? '' : '<div class="cardText cardDefaultText">' + escapeHtml(title) + '</div>';
+
+        let html = '<div class="card ' + shapeClass + ' card-hoverable card-withuserdata ch-card" data-id="' + escapeHtml(item.Id) + '" data-serverid="' + escapeHtml(serverId)
+            + '" data-type="' + escapeHtml(item.Type || '') + '" data-isfolder="' + (item.IsFolder ? 'true' : 'false') + '"'
+            + (item.MediaType ? ' data-mediatype="' + escapeHtml(item.MediaType) + '"' : '') + '>';
+        html += '<div class="cardBox cardBox-bottompadded"><div class="cardScalable"><div class="cardPadder ' + padder + '"></div>';
+        html += '<a href="' + href + '" class="' + imageClass + '"' + imageStyle + ' aria-label="' + escapeHtml(title) + '">' + defaultText + inner + '</a>';
+        html += '</div>';
+        if (showTitle) {
+            html += '<div class="cardText cardTextCentered cardText-first"><bdi><a href="' + href + '" class="textActionButton" title="' + escapeHtml(title) + '">' + escapeHtml(title) + '</a></bdi></div>';
+            html += '<div class="cardText cardTextCentered cardText-secondary"><bdi>' + escapeHtml(secondary) + '</bdi></div>';
+        }
+        html += '</div></div>';
+        return html;
+    }
+
+    function formatFor(item, definition) {
+        const shape = item && item.Shape && item.Shape !== 'auto' ? item.Shape : definition.shape;
+        return { shape: shape, showTitle: !item || item.ShowTitle !== false };
+    }
+
+    function createIntegratedSection(container, key, instanceIndex) {
+        const node = el('div', 'verticalSection ch-section hide');
+        node.dataset.chKey = key;
+        node.dataset.chInstance = String(instanceIndex || 0);
+        node.innerHTML = '<div class="sectionTitleContainer sectionTitleContainer-cards padded-left"><h2 class="sectionTitle sectionTitle-cards"></h2></div>'
+            + '<div is="emby-scroller" class="padded-top-focusscale padded-bottom-focusscale" data-centerfocus="true">'
+            + '<div is="emby-itemscontainer" class="itemsContainer scrollSlider focuscontainer-x ch-items"></div>'
+            + '</div>';
+        container.appendChild(node);
+        return node;
+    }
+
+    function renderIntegratedSection(node, title, items, shape, showTitle) {
+        node._chItems = items;
+        node.dataset.chShape = shape;
+        node.dataset.chShowTitle = showTitle ? '1' : '0';
+        node.querySelector('.sectionTitle').textContent = title;
+        node.querySelector('.ch-items').innerHTML = items.map(function (item) {
+            return cardHtml(item, shape, showTitle);
+        }).join('');
+        setClass(node, 'hide', items.length === 0);
+    }
+
+    function wantedIntegrated(layout) {
+        const wanted = {};
+        if (!state.response || !state.response.EnableIntegratedSections) {
+            return wanted;
+        }
+        (layout.Items || []).forEach(function (item) {
+            if (item.Type === 'folder') {
+                (item.Items || []).forEach(function (member) {
+                    if (member.Key && INTEGRATED[member.Key] && member.Visible !== false && item.Visible !== false) {
+                        wanted[member.Key] = member;
+                    }
+                });
+            } else if (item.Key && INTEGRATED[item.Key] && item.Visible !== false) {
+                wanted[item.Key] = item;
+            }
+        });
+        return wanted;
+    }
+
+    function syncIntegratedSections(container, wanted) {
+        const registry = container._chIntegrated || (container._chIntegrated = {});
+        Array.prototype.forEach.call(container.querySelectorAll(':scope > .ch-section'), function (node) {
+            if (!wanted[node.dataset.chKey]) {
+                node.remove();
+                delete registry[node.dataset.chKey];
+            }
+        });
+        Object.keys(wanted).forEach(function (key) {
+            const known = registry[key];
+            if (known) {
+                // The web client may have wiped the container (settings change, navigation): render again.
+                const missing = !known.loading && known.count > 0 && !container.querySelector('[data-ch-key="' + key + '"]');
+                if (!missing) {
+                    return;
+                }
+                delete registry[key];
+            }
+            const definition = INTEGRATED[key];
+            const entry = { loading: true, count: 0 };
+            registry[key] = entry;
+            const cached = state.integratedCache[key];
+            let dataPromise;
+            if (cached && Date.now() - cached.ts < INTEGRATED_CACHE_MS) {
+                dataPromise = Promise.resolve(cached.data);
+            } else {
+                const load = definition.family
+                    ? definition.fetchInstances()
+                    : definition.fetch().then(function (items) {
+                        return [{ title: t(definition.titleKey), items: items }];
+                    });
+                dataPromise = load.then(function (data) {
+                    state.integratedCache[key] = { ts: Date.now(), data: data };
+                    return data;
+                });
+            }
+            dataPromise.then(function (instances) {
+                entry.loading = false;
+                entry.count = instances.length;
+                if (!container.isConnected || container._chIntegrated !== registry || registry[key] !== entry) {
+                    return;
+                }
+                instances.forEach(function (instance, index) {
+                    const node = createIntegratedSection(container, key, index);
+                    const format = formatFor(wanted[key], definition);
+                    renderIntegratedSection(node, instance.title, instance.items, format.shape, format.showTitle);
+                });
+                scheduleApply();
+            }).catch(function (error) {
+                entry.loading = false;
+                console.warn('[CustomizedHome] section ' + key + ' failed', error);
+            });
+        });
+    }
+
+    function applyFormat(node, item) {
+        const integrated = node.dataset.chKey ? INTEGRATED[node.dataset.chKey] : null;
+        const shape = !integrated && item && item.Shape && item.Shape !== 'auto' ? item.Shape : null;
+        const size = item && item.Size && item.Size !== 'normal' ? item.Size : null;
+        ['portrait', 'landscape', 'square'].forEach(function (candidate) {
+            setClass(node, 'ch-shape-' + candidate, shape === candidate);
+        });
+        ['small', 'large'].forEach(function (candidate) {
+            setClass(node, 'ch-size-' + candidate, size === candidate);
+        });
+        setClass(node, 'ch-notitle', !integrated && !!item && item.ShowTitle === false);
+        if (integrated && node._chItems) {
+            const format = formatFor(item, integrated);
+            if (node.dataset.chShape !== format.shape || (node.dataset.chShowTitle === '1') !== format.showTitle) {
+                renderIntegratedSection(node, node.querySelector('.sectionTitle').textContent, node._chItems, format.shape, format.showTitle);
+            }
+        }
+    }
+
+    /* ------------------------------------------------------------------ */
     /* Section discovery                                                   */
     /* ------------------------------------------------------------------ */
 
@@ -443,6 +856,15 @@
 
     function describeSection(node, wrapperType, index, subIndex, ctx) {
         const info = { el: node, key: null, label: sectionTitle(node), origin: 'other', family: null, instance: null, origOrder: 0 };
+
+        if (node.dataset.chKey) {
+            info.key = node.dataset.chKey;
+            info.origin = 'customized';
+            info.family = INTEGRATED[info.key] && INTEGRATED[info.key].family ? info.key : null;
+            info.instance = info.key + ':' + node.dataset.chInstance;
+            info.origOrder = parseInt(node.dataset.chInstance, 10) || 0;
+            return info;
+        }
 
         if (node.dataset.chOrigOrder === undefined) {
             const inline = parseInt(node.style.order, 10);
@@ -658,6 +1080,9 @@
         ctx.hss = !!container.querySelector(':scope > [data-page]');
         setClass(container, 'ch-container', true);
 
+        const layout = state.layout || { Items: [], HideUnlisted: false };
+        syncIntegratedSections(container, wantedIntegrated(layout));
+
         const sections = collectSections(container, ctx);
         state.discovered = sections;
         observeSectionNodes(container);
@@ -672,7 +1097,6 @@
             });
         });
 
-        const layout = state.layout || { Items: [], HideUnlisted: false };
         const items = layout.Items || [];
         const existingFolders = {};
         const folderNodes = container.querySelectorAll(':scope > .ch-folder');
@@ -683,7 +1107,8 @@
         let order = ORDER_STEP;
         const used = {};
 
-        function place(key, visible, folder, collapsed) {
+        function place(item, visible, folder, collapsed) {
+            const key = item.Key;
             used[key] = true;
             const group = byKey[key];
             if (!group) {
@@ -693,6 +1118,7 @@
             group.forEach(function (section, i) {
                 const node = section.el;
                 setOrder(node, order + i);
+                applyFormat(node, item);
                 setClass(node, 'ch-hidden', !visible || (!!folder && collapsed));
                 setClass(node, 'ch-in-folder', !!folder);
                 if (folder) {
@@ -726,12 +1152,12 @@
                     if (member.Type === 'folder' || !member.Key) {
                         return;
                     }
-                    visibleMembers += place(member.Key, item.Visible !== false && member.Visible !== false, item, collapsed);
+                    visibleMembers += place(member, item.Visible !== false && member.Visible !== false, item, collapsed);
                 });
                 updateFolderHeader(header, item, collapsed, visibleMembers);
                 setClass(header, 'ch-hidden', item.Visible === false || visibleMembers === 0);
             } else if (item.Key) {
-                place(item.Key, item.Visible !== false, null, false);
+                place(item, item.Visible !== false, null, false);
             }
         });
 
@@ -746,6 +1172,7 @@
                 return;
             }
             setOrder(section.el, ORDER_UNLISTED_BASE + section.origOrder);
+            applyFormat(section.el, null);
             setClass(section.el, 'ch-hidden', !!layout.HideUnlisted);
             setClass(section.el, 'ch-in-folder', false);
             if (section.el.dataset.chFolder !== undefined) {
@@ -964,7 +1391,10 @@
 
         // Catalog entries relevant to the current setup.
         catalog.forEach(function (definition) {
-            const relevant = mode === 'default' || (definition.Origin === 'hss' ? hssActive : !hssActive);
+            let relevant = mode === 'default' || (definition.Origin === 'hss' ? hssActive : !hssActive);
+            if (definition.Origin === 'customized') {
+                relevant = !!(state.response && state.response.EnableIntegratedSections);
+            }
             if (!relevant) {
                 return;
             }
@@ -1197,6 +1627,9 @@
         if (origin === 'hss') {
             return t('originHss');
         }
+        if (origin === 'customized') {
+            return t('originCustomized');
+        }
         return t('originOther');
     }
 
@@ -1209,12 +1642,14 @@
         if (entry.family) {
             subtitle.push(t('family'));
         }
-        if (!entry.present) {
+        if (!entry.present && entry.origin !== 'customized') {
             subtitle.push(t('absent'));
         }
+        const badge = formatBadge(item);
         row.innerHTML = '<span class="material-icons ch-handle" aria-hidden="true">drag_indicator</span>'
-            + '<span class="material-icons ch-row-icon" aria-hidden="true">' + (entry.origin === 'hss' ? 'view_carousel' : 'view_stream') + '</span>'
+            + '<span class="material-icons ch-row-icon" aria-hidden="true">' + (entry.origin === 'hss' ? 'view_carousel' : (entry.origin === 'customized' ? 'auto_awesome' : 'view_stream')) + '</span>'
             + '<div class="ch-row-text"><div class="ch-row-title"></div><div class="ch-row-sub"></div></div>'
+            + (badge ? '<span class="ch-row-format"></span>' : '')
             + '<div class="ch-row-actions">'
             + '<button type="button" class="ch-icon-btn ch-act-visibility" title="' + escapeHtml(item.Visible === false ? t('show') : t('hide')) + '"><span class="material-icons" aria-hidden="true">' + (item.Visible === false ? 'visibility_off' : 'visibility') + '</span></button>'
             + '<button type="button" class="ch-icon-btn ch-act-up" title="' + escapeHtml(t('moveUp')) + '"' + (index === 0 ? ' disabled' : '') + '><span class="material-icons" aria-hidden="true">expand_less</span></button>'
@@ -1223,7 +1658,65 @@
             + '</div>';
         row.querySelector('.ch-row-title').textContent = entry.label || item.Key;
         row.querySelector('.ch-row-sub').textContent = subtitle.join(' · ');
+        if (badge) {
+            row.querySelector('.ch-row-format').textContent = badge;
+        }
         return row;
+    }
+
+    function formatBadge(item) {
+        const parts = [];
+        if (item.Shape && item.Shape !== 'auto') {
+            parts.push(t('shape' + item.Shape.charAt(0).toUpperCase() + item.Shape.slice(1)));
+        }
+        if (item.Size && item.Size !== 'normal') {
+            parts.push(t('size' + item.Size.charAt(0).toUpperCase() + item.Size.slice(1)));
+        }
+        if (item.ShowTitle === false) {
+            parts.push(t('noTitles'));
+        }
+        return parts.join(' · ');
+    }
+
+    function openFormatMenu(anchor, item) {
+        const menu = el('div');
+        function group(label) {
+            const node = el('div', 'ch-popup-label');
+            node.textContent = label;
+            menu.appendChild(node);
+        }
+        function option(icon, label, selected, handler) {
+            const button = el('button', '', '<span class="material-icons" aria-hidden="true">' + (selected ? 'radio_button_checked' : icon) + '</span><span></span>');
+            button.type = 'button';
+            button.querySelector('span:last-child').textContent = label;
+            button.addEventListener('click', function () {
+                closePopup();
+                materialize(item);
+                handler();
+                renderEditor();
+            });
+            menu.appendChild(button);
+        }
+        const shape = item.Shape || 'auto';
+        const size = item.Size || 'normal';
+        group(t('shape'));
+        [['auto', 'shapeAuto', 'tune'], ['portrait', 'shapePortrait', 'crop_portrait'], ['landscape', 'shapeLandscape', 'crop_landscape'], ['square', 'shapeSquare', 'crop_square']].forEach(function (choice) {
+            option(choice[2], t(choice[1]), shape === choice[0], function () {
+                item.Shape = choice[0];
+            });
+        });
+        menu.appendChild(el('div', 'ch-popup-sep'));
+        group(t('size'));
+        [['small', 'sizeSmall', 'photo_size_select_small'], ['normal', 'sizeNormal', 'photo_size_select_actual'], ['large', 'sizeLarge', 'photo_size_select_large']].forEach(function (choice) {
+            option(choice[2], t(choice[1]), size === choice[0], function () {
+                item.Size = choice[0];
+            });
+        });
+        menu.appendChild(el('div', 'ch-popup-sep'));
+        option(item.ShowTitle === false ? 'check_box_outline_blank' : 'check_box', t('showTitles'), false, function () {
+            item.ShowTitle = item.ShowTitle === false;
+        });
+        showPopup(anchor, menu);
     }
 
     function renderFolderRow(item, index, siblings) {
@@ -1270,7 +1763,7 @@
             header.textContent = t('unlisted');
             list.appendChild(header);
             unlisted.forEach(function (entry) {
-                const item = { Type: 'section', Key: entry.key, Label: entry.label, Visible: !model.HideUnlisted, _unlisted: true };
+                const item = { Type: 'section', Key: entry.key, Label: entry.label, Visible: INTEGRATED[entry.key] ? false : !model.HideUnlisted, _unlisted: true };
                 const row = renderSectionRow(item, null, -1, []);
                 row.classList.add('ch-row-unlisted');
                 list.appendChild(row);
@@ -1454,6 +1947,9 @@
                 }
             });
         } else {
+            addAction('aspect_ratio', t('format'), function () {
+                openFormatMenu(anchor, item);
+            });
             if (parent) {
                 addAction('drive_file_move', t('removeFromFolder'), function () {
                     moveItem(item, { folder: null, before: null });
@@ -1678,7 +2174,15 @@
 
     function serializeModel(model) {
         function section(item) {
-            return { Type: 'section', Key: item.Key, Label: (editor.known[item.Key] && editor.known[item.Key].label) || item.Label || null, Visible: item.Visible !== false };
+            return {
+                Type: 'section',
+                Key: item.Key,
+                Label: (editor.known[item.Key] && editor.known[item.Key].label) || item.Label || null,
+                Visible: item.Visible !== false,
+                Shape: item.Shape || 'auto',
+                Size: item.Size || 'normal',
+                ShowTitle: item.ShowTitle !== false
+            };
         }
         return {
             Version: 1,
@@ -1760,6 +2264,7 @@
         version: VERSION,
         openEditor: openEditor,
         refresh: function () {
+            state.integratedCache = {};
             return reloadLayout();
         },
         apply: scheduleApply,

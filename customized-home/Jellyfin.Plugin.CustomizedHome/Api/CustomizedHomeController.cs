@@ -121,6 +121,7 @@ public class CustomizedHomeController : ControllerBase
             ShowCustomizeButtonOnHome = config.ShowCustomizeButtonOnHome,
             ShowUserMenuEntry = config.ShowUserMenuEntry,
             FoldersCollapsible = config.FoldersCollapsible,
+            EnableIntegratedSections = config.EnableIntegratedSections,
             PluginVersion = Plugin.Instance?.VersionString ?? string.Empty
         };
     }

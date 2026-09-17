@@ -49,6 +49,21 @@ public class LayoutItem
     public bool Collapsed { get; set; }
 
     /// <summary>
+    /// Gets or sets the card shape (sections only): <c>auto</c>, <c>portrait</c>, <c>landscape</c> or <c>square</c>.
+    /// </summary>
+    public string Shape { get; set; } = LayoutFormats.ShapeAuto;
+
+    /// <summary>
+    /// Gets or sets the card size (sections only): <c>small</c>, <c>normal</c> or <c>large</c>.
+    /// </summary>
+    public string Size { get; set; } = LayoutFormats.SizeNormal;
+
+    /// <summary>
+    /// Gets or sets a value indicating whether the card titles are shown (sections only).
+    /// </summary>
+    public bool ShowTitle { get; set; } = true;
+
+    /// <summary>
     /// Gets or sets the folder members (folders only).
     /// </summary>
     [XmlArrayItem("Item")]
@@ -69,4 +84,37 @@ public static class LayoutItemTypes
     /// A folder grouping sections.
     /// </summary>
     public const string Folder = "folder";
+}
+
+/// <summary>
+/// Display format values accepted for a section.
+/// </summary>
+public static class LayoutFormats
+{
+    /// <summary>Keep the shape chosen by the section renderer.</summary>
+    public const string ShapeAuto = "auto";
+
+    /// <summary>Poster cards (2:3).</summary>
+    public const string ShapePortrait = "portrait";
+
+    /// <summary>Backdrop / thumb cards (16:9).</summary>
+    public const string ShapeLandscape = "landscape";
+
+    /// <summary>Square cards.</summary>
+    public const string ShapeSquare = "square";
+
+    /// <summary>Small cards.</summary>
+    public const string SizeSmall = "small";
+
+    /// <summary>Default card size.</summary>
+    public const string SizeNormal = "normal";
+
+    /// <summary>Large cards.</summary>
+    public const string SizeLarge = "large";
+
+    /// <summary>Every accepted shape.</summary>
+    public static readonly string[] Shapes = [ShapeAuto, ShapePortrait, ShapeLandscape, ShapeSquare];
+
+    /// <summary>Every accepted size.</summary>
+    public static readonly string[] Sizes = [SizeSmall, SizeNormal, SizeLarge];
 }

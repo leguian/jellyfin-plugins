@@ -46,6 +46,11 @@ public class LayoutResponse
     public bool FoldersCollapsible { get; set; }
 
     /// <summary>
+    /// Gets or sets a value indicating whether the sections rendered by this plugin are available.
+    /// </summary>
+    public bool EnableIntegratedSections { get; set; }
+
+    /// <summary>
     /// Gets or sets the plugin version.
     /// </summary>
     public string PluginVersion { get; set; } = string.Empty;
