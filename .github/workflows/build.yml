@@ -1,0 +1,32 @@
+name: Build plugins
+
+on:
+  push:
+    branches: [main]
+    paths-ignore: ["manifest.json", "**/*.md"]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        plugin: [customized-home]
+        jellyfin: ["12.1.0", "10.11.11"]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "10.0.x"
+      - name: Build and package
+        run: python3 scripts/package.py ${{ matrix.plugin }} --jellyfin ${{ matrix.jellyfin }} --output artifacts > summary.json
+      - name: Check client script syntax
+        run: node --check ${{ matrix.plugin }}/*/Web/*.js
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.plugin }}-${{ matrix.jellyfin }}
+          path: |
+            artifacts/*.zip
+            summary.json

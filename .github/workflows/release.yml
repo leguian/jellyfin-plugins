@@ -1,0 +1,47 @@
+name: Release plugin
+
+# Tag format: <plugin-folder>-v<version>, e.g. customized-home-v1.0.0.0
+on:
+  push:
+    tags: ["*-v*"]
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "10.0.x"
+      - name: Resolve plugin and version from tag
+        id: meta
+        run: |
+          TAG="${GITHUB_REF_NAME}"
+          echo "plugin=${TAG%-v*}" >> "$GITHUB_OUTPUT"
+          echo "version=${TAG##*-v}" >> "$GITHUB_OUTPUT"
+      - name: Package for Jellyfin 12
+        run: python3 scripts/package.py ${{ steps.meta.outputs.plugin }} --jellyfin 12.1.0 --version ${{ steps.meta.outputs.version }} --output artifacts > summary-12.json
+      - name: Package for Jellyfin 10.11
+        run: python3 scripts/package.py ${{ steps.meta.outputs.plugin }} --jellyfin 10.11.11 --version ${{ steps.meta.outputs.version }} --output artifacts > summary-10.11.json
+      - name: Create GitHub release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: artifacts/*.zip
+          name: ${{ github.ref_name }}
+          generate_release_notes: true
+      - name: Update manifest.json
+        run: |
+          python3 scripts/update-manifest.py --manifest manifest.json \
+            --base-url "https://github.com/${GITHUB_REPOSITORY}/releases/download/${GITHUB_REF_NAME}" \
+            summary-12.json summary-10.11.json
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add manifest.json
+          git commit -m "manifest: ${GITHUB_REF_NAME}" || echo "nothing to commit"
+          git push origin HEAD:main

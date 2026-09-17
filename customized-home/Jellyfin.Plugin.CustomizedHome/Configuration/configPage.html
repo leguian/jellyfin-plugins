@@ -1,0 +1,273 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <title>Customized Home</title>
+</head>
+<body>
+    <div id="CustomizedHomeConfigPage" data-role="page" class="page type-interior pluginConfigurationPage" data-require="emby-input,emby-button,emby-checkbox">
+        <div data-role="content">
+            <div class="content-primary">
+                <form id="CustomizedHomeConfigForm">
+                    <div class="verticalSection verticalSection-extrabottompadding">
+                        <h2 class="sectionTitle">Customized Home</h2>
+                        <p class="fieldDescription">
+                            Reorder, hide and group the home screen sections into folders. Each user can arrange their own home page;
+                            administrators define the default layout applied to everybody else.
+                        </p>
+                    </div>
+
+                    <div class="verticalSection verticalSection-extrabottompadding">
+                        <h3 class="sectionTitle">Status</h3>
+                        <div id="chStatus" class="fieldDescription">Loading…</div>
+                        <div style="margin-top: 0.6em;">
+                            <button is="emby-button" type="button" id="chRetryRegistration" class="raised emby-button">
+                                <span>Retry File Transformation registration</span>
+                            </button>
+                        </div>
+                    </div>
+
+                    <div class="verticalSection verticalSection-extrabottompadding">
+                        <h3 class="sectionTitle">Default layout</h3>
+                        <p class="fieldDescription" id="chDefaultSummary">Loading…</p>
+                        <div style="display: flex; gap: 0.6em; flex-wrap: wrap;">
+                            <button is="emby-button" type="button" id="chEditDefault" class="raised button-submit emby-button">
+                                <span>Edit default layout</span>
+                            </button>
+                            <button is="emby-button" type="button" id="chClearDefault" class="raised emby-button">
+                                <span>Clear default layout</span>
+                            </button>
+                        </div>
+                    </div>
+
+                    <div class="verticalSection verticalSection-extrabottompadding">
+                        <h3 class="sectionTitle">Options</h3>
+                        <div class="checkboxContainer checkboxContainer-withDescription">
+                            <label class="emby-checkbox-label">
+                                <input id="chAllowUserCustomization" type="checkbox" is="emby-checkbox" />
+                                <span>Allow users to customize their own home page</span>
+                            </label>
+                            <div class="fieldDescription checkboxFieldDescription">When disabled, every user gets the default layout. Administrators can always customize their own page.</div>
+                        </div>
+                        <div class="checkboxContainer checkboxContainer-withDescription">
+                            <label class="emby-checkbox-label">
+                                <input id="chForceDefaultLayout" type="checkbox" is="emby-checkbox" />
+                                <span>Force the default layout for everybody</span>
+                            </label>
+                            <div class="fieldDescription checkboxFieldDescription">Ignores the layouts saved by users (they are kept and used again when this option is turned off).</div>
+                        </div>
+                        <div class="checkboxContainer checkboxContainer-withDescription">
+                            <label class="emby-checkbox-label">
+                                <input id="chShowCustomizeButtonOnHome" type="checkbox" is="emby-checkbox" />
+                                <span>Show a "Customize home" button at the bottom of the home page</span>
+                            </label>
+                        </div>
+                        <div class="checkboxContainer checkboxContainer-withDescription">
+                            <label class="emby-checkbox-label">
+                                <input id="chShowUserMenuEntry" type="checkbox" is="emby-checkbox" />
+                                <span>Add a "Customize home" entry to the user menu</span>
+                            </label>
+                        </div>
+                        <div class="checkboxContainer checkboxContainer-withDescription">
+                            <label class="emby-checkbox-label">
+                                <input id="chFoldersCollapsible" type="checkbox" is="emby-checkbox" />
+                                <span>Folders can be collapsed and expanded by clicking their header</span>
+                            </label>
+                            <div class="fieldDescription checkboxFieldDescription">The collapsed state is remembered per device.</div>
+                        </div>
+                        <div class="checkboxContainer checkboxContainer-withDescription">
+                            <label class="emby-checkbox-label">
+                                <input id="chDeveloperMode" type="checkbox" is="emby-checkbox" />
+                                <span>Developer mode (client assets are never cached)</span>
+                            </label>
+                        </div>
+                    </div>
+
+                    <div>
+                        <button is="emby-button" type="submit" class="raised button-submit block emby-button">
+                            <span>Save</span>
+                        </button>
+                    </div>
+                </form>
+
+                <div class="verticalSection verticalSection-extrabottompadding" style="margin-top: 2em;">
+                    <h3 class="sectionTitle">User layouts</h3>
+                    <p class="fieldDescription">Users that saved their own layout. Resetting a user sends them back to the default layout.</p>
+                    <div id="chUserLayouts" class="paperList" style="margin-top: 0.6em;"></div>
+                </div>
+            </div>
+        </div>
+        <script type="text/javascript">
+            (function () {
+                var pluginId = '7c99a4bf-cd3b-4bc8-b941-7ddccd816f3c';
+                var page = document.querySelector('#CustomizedHomeConfigPage');
+                var fields = ['AllowUserCustomization', 'ForceDefaultLayout', 'ShowCustomizeButtonOnHome', 'ShowUserMenuEntry', 'FoldersCollapsible', 'DeveloperMode'];
+
+                function escapeHtml(value) {
+                    return String(value == null ? '' : value).replace(/[&<>"']/g, function (c) {
+                        return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
+                    });
+                }
+
+                function describeLayout(layout) {
+                    var items = (layout && layout.Items) || [];
+                    if (!items.length) {
+                        return 'No default layout: the home page is left untouched for users without a layout of their own.';
+                    }
+                    var folders = 0;
+                    var sections = 0;
+                    var hidden = 0;
+                    items.forEach(function (item) {
+                        if (item.Type === 'folder') {
+                            folders++;
+                            (item.Items || []).forEach(function (member) {
+                                sections++;
+                                if (member.Visible === false) {
+                                    hidden++;
+                                }
+                            });
+                        } else {
+                            sections++;
+                            if (item.Visible === false) {
+                                hidden++;
+                            }
+                        }
+                    });
+                    return sections + ' section(s), ' + folders + ' folder(s), ' + hidden + ' hidden' + (layout.HideUnlisted ? ', unlisted sections hidden' : '') + '.';
+                }
+
+                function formatDate(value) {
+                    try {
+                        return new Date(value).toLocaleString();
+                    } catch (e) {
+                        return value;
+                    }
+                }
+
+                function renderStatus(status) {
+                    var inj = status.Injection || {};
+                    var lines = [];
+                    lines.push('Plugin version: ' + escapeHtml(status.PluginVersion));
+                    if (!inj.FileTransformationDetected) {
+                        lines.push('<span style="color:#ff9f43;">File Transformation plugin not detected.</span> Install it from the "iamparadox.dev" repository (https://www.iamparadox.dev/jellyfin/plugins/manifest.json) and restart the server: it injects the client script into the web client.');
+                    } else if (inj.Registered) {
+                        lines.push('<span style="color:#52c41a;">Client script registered with File Transformation ' + escapeHtml(inj.FileTransformationVersion || '') + '.</span> Users may need to refresh their browser once (Ctrl+F5).');
+                    } else {
+                        lines.push('<span style="color:#ff4d4f;">File Transformation ' + escapeHtml(inj.FileTransformationVersion || '') + ' detected but the registration failed: ' + escapeHtml(inj.Error || 'unknown error') + '</span>');
+                    }
+                    if (status.RootPath) {
+                        lines.push('Base URL prefix: ' + escapeHtml(status.RootPath));
+                    }
+                    lines.push('Users with their own layout: ' + status.UserLayoutCount);
+                    document.querySelector('#chStatus').innerHTML = lines.join('<br />');
+                }
+
+                function loadStatus() {
+                    return ApiClient.getJSON(ApiClient.getUrl('CustomizedHome/Status')).then(renderStatus).catch(function () {
+                        document.querySelector('#chStatus').textContent = 'Could not read the plugin status.';
+                    });
+                }
+
+                function loadUserLayouts() {
+                    var container = document.querySelector('#chUserLayouts');
+                    return ApiClient.getJSON(ApiClient.getUrl('CustomizedHome/UserLayouts')).then(function (list) {
+                        if (!list.length) {
+                            container.innerHTML = '<div class="fieldDescription">No user has saved a custom layout yet.</div>';
+                            return;
+                        }
+                        container.innerHTML = list.map(function (info) {
+                            return '<div class="listItem">' +
+                                '<span class="material-icons listItemIcon person" aria-hidden="true"></span>' +
+                                '<div class="listItemBody">' +
+                                '<div class="listItemBodyText">' + escapeHtml(info.UserName || info.UserId) + '</div>' +
+                                '<div class="listItemBodyText secondary">' + info.SectionCount + ' section(s), ' + info.FolderCount + ' folder(s), saved ' + escapeHtml(formatDate(info.ModifiedUtc)) + '</div>' +
+                                '</div>' +
+                                '<button type="button" is="paper-icon-button-light" class="listItemButton chResetUser" data-userid="' + escapeHtml(info.UserId) + '" title="Reset"><span class="material-icons delete" aria-hidden="true"></span></button>' +
+                                '</div>';
+                        }).join('');
+                    }).catch(function () {
+                        container.innerHTML = '<div class="fieldDescription">Could not list the user layouts.</div>';
+                    });
+                }
+
+                function loadConfig() {
+                    Dashboard.showLoadingMsg();
+                    return ApiClient.getPluginConfiguration(pluginId).then(function (config) {
+                        fields.forEach(function (name) {
+                            document.querySelector('#ch' + name).checked = !!config[name];
+                        });
+                        document.querySelector('#chDefaultSummary').textContent = describeLayout(config.DefaultLayout);
+                        Dashboard.hideLoadingMsg();
+                    });
+                }
+
+                page.addEventListener('pageshow', function () {
+                    loadConfig();
+                    loadStatus();
+                    loadUserLayouts();
+                });
+
+                document.querySelector('#CustomizedHomeConfigForm').addEventListener('submit', function (e) {
+                    e.preventDefault();
+                    Dashboard.showLoadingMsg();
+                    ApiClient.getPluginConfiguration(pluginId).then(function (config) {
+                        fields.forEach(function (name) {
+                            config[name] = document.querySelector('#ch' + name).checked;
+                        });
+                        ApiClient.updatePluginConfiguration(pluginId, config).then(function (result) {
+                            Dashboard.processPluginConfigurationUpdateResult(result);
+                        });
+                    });
+                    return false;
+                });
+
+                document.querySelector('#chRetryRegistration').addEventListener('click', function () {
+                    ApiClient.ajax({ type: 'POST', url: ApiClient.getUrl('CustomizedHome/Status/Retry'), dataType: 'json' }).then(renderStatus).catch(loadStatus);
+                });
+
+                document.querySelector('#chEditDefault').addEventListener('click', function () {
+                    if (!window.CustomizedHome || !window.CustomizedHome.openEditor) {
+                        Dashboard.alert('The client script is not loaded on this page. Check the File Transformation status above and refresh the page.');
+                        return;
+                    }
+                    window.CustomizedHome.openEditor({
+                        mode: 'default',
+                        onSaved: function (layout) {
+                            document.querySelector('#chDefaultSummary').textContent = describeLayout(layout);
+                        }
+                    });
+                });
+
+                document.querySelector('#chClearDefault').addEventListener('click', function () {
+                    if (!window.confirm('Clear the default layout?')) {
+                        return;
+                    }
+                    ApiClient.ajax({
+                        type: 'POST',
+                        url: ApiClient.getUrl('CustomizedHome/DefaultLayout'),
+                        data: JSON.stringify({ Version: 1, HideUnlisted: false, Items: [] }),
+                        contentType: 'application/json',
+                        dataType: 'json'
+                    }).then(function (layout) {
+                        document.querySelector('#chDefaultSummary').textContent = describeLayout(layout);
+                    });
+                });
+
+                document.querySelector('#chUserLayouts').addEventListener('click', function (e) {
+                    var button = e.target.closest('.chResetUser');
+                    if (!button) {
+                        return;
+                    }
+                    if (!window.confirm('Reset this user to the default layout?')) {
+                        return;
+                    }
+                    ApiClient.ajax({ type: 'DELETE', url: ApiClient.getUrl('CustomizedHome/Layout', { userId: button.getAttribute('data-userid') }) }).then(function () {
+                        loadUserLayouts();
+                        loadStatus();
+                    });
+                });
+            })();
+        </script>
+    </div>
+</body>
+</html>

@@ -1,0 +1,505 @@
+/* Customized Home - client styles (injected into jellyfin-web) */
+
+/* Home container: sections are ordered with flex "order" so the DOM is never moved
+   (moving emby-itemscontainer elements would reset their data bindings). */
+.homeSectionsContainer.ch-container {
+    display: flex;
+    flex-direction: column;
+}
+
+/* Built-in wrappers holding several sections (recently added per library, live tv, library buttons):
+   let their children take part in the flex ordering. */
+.ch-container > .ch-wrapper {
+    display: contents;
+}
+
+.ch-hidden {
+    display: none !important;
+}
+
+/* Folder header */
+.ch-folder {
+    margin-top: 0.4em;
+}
+
+.ch-folder-header {
+    display: flex;
+    align-items: center;
+    gap: 0.5em;
+    width: 100%;
+    background: transparent;
+    border: 0;
+    color: inherit;
+    font: inherit;
+    text-align: left;
+    cursor: pointer;
+    padding: 0.35em 0;
+    margin: 0;
+    border-radius: 0.3em;
+}
+
+.ch-folder-header:disabled {
+    cursor: default;
+}
+
+.ch-folder-header:hover:not(:disabled),
+.ch-folder-header:focus-visible {
+    background: rgba(255, 255, 255, 0.06);
+    outline: none;
+}
+
+.layout-tv .ch-folder-header:focus {
+    background: rgba(255, 255, 255, 0.12);
+}
+
+.ch-folder-header .sectionTitle {
+    margin: 0;
+}
+
+.ch-folder-icon {
+    opacity: 0.85;
+}
+
+.ch-folder-count {
+    opacity: 0.6;
+    font-size: 0.85em;
+}
+
+.ch-folder-chevron {
+    margin-left: auto;
+    margin-right: 3.3%;
+    transition: transform 0.15s ease;
+}
+
+.ch-folder.ch-folder-collapsed .ch-folder-chevron {
+    transform: rotate(-90deg);
+}
+
+/* Folder members: a left accent, no layout shift */
+.ch-in-folder {
+    box-shadow: inset 0.25em 0 0 0 rgba(0, 164, 220, 0.45);
+}
+
+.ch-in-folder .sectionTitle-cards {
+    font-size: 1.1em;
+}
+
+/* Customize button at the bottom of the home page */
+.ch-customize-bar {
+    display: flex;
+    justify-content: center;
+    padding: 1.5em 0 2em;
+}
+
+.ch-customize-button {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4em;
+    background: rgba(255, 255, 255, 0.08);
+    color: inherit;
+    border: 0;
+    border-radius: 2em;
+    padding: 0.55em 1.2em;
+    font: inherit;
+    font-size: 0.95em;
+    cursor: pointer;
+}
+
+.ch-customize-button:hover,
+.ch-customize-button:focus-visible {
+    background: rgba(255, 255, 255, 0.16);
+    outline: none;
+}
+
+.layout-tv .ch-customize-button:focus {
+    background: rgba(255, 255, 255, 0.25);
+}
+
+/* User menu entry (MUI menu) */
+.ch-menu-entry {
+    cursor: pointer;
+}
+
+/* ---------- Editor dialog ---------- */
+.ch-overlay {
+    position: fixed;
+    inset: 0;
+    z-index: 100000;
+    background: rgba(0, 0, 0, 0.72);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 1em;
+    box-sizing: border-box;
+    font-family: inherit;
+}
+
+.ch-dialog {
+    background: #202020;
+    color: #ddd;
+    width: 100%;
+    max-width: 44em;
+    max-height: 100%;
+    border-radius: 0.5em;
+    box-shadow: 0 0.5em 2em rgba(0, 0, 0, 0.6);
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+}
+
+@media (max-width: 40em) {
+    .ch-overlay {
+        padding: 0;
+    }
+
+    .ch-dialog {
+        max-width: none;
+        height: 100%;
+        border-radius: 0;
+    }
+}
+
+.ch-dialog-header {
+    display: flex;
+    align-items: center;
+    gap: 0.6em;
+    padding: 0.9em 1.1em;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.ch-dialog-title {
+    margin: 0;
+    font-size: 1.25em;
+    font-weight: 500;
+    flex: 1;
+}
+
+.ch-dialog-body {
+    flex: 1;
+    overflow-y: auto;
+    padding: 0.6em 1.1em;
+    -webkit-overflow-scrolling: touch;
+}
+
+.ch-dialog-footer {
+    display: flex;
+    justify-content: flex-end;
+    gap: 0.6em;
+    padding: 0.8em 1.1em;
+    border-top: 1px solid rgba(255, 255, 255, 0.08);
+    flex-wrap: wrap;
+}
+
+.ch-toolbar {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5em 1em;
+    align-items: center;
+    padding: 0.4em 0 0.8em;
+}
+
+.ch-toolbar label {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35em;
+    font-size: 0.9em;
+    opacity: 0.9;
+    cursor: pointer;
+}
+
+.ch-hint {
+    font-size: 0.85em;
+    opacity: 0.65;
+    margin: 0 0 0.6em;
+}
+
+.ch-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35em;
+    background: rgba(255, 255, 255, 0.1);
+    color: inherit;
+    border: 0;
+    border-radius: 0.3em;
+    padding: 0.5em 0.9em;
+    font: inherit;
+    font-size: 0.95em;
+    cursor: pointer;
+    text-transform: none;
+}
+
+.ch-btn:hover,
+.ch-btn:focus-visible {
+    background: rgba(255, 255, 255, 0.2);
+    outline: none;
+}
+
+.ch-btn-primary {
+    background: #00a4dc;
+    color: #fff;
+}
+
+.ch-btn-primary:hover,
+.ch-btn-primary:focus-visible {
+    background: #0288b8;
+}
+
+.ch-btn-danger {
+    color: #ff7b7b;
+}
+
+.ch-btn:disabled {
+    opacity: 0.5;
+    cursor: default;
+}
+
+.ch-icon-btn {
+    background: transparent;
+    border: 0;
+    color: inherit;
+    padding: 0.3em;
+    border-radius: 50%;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    line-height: 1;
+}
+
+.ch-icon-btn:hover,
+.ch-icon-btn:focus-visible {
+    background: rgba(255, 255, 255, 0.14);
+    outline: none;
+}
+
+.ch-icon-btn:disabled {
+    opacity: 0.3;
+    cursor: default;
+}
+
+/* Rows */
+.ch-list {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    gap: 0.25em;
+    padding-bottom: 4em;
+}
+
+.ch-row {
+    display: flex;
+    align-items: center;
+    gap: 0.4em;
+    background: rgba(255, 255, 255, 0.06);
+    border-radius: 0.35em;
+    padding: 0.35em 0.5em;
+    min-height: 2.6em;
+    user-select: none;
+    -webkit-user-select: none;
+    position: relative;
+}
+
+.ch-row.ch-row-child {
+    margin-left: 2em;
+    background: rgba(255, 255, 255, 0.045);
+}
+
+.ch-row.ch-row-folder {
+    background: rgba(0, 164, 220, 0.16);
+}
+
+.ch-row.ch-row-hidden .ch-row-title {
+    opacity: 0.45;
+    text-decoration: line-through;
+}
+
+.ch-row.ch-row-absent .ch-row-title {
+    opacity: 0.6;
+}
+
+.ch-row.ch-dragging {
+    opacity: 0.35;
+}
+
+.ch-handle {
+    cursor: grab;
+    touch-action: none;
+    opacity: 0.6;
+    padding: 0.2em;
+}
+
+.ch-handle:active {
+    cursor: grabbing;
+}
+
+.ch-row-icon {
+    opacity: 0.8;
+}
+
+.ch-row-text {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+}
+
+.ch-row-title {
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.ch-row-sub {
+    font-size: 0.75em;
+    opacity: 0.55;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.ch-row-actions {
+    display: flex;
+    align-items: center;
+    gap: 0.1em;
+}
+
+.ch-folder-name {
+    flex: 1;
+    min-width: 0;
+    background: rgba(0, 0, 0, 0.25);
+    color: inherit;
+    border: 1px solid rgba(255, 255, 255, 0.15);
+    border-radius: 0.3em;
+    padding: 0.35em 0.5em;
+    font: inherit;
+}
+
+.ch-folder-name:focus {
+    outline: none;
+    border-color: #00a4dc;
+}
+
+.ch-ghost {
+    position: fixed;
+    z-index: 100001;
+    pointer-events: none;
+    opacity: 0.85;
+    box-shadow: 0 0.4em 1.2em rgba(0, 0, 0, 0.6);
+    width: auto;
+}
+
+.ch-drop-indicator {
+    position: absolute;
+    left: 0;
+    right: 0;
+    height: 0.2em;
+    background: #00a4dc;
+    border-radius: 0.1em;
+    pointer-events: none;
+    z-index: 5;
+}
+
+.ch-drop-indicator.ch-drop-indent {
+    left: 2em;
+}
+
+/* Popup menu */
+.ch-popup {
+    position: fixed;
+    z-index: 100002;
+    background: #2b2b2b;
+    color: #eee;
+    border-radius: 0.35em;
+    box-shadow: 0 0.4em 1.2em rgba(0, 0, 0, 0.6);
+    min-width: 14em;
+    padding: 0.3em 0;
+    max-height: 60vh;
+    overflow-y: auto;
+}
+
+.ch-popup button,
+.ch-popup .ch-popup-label {
+    display: flex;
+    align-items: center;
+    gap: 0.6em;
+    width: 100%;
+    background: transparent;
+    border: 0;
+    color: inherit;
+    font: inherit;
+    text-align: left;
+    padding: 0.55em 1em;
+    cursor: pointer;
+    box-sizing: border-box;
+}
+
+.ch-popup .ch-popup-label {
+    cursor: default;
+    opacity: 0.6;
+    font-size: 0.85em;
+}
+
+.ch-popup button:hover,
+.ch-popup button:focus-visible {
+    background: rgba(255, 255, 255, 0.1);
+    outline: none;
+}
+
+.ch-popup .ch-popup-sep {
+    height: 1px;
+    background: rgba(255, 255, 255, 0.1);
+    margin: 0.3em 0;
+}
+
+/* Icon picker */
+.ch-icon-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(2.6em, 1fr));
+    gap: 0.3em;
+    padding: 0.5em 0.8em;
+}
+
+.ch-icon-grid button {
+    aspect-ratio: 1;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    background: rgba(255, 255, 255, 0.06);
+    border: 0;
+    border-radius: 0.3em;
+    color: inherit;
+    cursor: pointer;
+}
+
+.ch-icon-grid button:hover,
+.ch-icon-grid button.ch-selected {
+    background: #00a4dc;
+    color: #fff;
+}
+
+/* Toast */
+.ch-toast {
+    position: fixed;
+    left: 50%;
+    bottom: 2em;
+    transform: translateX(-50%);
+    background: #333;
+    color: #fff;
+    padding: 0.7em 1.2em;
+    border-radius: 0.4em;
+    z-index: 100003;
+    box-shadow: 0 0.3em 1em rgba(0, 0, 0, 0.5);
+    opacity: 0;
+    transition: opacity 0.2s ease;
+    max-width: 90vw;
+}
+
+.ch-toast.ch-toast-visible {
+    opacity: 1;
+}
+
+.ch-empty {
+    text-align: center;
+    opacity: 0.6;
+    padding: 2em 1em;
+}
