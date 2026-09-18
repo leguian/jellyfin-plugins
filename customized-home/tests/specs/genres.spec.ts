@@ -28,6 +28,31 @@ test('all genres section shows one card per genre linking to the genre list', as
     await expect(links.first()).toHaveAttribute('href', '#/list?genreId=genre-action&serverId=server-1');
 });
 
+test('genre cards are poster shaped and show a collage of four distinct posters', async ({ page }) => {
+    await openHome(page, {
+        enableIntegratedSections: true,
+        layout: layoutWith([{ Type: 'section', Key: 'ch:allGenres', Visible: true }])
+    });
+    const card = page.locator('[data-ch-key="ch:allGenres"] .ch-card').first();
+    await expect(card).toHaveClass(/overflowPortraitCard/);
+    const cells = await card.locator('.ch-collage-cell').evaluateAll((nodes) => nodes.map((node) => (node as HTMLElement).style.backgroundImage));
+    expect(cells).toHaveLength(4);
+    expect(new Set(cells).size).toBe(4);
+});
+
+test('an uploaded genre thumbnail replaces the collage', async ({ page }) => {
+    await openHome(page, {
+        enableIntegratedSections: true,
+        genreImages: [{ Name: 'Comedy', Version: 7 }],
+        layout: layoutWith([{ Type: 'section', Key: 'ch:allGenres', Visible: true }])
+    });
+    const comedy = page.locator('[data-ch-key="ch:allGenres"] .ch-card', { hasText: 'Comedy' });
+    await expect(comedy.locator('.ch-collage')).toHaveCount(0);
+    const background = await comedy.locator('a.cardImageContainer').evaluate((node) => (node as HTMLElement).style.backgroundImage);
+    expect(background).toContain('CustomizedHome/GenreImages/Image?name=Comedy&v=7');
+    await expect(page.locator('[data-ch-key="ch:allGenres"] .ch-card', { hasText: 'Action' }).locator('.ch-collage')).toHaveCount(1);
+});
+
 test('integrated sections stay off when the administrator disabled them', async ({ page }) => {
     await openHome(page, {
         enableIntegratedSections: false,
@@ -48,10 +73,11 @@ test('genres are chosen from the format menu, saved, and applied without reloadi
     const row = page.locator(`${LIST} .ch-row`).first();
     await expect(row.locator('.ch-row-format')).toHaveText('1 genre(s)');
     await row.locator('.ch-act-menu').click();
-    await page.locator('.ch-popup .ch-act-genres').click();
-    await expect(page.locator('.ch-genre-option')).toHaveText(['Action', 'Comedy', 'Drama']);
-    await expect(page.locator('.ch-genre-option input').first()).toBeChecked();
-    await page.locator('.ch-genre-option', { hasText: 'Comedy' }).locator('input').check();
+    // Genres are listed inside the format menu, which stays open while they are toggled.
+    await expect(page.locator('.ch-popup .ch-genre-option')).toHaveCount(3);
+    await expect(page.locator('.ch-popup .ch-genre-option', { hasText: 'Action' })).toHaveAttribute('aria-checked', 'true');
+    await page.locator('.ch-popup .ch-genre-option', { hasText: 'Comedy' }).click();
+    await expect(page.locator('.ch-popup .ch-genre-option', { hasText: 'Comedy' })).toHaveAttribute('aria-checked', 'true');
     await expect(page.locator(`${LIST} .ch-row`).first().locator('.ch-row-format')).toHaveText('2 genre(s)');
 
     await page.locator('.ch-overlay .ch-dialog-header').click();
@@ -67,5 +93,6 @@ test('other sections never carry genres', async ({ page }) => {
     await openHome(page, { layout: layoutWith([{ Type: 'section', Key: 'jf:nextup', Visible: true }]) });
     await openEditor(page);
     await page.locator(`${LIST} .ch-row`).first().locator('.ch-act-menu').click();
-    await expect(page.locator('.ch-popup .ch-act-genres')).toHaveCount(0);
+    await expect(page.locator('.ch-popup')).toBeVisible();
+    await expect(page.locator('.ch-popup .ch-genre-option')).toHaveCount(0);
 });

@@ -13,7 +13,7 @@
         return;
     }
 
-    const VERSION = '1.4.0.1';
+    const VERSION = '1.5.0';
     const API = 'CustomizedHome';
     const ORDER_STEP = 1000;
     const ORDER_UNLISTED_BASE = 1000000000;
@@ -40,7 +40,15 @@
             saveError: 'Could not save the layout',
             loadError: 'Could not load the layout',
             hideUnlisted: 'Hide sections that are not listed here',
-            showAll: 'Show every known section',
+            showAll: 'Also list the Jellyfin sections that are not displayed right now',
+            legendCustomized: 'Customized Home section',
+            legendJellyfin: 'Jellyfin default section',
+            legendOther: 'Section from another plugin',
+            dragHandle: 'Drag to reorder, or to move to the other column',
+            showSectionTitle: 'Show the section title',
+            noSectionTitle: 'no section title',
+            cardOptions: 'Cards',
+            sectionOptions: 'Section',
             hint: 'The left column is your home page: as soon as it holds one section, it replaces the default home page. Add sections from the right column, drag the handles to reorder.',
             addToLayout: 'Add to the customized home page',
             removeAction: 'Remove from the customized home page',
@@ -89,7 +97,7 @@
             genresNone: 'No genre found in your libraries.',
             becauseYouWatched: 'Because you watched {0}',
             genreTitle: 'Genre: {0}',
-            format: 'Display format',
+            format: 'Display format (shape, size, titles)',
             shape: 'Card shape',
             shapeAuto: 'Default',
             shapePortrait: 'Poster',
@@ -99,8 +107,8 @@
             sizeSmall: 'Small',
             sizeNormal: 'Normal',
             sizeLarge: 'Large',
-            showTitles: 'Show titles',
-            noTitles: 'no titles'
+            showTitles: 'Show the card titles',
+            noTitles: 'no card titles'
         },
         fr: {
             customize: "Personnaliser l'accueil",
@@ -116,7 +124,15 @@
             saveError: "Impossible d'enregistrer la disposition",
             loadError: 'Impossible de charger la disposition',
             hideUnlisted: 'Masquer les sections absentes de cette liste',
-            showAll: 'Afficher toutes les sections connues',
+            showAll: 'Lister aussi les sections Jellyfin non affichées actuellement',
+            legendCustomized: 'Section Customized Home',
+            legendJellyfin: 'Section Jellyfin par défaut',
+            legendOther: "Section d'un autre plugin",
+            dragHandle: "Glisser pour réordonner, ou pour changer de colonne",
+            showSectionTitle: 'Afficher le titre de la section',
+            noSectionTitle: 'sans titre de section',
+            cardOptions: 'Cartes',
+            sectionOptions: 'Section',
             hint: "La colonne de gauche est votre page d'accueil : dès qu'elle contient une section, elle remplace la page d'accueil par défaut. Ajoutez des sections depuis la colonne de droite, glissez les poignées pour réordonner.",
             addToLayout: "Ajouter à la page d'accueil modifiée",
             removeAction: "Supprimer de la page d'accueil modifiée",
@@ -165,7 +181,7 @@
             genresNone: 'Aucun genre trouvé dans vos médiathèques.',
             becauseYouWatched: 'Parce que vous avez regardé {0}',
             genreTitle: 'Genre : {0}',
-            format: "Format d'affichage",
+            format: "Format d'affichage (forme, taille, titres)",
             shape: 'Forme des cartes',
             shapeAuto: 'Par défaut',
             shapePortrait: 'Affiche',
@@ -175,8 +191,8 @@
             sizeSmall: 'Petite',
             sizeNormal: 'Normale',
             sizeLarge: 'Grande',
-            showTitles: 'Afficher les titres',
-            noTitles: 'sans titres'
+            showTitles: 'Afficher les titres des cartes',
+            noTitles: 'sans titres de cartes'
         }
     };
 
@@ -193,6 +209,7 @@
         applyScheduled: false,
         scanScheduled: false,
         catalog: null,
+        genreNames: null,
         userViews: null,
         integratedCache: {}
     };
@@ -508,6 +525,74 @@
     const AUTO_GENRE_ROWS = 2;
     const GENRE_ROW_ITEMS = 16;
 
+    const GENRE_COLLAGE_SIZE = 4;
+    const GENRE_FETCH_CONCURRENCY = 6;
+
+    // Runs `worker` over `values` with a bounded number of requests in flight.
+    function mapLimit(values, limit, worker) {
+        const results = new Array(values.length);
+        let next = 0;
+        function run() {
+            if (next >= values.length) {
+                return Promise.resolve();
+            }
+            const index = next++;
+            return worker(values[index]).then(function (result) {
+                results[index] = result;
+                return run();
+            });
+        }
+        const runners = [];
+        for (let i = 0; i < Math.min(limit, values.length); i++) {
+            runners.push(run());
+        }
+        return Promise.all(runners).then(function () {
+            return results;
+        });
+    }
+
+    function fetchGenreImages() {
+        return apiGet('GenreImages').then(function (list) {
+            const byName = {};
+            (list || []).forEach(function (entry) {
+                byName[entry.Name.toUpperCase()] = entry;
+            });
+            return byName;
+        }).catch(function () {
+            return {};
+        });
+    }
+
+    function genreImageUrl(entry) {
+        return apiUrl('GenreImages/Image', { name: entry.Name, v: entry.Version });
+    }
+
+    // Genre cards: the thumbnail uploaded by the administrator, else a collage of distinct posters of the genre.
+    function fetchGenreCards() {
+        return Promise.all([fetchGenreList(), fetchGenreImages()]).then(function (results) {
+            const custom = results[1];
+            return mapLimit(results[0], GENRE_FETCH_CONCURRENCY, function (genre) {
+                const uploaded = custom[String(genre.Name).toUpperCase()];
+                if (uploaded) {
+                    genre._chImage = genreImageUrl(uploaded);
+                    return Promise.resolve(genre);
+                }
+                return itemsQuery({ genreIds: genre.Id, includeItemTypes: 'Movie,Series', recursive: true, sortBy: 'Random', imageTypes: 'Primary', limit: GENRE_COLLAGE_SIZE, fields: 'PrimaryImageAspectRatio' })
+                    .then(function (items) {
+                        genre._chCollage = dedupeItems(items).filter(function (item) {
+                            return item.ImageTags && item.ImageTags.Primary;
+                        }).map(function (item) {
+                            return apiClient().getImageUrl(item.Id, { type: 'Primary', maxWidth: 240, tag: item.ImageTags.Primary });
+                        });
+                        return genre;
+                    })
+                    .catch(function () {
+                        return genre;
+                    });
+            });
+        });
+    }
+
     function fetchGenreList() {
         const client = apiClient();
         return client.getJSON(client.getUrl('Genres', {
@@ -598,7 +683,7 @@
         } },
         'ch:becauseYouWatched': { titleKey: 'becauseYouWatched', shape: 'portrait', family: true, fetchInstances: fetchBecauseYouWatched },
         'ch:genre': { titleKey: 'genreTitle', shape: 'portrait', family: true, fetchInstances: fetchGenre },
-        'ch:allGenres': { titleKey: 'int_allGenres', shape: 'landscape', fetch: fetchGenreList }
+        'ch:allGenres': { titleKey: 'int_allGenres', shape: 'portrait', fetch: fetchGenreCards }
     };
 
     function imageUrlFor(item, shape) {
@@ -672,7 +757,8 @@
         const serverId = item.ServerId || apiClient().serverId();
         const shapeClass = shape === 'landscape' ? 'overflowBackdropCard' : (shape === 'square' ? 'overflowSquareCard' : 'overflowPortraitCard');
         const padder = shape === 'landscape' ? 'cardPadder-overflowBackdrop' : (shape === 'square' ? 'cardPadder-overflowSquare' : 'cardPadder-overflowPortrait');
-        const image = imageUrlFor(item, shape);
+        const collage = item._chImage ? [] : (item._chCollage || []);
+        const image = item._chImage || (collage.length ? null : imageUrlFor(item, shape));
         const href = item.Type === 'Genre'
             ? '#/list?genreId=' + encodeURIComponent(item.Id) + '&serverId=' + encodeURIComponent(serverId)
             : '#/details?id=' + encodeURIComponent(item.Id) + '&serverId=' + encodeURIComponent(serverId);
@@ -704,7 +790,15 @@
             ? 'cardImageContainer coveredImage cardContent'
             : 'cardImageContainer cardContent defaultCardBackground defaultCardBackground' + (textHash(title) % 5 + 1);
         const imageStyle = image ? ' style="background-image:url(&quot;' + escapeHtml(image) + '&quot;)"' : '';
-        const defaultText = image ? '' : '<div class="cardText cardDefaultText">' + escapeHtml(title) + '</div>';
+        let defaultText = '';
+        if (collage.length) {
+            // Each cell keeps the poster ratio on portrait cards (2 x 2 posters = one poster shaped card).
+            defaultText = '<div class="ch-collage ch-collage-' + collage.length + '">' + collage.map(function (url) {
+                return '<span class="ch-collage-cell" style="background-image:url(&quot;' + escapeHtml(url) + '&quot;)"></span>';
+            }).join('') + '</div>';
+        } else if (!image) {
+            defaultText = '<div class="cardText cardDefaultText">' + escapeHtml(title) + '</div>';
+        }
 
         let html = '<div class="card ' + shapeClass + ' card-hoverable card-withuserdata ch-card" data-id="' + escapeHtml(item.Id) + '" data-serverid="' + escapeHtml(serverId)
             + '" data-type="' + escapeHtml(item.Type || '') + '" data-isfolder="' + (item.IsFolder ? 'true' : 'false') + '"'
@@ -841,6 +935,7 @@
             setClass(node, 'ch-size-' + candidate, size === candidate);
         });
         setClass(node, 'ch-notitle', !integrated && !!item && item.ShowTitle === false);
+        setClass(node, 'ch-nosectiontitle', !!item && item.ShowSectionTitle === false);
         if (integrated && node._chItems) {
             const format = formatFor(item, integrated);
             if (node.dataset.chShape !== format.shape || (node.dataset.chShowTitle === '1') !== format.showTitle) {
@@ -1552,7 +1647,9 @@
             mode: mode,
             model: model,
             known: info.known,
-            showAll: mode === 'default',
+            // Without a home page under the editor (administration, other page) nothing is "displayed": list everything.
+            hasHome: mode === 'user' && (state.discovered || []).length > 0,
+            showAll: !(mode === 'user' && (state.discovered || []).length > 0),
             query: '',
             embedded: embedded,
             options: options,
@@ -1569,7 +1666,7 @@
         dialog.innerHTML = '<div class="ch-dialog-header">'
             + '<span class="material-icons" aria-hidden="true">other_houses</span>'
             + '<h2 class="ch-dialog-title"></h2>'
-            + '<button type="button" class="ch-icon-btn ch-close" title="' + escapeHtml(t('close')) + '"><span class="material-icons" aria-hidden="true">close</span></button>'
+            + '<button type="button" class="ch-icon-btn ch-close" data-ch-tip="' + escapeHtml(t('close')) + '" aria-label="' + escapeHtml(t('close')) + '"><span class="material-icons" aria-hidden="true">close</span></button>'
             + '</div>'
             + '<div class="ch-dialog-body">'
             + '<p class="ch-hint"></p>'
@@ -1577,6 +1674,10 @@
             + '<div class="ch-search-box"><span class="material-icons" aria-hidden="true">search</span><input type="search" class="ch-search" autocomplete="off" /></div>'
             + '<label><input type="checkbox" class="ch-show-all" /> <span></span></label>'
             + '<button type="button" class="ch-btn ch-btn-primary ch-save ch-save-top"></button>'
+            + '</div>'
+            + '<div class="ch-legend">'
+            + '<span class="ch-legend-item"><span class="material-icons ch-origin-customized" aria-hidden="true">house</span><span class="ch-legend-customized"></span></span>'
+            + '<span class="ch-legend-item"><span class="ch-origin-jellyfin">' + JELLYFIN_LOGO + '</span><span class="ch-legend-jellyfin"></span></span>'
             + '</div>'
             + '<div class="ch-columns">'
             + '<div class="ch-col ch-col-layout"><h3 class="ch-col-title"></h3><div class="ch-list"></div></div>'
@@ -1599,6 +1700,8 @@
         editor.list = dialog.querySelector('.ch-list');
         editor.unlisted = dialog.querySelector('.ch-unlisted');
         editor.columns = dialog.querySelector('.ch-columns');
+        dialog.querySelector('.ch-legend-customized').textContent = t('legendCustomized');
+        dialog.querySelector('.ch-legend-jellyfin').textContent = t('legendJellyfin');
         dialog.querySelector('.ch-col-layout .ch-col-title').textContent = t('colLayout');
         dialog.querySelector('.ch-col-unlisted .ch-col-title').textContent = t('colUnlisted');
         if (!embedded) {
@@ -1610,6 +1713,7 @@
         dialog.querySelector('.ch-hint').textContent = t('hint');
         dialog.querySelector('.ch-search').placeholder = t('search');
         dialog.querySelector('.ch-show-all').checked = editor.showAll;
+        dialog.querySelector('.ch-show-all').parentNode.style.display = editor.hasHome ? '' : 'none';
         dialog.querySelector('.ch-show-all').nextElementSibling.textContent = t('showAll');
         dialog.querySelector('.ch-cancel').textContent = t('cancel');
         Array.prototype.forEach.call(dialog.querySelectorAll('.ch-save'), function (button) {
@@ -1657,6 +1761,7 @@
         editor.columns.addEventListener('click', onListClick);
         editor.list.addEventListener('input', onListInput);
         initDrag(editor.columns, editor.list, editor.unlisted);
+        initTooltips(overlay);
 
         renderEditor();
         if (!embedded) {
@@ -1673,6 +1778,7 @@
             return;
         }
         closePopup();
+        hideTooltip();
         editor.overlay.remove();
         editor = null;
     }
@@ -1696,7 +1802,8 @@
         return Object.keys(editor.known).map(function (key) {
             return editor.known[key];
         }).filter(function (entry) {
-            return !used[entry.key] && (editor.showAll || editor.query || entry.present);
+            // Sections rendered by this plugin only exist once added: they are always offered.
+            return !used[entry.key] && (editor.showAll || editor.query || entry.present || entry.origin === 'customized');
         }).sort(function (a, b) {
             return a.label.localeCompare(b.label);
         });
@@ -1729,21 +1836,42 @@
             subtitle.push(t('absent'));
         }
         const badge = formatBadge(item);
-        row.innerHTML = '<span class="material-icons ch-handle" aria-hidden="true">drag_indicator</span>'
-            + '<span class="material-icons ch-row-icon" aria-hidden="true">' + (entry.origin === 'hss' ? 'view_carousel' : (entry.origin === 'customized' ? 'auto_awesome' : 'view_stream')) + '</span>'
+        row.innerHTML = '<span class="material-icons ch-handle" data-ch-tip="' + escapeHtml(t('dragHandle')) + '" aria-hidden="true">drag_indicator</span>'
+            + originIconHtml(entry.origin)
             + '<div class="ch-row-text"><div class="ch-row-title"></div><div class="ch-row-sub"></div></div>'
             + (badge ? '<span class="ch-row-format"></span>' : '')
             + '<div class="ch-row-actions">' + rowActionsHtml(item) + '</div>';
         row.querySelector('.ch-row-title').textContent = entry.label || item.Key;
         row.querySelector('.ch-row-sub').textContent = subtitle.join(' · ');
         if (badge) {
-            row.querySelector('.ch-row-format').textContent = badge;
+            const badgeNode = row.querySelector('.ch-row-format');
+            badgeNode.textContent = badge;
+            badgeNode.setAttribute('data-ch-tip', badge);
         }
         return row;
     }
 
+    const JELLYFIN_LOGO = '<svg class="ch-origin-svg" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 .002C8.826.002-1.398 18.537.16 21.666c1.56 3.129 22.14 3.094 23.682 0C25.384 18.573 15.177 0 12 0zm7.76 18.949c-1.008 2.028-14.493 2.05-15.514 0C3.224 16.9 9.92 4.755 12.003 4.755c2.081 0 8.77 12.166 7.759 14.196zM12 9.198c-1.054 0-4.446 6.15-3.93 7.189.518 1.04 7.348 1.027 7.86 0 .511-1.027-2.874-7.19-3.93-7.19z"/></svg>';
+
+    function originLegendKey(origin) {
+        if (origin === 'customized') {
+            return 'legendCustomized';
+        }
+        return origin === 'jellyfin' ? 'legendJellyfin' : 'legendOther';
+    }
+
+    // House = rendered by this plugin, Jellyfin logo = default web client section, puzzle = another plugin.
+    function originIconHtml(origin) {
+        const tip = ' data-ch-tip="' + escapeHtml(t(originLegendKey(origin))) + '"';
+        if (origin === 'jellyfin') {
+            return '<span class="ch-row-icon ch-origin-jellyfin"' + tip + '>' + JELLYFIN_LOGO + '</span>';
+        }
+        return '<span class="material-icons ch-row-icon ch-origin-' + (origin === 'customized' ? 'customized' : 'other') + '"' + tip + ' aria-hidden="true">'
+            + (origin === 'customized' ? 'house' : 'extension') + '</span>';
+    }
+
     function actionButton(className, title, icon) {
-        return '<button type="button" class="ch-icon-btn ' + className + '" title="' + escapeHtml(title) + '"><span class="material-icons" aria-hidden="true">' + icon + '</span></button>';
+        return '<button type="button" class="ch-icon-btn ' + className + '" data-ch-tip="' + escapeHtml(title) + '" aria-label="' + escapeHtml(title) + '"><span class="material-icons" aria-hidden="true">' + icon + '</span></button>';
     }
 
     function rowActionsHtml(item) {
@@ -1768,110 +1896,132 @@
         if (item.ShowTitle === false) {
             parts.push(t('noTitles'));
         }
+        if (item.ShowSectionTitle === false) {
+            parts.push(t('noSectionTitle'));
+        }
         if (item.Key === 'ch:genre' && item.Genres && item.Genres.length) {
             parts.push(t('genresCount', item.Genres.length));
         }
         return parts.join(' · ');
     }
 
+    function loadGenreNames() {
+        if (!state.genreNames) {
+            state.genreNames = fetchGenreList().then(function (genres) {
+                return genres.map(function (genre) {
+                    return genre.Name;
+                });
+            }).catch(function () {
+                state.genreNames = null;
+                return [];
+            });
+        }
+        return state.genreNames;
+    }
+
+    // The menu stays open while options are toggled: it closes on an outside click or Escape.
     function openFormatMenu(anchor, item) {
-        const menu = el('div');
+        const menu = el('div', 'ch-format-menu');
+
+        function apply(change) {
+            materialize(item);
+            change();
+            renderEditor();
+            fill();
+        }
+
         function group(label) {
             const node = el('div', 'ch-popup-label');
             node.textContent = label;
             menu.appendChild(node);
         }
-        function option(icon, label, selected, handler) {
-            const button = el('button', '', '<span class="material-icons" aria-hidden="true">' + (selected ? 'radio_button_checked' : icon) + '</span><span></span>');
+
+        function option(kind, icon, label, selected, change) {
+            const symbol = kind === 'radio'
+                ? (selected ? 'radio_button_checked' : icon)
+                : (selected ? 'check_box' : 'check_box_outline_blank');
+            const button = el('button', selected ? 'ch-selected' : '', '<span class="material-icons" aria-hidden="true">' + symbol + '</span><span></span>');
             button.type = 'button';
+            button.setAttribute('role', kind === 'radio' ? 'menuitemradio' : 'menuitemcheckbox');
+            button.setAttribute('aria-checked', selected ? 'true' : 'false');
             button.querySelector('span:last-child').textContent = label;
             button.addEventListener('click', function () {
-                closePopup();
-                materialize(item);
-                handler();
-                renderEditor();
+                apply(change);
             });
             menu.appendChild(button);
+            return button;
         }
-        const shape = item.Shape || 'auto';
-        const size = item.Size || 'normal';
-        group(t('shape'));
-        [['auto', 'shapeAuto', 'tune'], ['portrait', 'shapePortrait', 'crop_portrait'], ['landscape', 'shapeLandscape', 'crop_landscape'], ['square', 'shapeSquare', 'crop_square']].forEach(function (choice) {
-            option(choice[2], t(choice[1]), shape === choice[0], function () {
-                item.Shape = choice[0];
-            });
-        });
-        menu.appendChild(el('div', 'ch-popup-sep'));
-        group(t('size'));
-        [['small', 'sizeSmall', 'photo_size_select_small'], ['normal', 'sizeNormal', 'photo_size_select_actual'], ['large', 'sizeLarge', 'photo_size_select_large']].forEach(function (choice) {
-            option(choice[2], t(choice[1]), size === choice[0], function () {
-                item.Size = choice[0];
-            });
-        });
-        menu.appendChild(el('div', 'ch-popup-sep'));
-        option(item.ShowTitle === false ? 'check_box_outline_blank' : 'check_box', t('showTitles'), false, function () {
-            item.ShowTitle = item.ShowTitle === false;
-        });
-        if (item.Key === 'ch:genre') {
-            menu.appendChild(el('div', 'ch-popup-sep'));
-            group(t('genres') + ' · ' + (item.Genres && item.Genres.length ? t('genresCount', item.Genres.length) : t('genresAuto')));
-            const choose = el('button', 'ch-act-genres', '<span class="material-icons" aria-hidden="true">category</span><span></span>');
-            choose.type = 'button';
-            choose.querySelector('span:last-child').textContent = t('chooseGenres');
-            choose.addEventListener('click', function () {
-                closePopup();
-                openGenrePicker(anchor, item);
-            });
-            menu.appendChild(choose);
-        }
-        showPopup(anchor, menu);
-    }
 
-    function openGenrePicker(anchor, item) {
-        const picker = el('div', 'ch-genre-picker');
-        const status = el('div', 'ch-popup-label');
-        status.textContent = t('genresLoading');
-        picker.appendChild(status);
-        showPopup(anchor, picker);
-        const opened = popup;
-
-        fetchGenreList().then(function (genres) {
-            if (popup !== opened) {
-                return;
-            }
-            if (!genres.length) {
-                status.textContent = t('genresNone');
-                return;
-            }
-            item.Genres = item.Genres || [];
-            function refreshStatus() {
-                status.textContent = item.Genres.length ? t('genresCount', item.Genres.length) : t('genresAuto');
-            }
-            refreshStatus();
-            genres.forEach(function (genre) {
-                const label = el('label', 'ch-genre-option');
-                const input = el('input');
-                input.type = 'checkbox';
-                input.checked = item.Genres.indexOf(genre.Name) >= 0;
-                const text = el('span');
-                text.textContent = genre.Name;
-                label.appendChild(input);
-                label.appendChild(text);
-                input.addEventListener('change', function () {
-                    const index = item.Genres.indexOf(genre.Name);
-                    if (input.checked && index < 0) {
-                        item.Genres.push(genre.Name);
-                    } else if (!input.checked && index >= 0) {
-                        item.Genres.splice(index, 1);
-                    }
-                    refreshStatus();
-                    renderEditor();
+        function fill() {
+            const focused = menu.contains(document.activeElement) ? Array.prototype.indexOf.call(menu.children, document.activeElement) : -1;
+            menu.innerHTML = '';
+            const shape = item.Shape || 'auto';
+            const size = item.Size || 'normal';
+            group(t('shape'));
+            [['auto', 'shapeAuto', 'tune'], ['portrait', 'shapePortrait', 'crop_portrait'], ['landscape', 'shapeLandscape', 'crop_landscape'], ['square', 'shapeSquare', 'crop_square']].forEach(function (choice) {
+                option('radio', choice[2], t(choice[1]), shape === choice[0], function () {
+                    item.Shape = choice[0];
                 });
-                picker.appendChild(label);
             });
-        }).catch(function () {
-            status.textContent = t('genresNone');
-        });
+            menu.appendChild(el('div', 'ch-popup-sep'));
+            group(t('size'));
+            [['small', 'sizeSmall', 'photo_size_select_small'], ['normal', 'sizeNormal', 'photo_size_select_actual'], ['large', 'sizeLarge', 'photo_size_select_large']].forEach(function (choice) {
+                option('radio', choice[2], t(choice[1]), size === choice[0], function () {
+                    item.Size = choice[0];
+                });
+            });
+            menu.appendChild(el('div', 'ch-popup-sep'));
+            group(t('sectionOptions'));
+            option('check', '', t('showSectionTitle'), item.ShowSectionTitle !== false, function () {
+                item.ShowSectionTitle = item.ShowSectionTitle === false;
+            }).classList.add('ch-opt-section-title');
+            group(t('cardOptions'));
+            option('check', '', t('showTitles'), item.ShowTitle !== false, function () {
+                item.ShowTitle = item.ShowTitle === false;
+            }).classList.add('ch-opt-card-titles');
+
+            if (item.Key === 'ch:genre') {
+                item.Genres = item.Genres || [];
+                menu.appendChild(el('div', 'ch-popup-sep'));
+                group(t('genres') + ' · ' + (item.Genres.length ? t('genresCount', item.Genres.length) : t('genresAuto')));
+                const holder = el('div', 'ch-genre-picker');
+                const status = el('div', 'ch-popup-label');
+                status.textContent = t('genresLoading');
+                holder.appendChild(status);
+                menu.appendChild(holder);
+                loadGenreNames().then(function (names) {
+                    if (!holder.isConnected) {
+                        return;
+                    }
+                    holder.innerHTML = '';
+                    if (!names.length) {
+                        status.textContent = t('genresNone');
+                        holder.appendChild(status);
+                        return;
+                    }
+                    names.forEach(function (name) {
+                        option('check', '', name, item.Genres.indexOf(name) >= 0, function () {
+                            const index = item.Genres.indexOf(name);
+                            if (index < 0) {
+                                item.Genres.push(name);
+                            } else {
+                                item.Genres.splice(index, 1);
+                            }
+                        }).classList.add('ch-genre-option');
+                    });
+                    // option() appends to the menu: move the genre entries into their scrollable holder.
+                    Array.prototype.forEach.call(menu.querySelectorAll(':scope > .ch-genre-option'), function (node) {
+                        holder.appendChild(node);
+                    });
+                });
+            }
+            if (focused >= 0 && menu.children[focused] && menu.children[focused].focus) {
+                menu.children[focused].focus();
+            }
+        }
+
+        fill();
+        showPopup(anchor, menu);
     }
 
     function renderFolderRow(item, index, siblings) {
@@ -1879,11 +2029,11 @@
         row._item = item;
         row._parent = null;
         row.innerHTML = '<span class="material-icons ch-handle" aria-hidden="true">drag_indicator</span>'
-            + '<button type="button" class="ch-icon-btn ch-act-icon" title="' + escapeHtml(t('chooseIcon')) + '"><span class="material-icons" aria-hidden="true">' + escapeHtml(item.Icon || 'folder') + '</span></button>'
+            + '<button type="button" class="ch-icon-btn ch-act-icon" data-ch-tip="' + escapeHtml(t('chooseIcon')) + '" aria-label="' + escapeHtml(t('chooseIcon')) + '"><span class="material-icons" aria-hidden="true">' + escapeHtml(item.Icon || 'folder') + '</span></button>'
             + '<input type="text" class="ch-folder-name" maxlength="100" placeholder="' + escapeHtml(t('folderName')) + '" />'
             + '<div class="ch-row-actions">'
-            + '<button type="button" class="ch-icon-btn ch-act-visibility" title="' + escapeHtml(item.Visible === false ? t('show') : t('hide')) + '"><span class="material-icons" aria-hidden="true">' + (item.Visible === false ? 'visibility_off' : 'visibility') + '</span></button>'
-            + '<button type="button" class="ch-icon-btn ch-act-menu" title="' + escapeHtml(t('more')) + '"><span class="material-icons" aria-hidden="true">more_vert</span></button>'
+            + '<button type="button" class="ch-icon-btn ch-act-visibility" data-ch-tip="' + escapeHtml(item.Visible === false ? t('show') : t('hide')) + '" aria-label="' + escapeHtml(item.Visible === false ? t('show') : t('hide')) + '"><span class="material-icons" aria-hidden="true">' + (item.Visible === false ? 'visibility_off' : 'visibility') + '</span></button>'
+            + '<button type="button" class="ch-icon-btn ch-act-menu" data-ch-tip="' + escapeHtml(t('more')) + '" aria-label="' + escapeHtml(t('more')) + '"><span class="material-icons" aria-hidden="true">more_vert</span></button>'
             + '</div>';
         row.querySelector('.ch-folder-name').value = item.Name || '';
         return row;
@@ -2043,6 +2193,56 @@
         }
     }
 
+    /* ---- tooltips ---- */
+
+    let tooltip = null;
+
+    function hideTooltip() {
+        if (tooltip) {
+            tooltip.remove();
+            tooltip = null;
+        }
+    }
+
+    function showTooltip(target) {
+        hideTooltip();
+        const text = target.getAttribute('data-ch-tip');
+        if (!text) {
+            return;
+        }
+        tooltip = el('div', 'ch-tooltip');
+        tooltip.setAttribute('role', 'tooltip');
+        tooltip.textContent = text;
+        document.body.appendChild(tooltip);
+        const rect = target.getBoundingClientRect();
+        const width = tooltip.offsetWidth;
+        const height = tooltip.offsetHeight;
+        let left = rect.left + rect.width / 2 - width / 2;
+        left = Math.max(8, Math.min(left, window.innerWidth - width - 8));
+        let top = rect.top - height - 8;
+        if (top < 8) {
+            top = rect.bottom + 8;
+        }
+        tooltip.style.left = left + 'px';
+        tooltip.style.top = top + 'px';
+    }
+
+    // Delegated: works for rows rebuilt by renderEditor. Shown on hover and on keyboard focus.
+    function initTooltips(root) {
+        function onEnter(e) {
+            const target = e.target.closest ? e.target.closest('[data-ch-tip]') : null;
+            // No tooltip while a menu is open: it would sit on top of the menu it belongs to.
+            if (target && root.contains(target) && !popup) {
+                showTooltip(target);
+            }
+        }
+        root.addEventListener('mouseover', onEnter);
+        root.addEventListener('focusin', onEnter);
+        root.addEventListener('mouseout', hideTooltip);
+        root.addEventListener('focusout', hideTooltip);
+        root.addEventListener('pointerdown', hideTooltip);
+    }
+
     /* ---- popup menus ---- */
 
     let popup = null;
@@ -2052,11 +2252,21 @@
             popup.remove();
             popup = null;
             document.removeEventListener('pointerdown', onDocumentPointerDown, true);
+            document.removeEventListener('keydown', onPopupKeyDown, true);
         }
     }
 
     function onDocumentPointerDown(e) {
         if (popup && !popup.contains(e.target)) {
+            closePopup();
+        }
+    }
+
+    function onPopupKeyDown(e) {
+        if (popup && e.key === 'Escape') {
+            // Close the menu only, not the editor behind it.
+            e.stopPropagation();
+            e.preventDefault();
             closePopup();
         }
     }
@@ -2079,6 +2289,7 @@
         }
         popup.style.left = left + 'px';
         popup.style.top = top + 'px';
+        document.addEventListener('keydown', onPopupKeyDown, true);
         setTimeout(function () {
             document.addEventListener('pointerdown', onDocumentPointerDown, true);
         }, 0);
@@ -2347,6 +2558,7 @@
                 Shape: item.Shape || 'auto',
                 Size: item.Size || 'normal',
                 ShowTitle: item.ShowTitle !== false,
+                ShowSectionTitle: item.ShowSectionTitle !== false,
                 Genres: item.Key === 'ch:genre' ? (item.Genres || []) : []
             };
         }

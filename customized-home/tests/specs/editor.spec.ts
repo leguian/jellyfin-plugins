@@ -42,20 +42,83 @@ test('right column rows only offer "add", which puts the section at the very top
     expect(await rowTitles(page, UNLISTED)).not.toContain('Recently Added in Shows');
 });
 
-test('left column: the menu button opens the display format options directly, remove has its own action', async ({ page }) => {
+test('left column: format menu opens directly and stays open while several options are picked', async ({ page }) => {
     await openHome(page, { layout: LAYOUT });
     await openEditor(page);
     const row = page.locator(`${LIST} .ch-row`, { hasText: 'My Media' });
     await row.locator('.ch-act-menu').click();
-    const labels = await page.locator('.ch-popup .ch-popup-label').allTextContents();
-    expect(labels).toEqual(['Card shape', 'Card size']);
+    expect(await page.locator('.ch-popup .ch-popup-label').allTextContents()).toEqual(['Card shape', 'Card size', 'Section', 'Cards']);
     await expect(page.locator('.ch-popup')).not.toContainText('Remove from the layout');
-    await page.locator('.ch-popup button', { hasText: 'Landscape' }).click();
-    await expect(row.locator('.ch-row-format')).toHaveText('Landscape');
 
-    await row.locator('.ch-act-remove').click();
+    await expect(page.locator('.ch-tooltip')).toHaveCount(0);
+    await page.locator('.ch-popup button', { hasText: 'Landscape' }).click();
+    await page.locator('.ch-popup button', { hasText: 'Large' }).click();
+    await page.locator('.ch-popup .ch-opt-section-title').click();
+    await expect(page.locator('.ch-popup')).toBeVisible();
+    await expect(page.locator('.ch-popup button', { hasText: 'Landscape' })).toHaveAttribute('aria-checked', 'true');
+    await expect(page.locator(`${LIST} .ch-row`, { hasText: 'My Media' }).locator('.ch-row-format')).toHaveText('Landscape · Large · no section title');
+
+    await page.keyboard.press('Escape');
+    await expect(page.locator('.ch-popup')).toHaveCount(0);
+    await expect(page.locator('.ch-overlay')).toHaveCount(1);
+
+    await page.locator(`${LIST} .ch-row`, { hasText: 'My Media' }).locator('.ch-act-remove').click();
     expect(await rowTitles(page, LIST)).toEqual(['Continue Watching', 'Next Up']);
     expect(await rowTitles(page, UNLISTED)).toContain('My Media');
+});
+
+test('hiding the section title is saved and applied to the home page', async ({ page }) => {
+    await openHome(page, { layout: LAYOUT });
+    await openEditor(page);
+    await page.locator(`${LIST} .ch-row`, { hasText: 'Next Up' }).locator('.ch-act-menu').click();
+    await page.locator('.ch-popup .ch-opt-section-title').click();
+    await page.keyboard.press('Escape');
+    await page.locator('.ch-overlay .ch-dialog-footer .ch-save').click();
+    await expect(page.locator('.ch-overlay')).toHaveCount(0);
+
+    const post = (await recordedRequests(page)).find((request) => request.method === 'POST' && request.path === 'CustomizedHome/Layout');
+    expect((post?.body as Layout).Items.find((item) => item.Key === 'jf:nextup')?.ShowSectionTitle).toBe(false);
+    const nextUp = page.locator('#homeTab .verticalSection.section5');
+    await expect(nextUp).toHaveClass(/ch-nosectiontitle/);
+    await expect(nextUp.locator('h2')).toBeHidden();
+    await expect(page.locator('#homeTab .verticalSection.section0 h2')).toBeVisible();
+});
+
+test('icons carry tooltips, and a legend explains the two origins', async ({ page }) => {
+    await openHome(page, { layout: LAYOUT, enableIntegratedSections: true });
+    await openEditor(page);
+    await expect(page.locator('.ch-overlay .ch-legend')).toContainText('Customized Home section');
+    await expect(page.locator('.ch-overlay .ch-legend')).toContainText('Jellyfin default section');
+
+    const row = page.locator(`${LIST} .ch-row`, { hasText: 'My Media' });
+    await expect(row.locator('.ch-origin-jellyfin svg')).toHaveCount(1);
+    await row.locator('.ch-act-remove').hover();
+    await expect(page.locator('.ch-tooltip')).toHaveText('Remove from the customized home page');
+    await row.locator('.ch-origin-jellyfin').hover();
+    await expect(page.locator('.ch-tooltip')).toHaveText('Jellyfin default section');
+
+    const customized = page.locator(`${UNLISTED} .ch-row`, { hasText: 'Continue Watching / Next Up' });
+    await expect(customized.locator('.ch-origin-customized')).toHaveText('house');
+    await customized.locator('.ch-act-add').hover();
+    await expect(page.locator('.ch-tooltip')).toHaveText('Add to the customized home page');
+    await page.mouse.move(0, 0);
+    await expect(page.locator('.ch-tooltip')).toHaveCount(0);
+});
+
+test('unchecking "also list not displayed sections" keeps the displayed and the plugin sections', async ({ page }) => {
+    await openHome(page, { layout: LAYOUT, enableIntegratedSections: true });
+    await openEditor(page);
+    const toggle = page.locator('.ch-overlay .ch-show-all');
+    await expect(toggle).not.toBeChecked();
+    const titles = await rowTitles(page, UNLISTED);
+    expect(titles).toContain('Recently Added in Movies');
+    expect(titles).toContain('All genres');
+    expect(titles).not.toContain('Live TV');
+    await toggle.check();
+    expect(await rowTitles(page, UNLISTED)).toContain('Live TV');
+    await toggle.uncheck();
+    expect(await rowTitles(page, UNLISTED)).not.toContain('Live TV');
+    expect((await rowTitles(page, UNLISTED)).length).toBeGreaterThan(0);
 });
 
 test('search: left rows get "move to top", right rows get "add" and no "move to top"', async ({ page }) => {

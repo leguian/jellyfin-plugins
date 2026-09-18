@@ -47,7 +47,8 @@ Installation manuelle : dézipper `customized-home_<version>_jellyfin-<abi>.zip`
 - Deux colonnes : **Page d'accueil modifiée** (la disposition) et **Sections hors disposition** (tout le reste).
 - **Règle** : dès que la colonne de gauche contient au moins une section, elle remplace la page d'accueil par défaut (les sections hors disposition ne sont plus affichées). Colonne vide = page d'accueil Jellyfin inchangée.
 - Colonne de droite : bouton `+` **Ajouter à la page d'accueil modifiée**, la section arrive tout en haut. Pas d'autre action.
-- Colonne de gauche : `👁` afficher / masquer, bouton format (ouvre directement forme, taille, titres), `✕` supprimer de la page d'accueil modifiée. Pendant une recherche, bouton au survol **Remonter cette section tout en haut**.
+- Colonne de gauche : `👁` afficher / masquer, bouton format, `✕` supprimer de la page d'accueil modifiée. Le menu format (forme, taille, titre de la section, titres des cartes, genres) reste ouvert pendant les choix ; clic extérieur ou Échap pour le fermer.
+- Pictos : maison = section rendue par Customized Home, logo Jellyfin = section par défaut du client web, puzzle = autre plugin. Légende en haut de l'éditeur, info-bulle sur chaque icône. Pendant une recherche, bouton au survol **Remonter cette section tout en haut**.
 - Glisser la poignée `⋮⋮` pour réordonner, glisser d'une colonne à l'autre pour ajouter ou retirer (désactivé pendant une recherche).
 - Champ **Rechercher une section** : filtre la liste et retrouve aussi les sections connues mais pas encore affichées.
 - Sous-titre d'une ligne : origine de la section (Jellyfin, Home Screen Sections, Customized Home) et « non affichée actuellement » quand la section est connue mais pas rendue sur l'accueil en ce moment (désactivée dans les réglages d'accueil Jellyfin, vide, plugin absent).
@@ -59,7 +60,7 @@ Installation manuelle : dézipper `customized-home_<version>_jellyfin-<abi>.zip`
 
 ### Page de configuration (administrateur)
 
-Deux onglets : **Options** (statut File Transformation + réglages) et **Layouts** (éditeur de la disposition par défaut intégré à la page, liste des utilisateurs ayant leur propre disposition avec réinitialisation).
+Trois onglets : **Options** (statut File Transformation + réglages), **Layouts** (éditeur de la disposition par défaut intégré à la page, liste des utilisateurs ayant leur propre disposition avec réinitialisation) et **Genres** (miniature par genre pour la section « Tous les genres » : PNG, JPEG ou WebP, 5 Mo max, ratio affiche 2:3 conseillé).
 
 | Option | Effet |
 | --- | --- |
@@ -81,7 +82,7 @@ Clés stables utilisées dans les dispositions (`GET /CustomizedHome/Catalog`). 
 | --- | --- | --- |
 | Customized Home | `ch:combined`, `ch:latestMovies`, `ch:latestShows`, `ch:collections`, `ch:watchAgain` | Continuer à regarder / À suivre, Derniers films (date de sortie), Dernières séries (date de sortie), Collections, Regarder à nouveau |
 | Customized Home | `ch:becauseYouWatched`, `ch:genre` (familles) | Parce que vous avez regardé {0} (3 derniers visionnages, items similaires), Genre : {0} (une ligne par genre choisi via bouton format → Choisir les genres ; sans choix, 2 genres pondérés par l'historique) |
-| Customized Home | `ch:allGenres` | Tous les genres : une carte par genre, clic = liste des médias du genre |
+| Customized Home | `ch:allGenres` | Tous les genres : une carte par genre au format affiche, clic = liste des médias du genre. Miniature = image envoyée par l'administrateur (onglet Genres), sinon collage de 4 affiches distinctes du genre |
 | jellyfin-web | `jf:smalllibrarytiles`, `jf:librarybuttons` | Mes médias, Mes médias (petit) |
 | jellyfin-web | `jf:resume`, `jf:resumeaudio`, `jf:resumebook`, `jf:nextup` | Continuer de regarder, Reprendre l'écoute, Reprendre la lecture, À suivre |
 | jellyfin-web | `jf:latestmedia:<idMédiathèque>` | « <Médiathèque>, ajouts récents » (une clé par médiathèque) |
@@ -115,6 +116,9 @@ Les sections « famille » (Parce que vous avez regardé, Genre, Réalisé par, 
 | GET | `/CustomizedHome/Catalog` | utilisateur | sections connues |
 | GET | `/CustomizedHome/Status`, POST `/CustomizedHome/Status/Retry` | admin | statut File Transformation |
 | GET | `/CustomizedHome/UserLayouts` | admin | utilisateurs ayant une disposition |
+| GET | `/CustomizedHome/GenreImages` | utilisateur | genres ayant une miniature (nom + version) |
+| GET | `/CustomizedHome/GenreImages/Image?name=&v=` | anonyme | miniature d'un genre (comme toute image Jellyfin) |
+| POST / DELETE | `/CustomizedHome/GenreImages` | admin | envoi (JSON `{ Name, Data }` en base64) / suppression |
 
 Format d'une disposition (`Shape` : auto | portrait | landscape | square ; `Size` : small | normal | large) :
 
@@ -149,6 +153,13 @@ Release : pousser un tag `customized-home-v<version>` ; le workflow `release.yml
 
 ## Tests
 
+Deux suites : tests unitaires C# (`Jellyfin.Plugin.CustomizedHome.Tests`, xUnit) pour la validation des dispositions et le stockage des miniatures de genres, et tests navigateur ci-dessous.
+
+```bash
+dotnet test customized-home/Jellyfin.Plugin.CustomizedHome.Tests -p:JellyfinVersion=10.11.11   # SDK .NET 9
+dotnet test customized-home/Jellyfin.Plugin.CustomizedHome.Tests                                # SDK .NET 10 (CI)
+```
+
 Tests navigateur (Playwright, TypeScript) du script client contre une page d'accueil jellyfin-web simulée et un `ApiClient` factice : aucun serveur Jellyfin requis.
 
 ```bash
@@ -177,4 +188,5 @@ Limite : ces tests valident le script contre un DOM simulé. Ils ne détectent p
 - Les apps natives n'exécutent pas le script : leur accueil n'est pas modifié.
 - Forme forcée sur une section native/HSS : l'image reste celle choisie par le rendu d'origine (vignette 16:9 recadrée en affiche, par exemple). Les sections intégrées chargent l'image adaptée.
 - Les sections intégrées ne se rafraîchissent pas en temps réel après un visionnage (cache 5 min, rechargement à la prochaine ouverture de l'accueil).
+- Miniatures de genres : type détecté sur les octets (le type déclaré n'est jamais cru), SVG refusé, 5 Mo max, fichier nommé par hash du genre (jamais par l'entrée utilisateur), servi avec `nosniff`.
 - Les assets client sont servis sans authentification (comme HSS / Plugin Pages) : ils ne contiennent aucune donnée sensible.

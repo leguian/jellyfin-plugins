@@ -64,6 +64,11 @@ public class LayoutItem
     public bool ShowTitle { get; set; } = true;
 
     /// <summary>
+    /// Gets or sets a value indicating whether the title of the section itself is shown (sections only).
+    /// </summary>
+    public bool ShowSectionTitle { get; set; } = true;
+
+    /// <summary>
     /// Gets or sets the genres displayed by the genre section, one row per genre (section <c>ch:genre</c> only).
     /// Empty means automatic: genres picked from the watch history of the user.
     /// </summary>
