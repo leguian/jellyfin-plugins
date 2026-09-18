@@ -1,9 +1,15 @@
 name: Release plugin
 
 # Tag format: <plugin-folder>-v<version>, e.g. customized-home-v1.0.0.0
+# Either push the tag, or run the workflow manually with the tag name: the tag is then created by the workflow.
 on:
   push:
     tags: ["*-v*"]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Release tag (<plugin>-v<version>)"
+        required: true
 
 permissions:
   contents: write
@@ -20,10 +26,25 @@ jobs:
           dotnet-version: "10.0.x"
       - name: Resolve plugin and version from tag
         id: meta
+        env:
+          INPUT_TAG: ${{ github.event.inputs.tag }}
         run: |
-          TAG="${GITHUB_REF_NAME}"
+          TAG="${INPUT_TAG:-${GITHUB_REF_NAME}}"
+          case "$TAG" in *-v*) ;; *) echo "invalid tag: $TAG"; exit 1;; esac
+          echo "tag=${TAG}" >> "$GITHUB_OUTPUT"
           echo "plugin=${TAG%-v*}" >> "$GITHUB_OUTPUT"
           echo "version=${TAG##*-v}" >> "$GITHUB_OUTPUT"
+      - name: Create the tag when started manually
+        if: github.event_name == 'workflow_dispatch'
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          if git ls-remote --exit-code --tags origin "refs/tags/${{ steps.meta.outputs.tag }}"; then
+            echo "tag already exists"
+          else
+            git tag -a "${{ steps.meta.outputs.tag }}" -m "${{ steps.meta.outputs.tag }}"
+            git push origin "refs/tags/${{ steps.meta.outputs.tag }}"
+          fi
       - name: Package for Jellyfin 12
         run: python3 scripts/package.py ${{ steps.meta.outputs.plugin }} --jellyfin 12.1.0 --version ${{ steps.meta.outputs.version }} --output artifacts > summary-12.json
       - name: Package for Jellyfin 10.11
@@ -32,7 +53,8 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           files: artifacts/*.zip
-          name: ${{ github.ref_name }}
+          tag_name: ${{ steps.meta.outputs.tag }}
+          name: ${{ steps.meta.outputs.tag }}
           generate_release_notes: true
       - name: Update manifest.json on main
         run: |
@@ -45,8 +67,8 @@ jobs:
             git checkout -B main
           fi
           python3 scripts/update-manifest.py --manifest manifest.json \
-            --base-url "https://github.com/${GITHUB_REPOSITORY}/releases/download/${GITHUB_REF_NAME}" \
+            --base-url "https://github.com/${GITHUB_REPOSITORY}/releases/download/${{ steps.meta.outputs.tag }}" \
             summary-12.json summary-10.11.json
           git add manifest.json
-          git commit -m "manifest: ${GITHUB_REF_NAME}" || echo "nothing to commit"
+          git commit -m "manifest: ${{ steps.meta.outputs.tag }}" || echo "nothing to commit"
           git push origin main
