@@ -68,6 +68,7 @@ jobs:
           fi
           python3 scripts/update-manifest.py --manifest manifest.json \
             --base-url "https://github.com/${GITHUB_REPOSITORY}/releases/download/${{ steps.meta.outputs.tag }}" \
+            --image-url-base "https://raw.githubusercontent.com/${GITHUB_REPOSITORY}/main" \
             summary-12.json summary-10.11.json
           git add manifest.json
           git commit -m "manifest: ${{ steps.meta.outputs.tag }}" || echo "nothing to commit"

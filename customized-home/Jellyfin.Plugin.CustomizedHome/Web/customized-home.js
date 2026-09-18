@@ -13,7 +13,7 @@
         return;
     }
 
-    const VERSION = '1.0.0';
+    const VERSION = '1.1.0';
     const API = 'CustomizedHome';
     const ORDER_STEP = 1000;
     const ORDER_UNLISTED_BASE = 1000000000;
@@ -41,7 +41,9 @@
             loadError: 'Could not load the layout',
             hideUnlisted: 'Hide sections that are not listed here',
             showAll: 'Show every known section',
-            hint: 'Drag the handles to reorder. Drop a section below a folder header (or indent it) to put it inside. Hidden sections stay in the list so you can show them again.',
+            hint: 'Drag the handles to reorder. Hidden sections stay in the list so you can show them again. Use the search box to find a section, including the ones not displayed yet.',
+            search: 'Search a section',
+            searchNoResult: 'No section matches.',
             show: 'Show',
             hide: 'Hide',
             moveUp: 'Move up',
@@ -52,7 +54,7 @@
             chooseIcon: 'Choose an icon',
             collapsedByDefault: 'Collapsed by default',
             deleteFolder: 'Delete folder (sections are kept)',
-            absent: 'not on the home page right now',
+            absent: 'not displayed right now',
             originJellyfin: 'Jellyfin',
             originHss: 'Home Screen Sections',
             originOther: 'Other plugin',
@@ -60,11 +62,11 @@
             sectionsCount: '{0} section(s)',
             notAllowed: 'Home customization is disabled by the administrator.',
             menuEntry: 'Customize home',
-            unlisted: 'Sections not in your layout',
+            unlisted: 'Sections not in the layout',
             close: 'Close',
             folder: 'Folder',
             family: 'several rows',
-            originCustomized: 'Built into Customized Home',
+            originCustomized: 'Customized Home',
             int_combined: 'Continue Watching / Next Up',
             int_latestMovies: 'Latest Movies',
             int_latestShows: 'Latest Shows',
@@ -100,7 +102,9 @@
             loadError: 'Impossible de charger la disposition',
             hideUnlisted: 'Masquer les sections absentes de cette liste',
             showAll: 'Afficher toutes les sections connues',
-            hint: 'Glissez les poignées pour réordonner. Déposez une section sous un dossier (ou décalée vers la droite) pour la ranger dedans. Les sections masquées restent listées pour pouvoir les réafficher.',
+            hint: 'Glissez les poignées pour réordonner. Les sections masquées restent listées pour pouvoir les réafficher. La recherche retrouve aussi les sections pas encore affichées.',
+            search: 'Rechercher une section',
+            searchNoResult: 'Aucune section ne correspond.',
             show: 'Afficher',
             hide: 'Masquer',
             moveUp: 'Monter',
@@ -111,7 +115,7 @@
             chooseIcon: 'Choisir une icône',
             collapsedByDefault: 'Replié par défaut',
             deleteFolder: 'Supprimer le dossier (les sections sont conservées)',
-            absent: "pas sur l'accueil actuellement",
+            absent: 'non affichée actuellement',
             originJellyfin: 'Jellyfin',
             originHss: 'Home Screen Sections',
             originOther: 'Autre plugin',
@@ -119,11 +123,11 @@
             sectionsCount: '{0} section(s)',
             notAllowed: "La personnalisation de l'accueil est désactivée par l'administrateur.",
             menuEntry: "Personnaliser l'accueil",
-            unlisted: 'Sections absentes de votre disposition',
+            unlisted: 'Sections hors disposition',
             close: 'Fermer',
             folder: 'Dossier',
             family: 'plusieurs lignes',
-            originCustomized: 'Intégrée à Customized Home',
+            originCustomized: 'Customized Home',
             int_combined: 'Continuer à regarder / À suivre',
             int_latestMovies: 'Derniers films',
             int_latestShows: 'Dernières séries',
@@ -1027,7 +1031,7 @@
         }
         if (!bar) {
             bar = el('div', 'ch-customize-bar');
-            bar.innerHTML = '<button type="button" class="ch-customize-button"><span class="material-icons" aria-hidden="true">tune</span><span></span></button>';
+            bar.innerHTML = '<button type="button" class="ch-customize-button"><span class="material-icons" aria-hidden="true">other_houses</span><span></span></button>';
             bar.querySelector('button').addEventListener('click', function () {
                 openEditor({ mode: 'user' });
             });
@@ -1297,7 +1301,7 @@
                 entry.setAttribute('role', 'menuitem');
                 const svg = entry.querySelector('svg');
                 if (svg) {
-                    const icon = el('span', 'material-icons', 'tune');
+                    const icon = el('span', 'material-icons', 'other_houses');
                     icon.setAttribute('aria-hidden', 'true');
                     svg.parentNode.replaceChild(icon, svg);
                 }
@@ -1323,7 +1327,7 @@
             const link = el('a', 'lnkMediaFolder navMenuOption ch-menu-entry');
             link.setAttribute('is', 'emby-linkbutton');
             link.setAttribute('href', '#');
-            link.innerHTML = '<span class="material-icons navMenuOptionIcon tune" aria-hidden="true"></span><span class="sectionName navMenuOptionText"></span>';
+            link.innerHTML = '<span class="material-icons navMenuOptionIcon other_houses" aria-hidden="true"></span><span class="sectionName navMenuOptionText"></span>';
             link.querySelector('.navMenuOptionText').textContent = t('menuEntry');
             link.addEventListener('click', function (e) {
                 e.preventDefault();
@@ -1418,7 +1422,11 @@
     function openEditor(options) {
         options = options || {};
         if (editor) {
-            return;
+            if (editor.embedded && options.container) {
+                closeEditor();
+            } else {
+                return;
+            }
         }
         const mode = options.mode === 'default' ? 'default' : 'user';
         ensureLoaded().then(function () {
@@ -1484,31 +1492,34 @@
             });
         }
 
+        const embedded = !!(options.container && options.container.isConnected);
         editor = {
             mode: mode,
             model: model,
             known: info.known,
             showAll: mode === 'default',
+            query: '',
+            embedded: embedded,
             options: options,
             overlay: null,
             list: null,
             body: null
         };
 
-        const overlay = el('div', 'ch-overlay');
+        const overlay = el('div', embedded ? 'ch-embedded' : 'ch-overlay');
         const dialog = el('div', 'ch-dialog');
         dialog.setAttribute('role', 'dialog');
         dialog.setAttribute('aria-modal', 'true');
         dialog.tabIndex = -1;
         dialog.innerHTML = '<div class="ch-dialog-header">'
-            + '<span class="material-icons" aria-hidden="true">tune</span>'
+            + '<span class="material-icons" aria-hidden="true">other_houses</span>'
             + '<h2 class="ch-dialog-title"></h2>'
             + '<button type="button" class="ch-icon-btn ch-close" title="' + escapeHtml(t('close')) + '"><span class="material-icons" aria-hidden="true">close</span></button>'
             + '</div>'
             + '<div class="ch-dialog-body">'
             + '<p class="ch-hint"></p>'
             + '<div class="ch-toolbar">'
-            + '<button type="button" class="ch-btn ch-new-folder"><span class="material-icons" aria-hidden="true">create_new_folder</span><span></span></button>'
+            + '<div class="ch-search-box"><span class="material-icons" aria-hidden="true">search</span><input type="search" class="ch-search" autocomplete="off" /></div>'
             + '<label><input type="checkbox" class="ch-hide-unlisted" /> <span></span></label>'
             + '<label><input type="checkbox" class="ch-show-all" /> <span></span></label>'
             + '</div>'
@@ -1521,7 +1532,10 @@
             + '<button type="button" class="ch-btn ch-btn-primary ch-save"></button>'
             + '</div>';
         overlay.appendChild(dialog);
-        document.body.appendChild(overlay);
+        (embedded ? options.container : document.body).appendChild(overlay);
+        if (embedded) {
+            dialog.querySelector('.ch-close').style.display = 'none';
+        }
 
         editor.overlay = overlay;
         editor.list = dialog.querySelector('.ch-list');
@@ -1529,7 +1543,7 @@
 
         dialog.querySelector('.ch-dialog-title').textContent = mode === 'default' ? t('defaultTitle') : t('editorTitle');
         dialog.querySelector('.ch-hint').textContent = t('hint');
-        dialog.querySelector('.ch-new-folder span:last-child').textContent = t('newFolder');
+        dialog.querySelector('.ch-search').placeholder = t('search');
         dialog.querySelector('.ch-hide-unlisted').checked = !!model.HideUnlisted;
         dialog.querySelector('.ch-hide-unlisted').nextElementSibling.textContent = t('hideUnlisted');
         dialog.querySelector('.ch-show-all').checked = editor.showAll;
@@ -1543,18 +1557,20 @@
         }
 
         dialog.querySelector('.ch-close').addEventListener('click', closeEditor);
-        dialog.querySelector('.ch-cancel').addEventListener('click', closeEditor);
+        dialog.querySelector('.ch-cancel').addEventListener('click', function () {
+            if (embedded) {
+                // Embedded editor: cancel reloads the stored layout.
+                closeEditor();
+                openEditor(options);
+            } else {
+                closeEditor();
+            }
+        });
         dialog.querySelector('.ch-save').addEventListener('click', saveEditor);
         resetButton.addEventListener('click', resetEditor);
-        dialog.querySelector('.ch-new-folder').addEventListener('click', function () {
-            const folder = { Type: 'folder', Id: newId(), Name: t('newFolder'), Icon: 'folder', Visible: true, Collapsed: false, Items: [] };
-            editor.model.Items.unshift(folder);
+        dialog.querySelector('.ch-search').addEventListener('input', function (e) {
+            editor.query = e.target.value.trim().toLowerCase();
             renderEditor();
-            const input = editor.list.querySelector('.ch-folder-name');
-            if (input) {
-                input.focus();
-                input.select();
-            }
         });
         dialog.querySelector('.ch-hide-unlisted').addEventListener('change', function (e) {
             editor.model.HideUnlisted = e.target.checked;
@@ -1563,23 +1579,27 @@
             editor.showAll = e.target.checked;
             renderEditor();
         });
-        overlay.addEventListener('click', function (e) {
-            if (e.target === overlay) {
-                closeEditor();
-            }
-        });
-        overlay.addEventListener('keydown', function (e) {
-            if (e.key === 'Escape') {
-                e.stopPropagation();
-                closeEditor();
-            }
-        });
+        if (!embedded) {
+            overlay.addEventListener('click', function (e) {
+                if (e.target === overlay) {
+                    closeEditor();
+                }
+            });
+            overlay.addEventListener('keydown', function (e) {
+                if (e.key === 'Escape') {
+                    e.stopPropagation();
+                    closeEditor();
+                }
+            });
+        }
         editor.list.addEventListener('click', onListClick);
         editor.list.addEventListener('input', onListInput);
         initDrag(editor.list);
 
         renderEditor();
-        dialog.focus();
+        if (!embedded) {
+            dialog.focus();
+        }
     }
 
     function newId() {
@@ -1614,7 +1634,7 @@
         return Object.keys(editor.known).map(function (key) {
             return editor.known[key];
         }).filter(function (entry) {
-            return !used[entry.key] && (editor.showAll || entry.present);
+            return !used[entry.key] && (editor.showAll || editor.query || entry.present);
         }).sort(function (a, b) {
             return a.label.localeCompare(b.label);
         });
@@ -1652,8 +1672,6 @@
             + (badge ? '<span class="ch-row-format"></span>' : '')
             + '<div class="ch-row-actions">'
             + '<button type="button" class="ch-icon-btn ch-act-visibility" title="' + escapeHtml(item.Visible === false ? t('show') : t('hide')) + '"><span class="material-icons" aria-hidden="true">' + (item.Visible === false ? 'visibility_off' : 'visibility') + '</span></button>'
-            + '<button type="button" class="ch-icon-btn ch-act-up" title="' + escapeHtml(t('moveUp')) + '"' + (index === 0 ? ' disabled' : '') + '><span class="material-icons" aria-hidden="true">expand_less</span></button>'
-            + '<button type="button" class="ch-icon-btn ch-act-down" title="' + escapeHtml(t('moveDown')) + '"' + (index === siblings.length - 1 ? ' disabled' : '') + '><span class="material-icons" aria-hidden="true">expand_more</span></button>'
             + '<button type="button" class="ch-icon-btn ch-act-menu" title="' + escapeHtml(t('more')) + '"><span class="material-icons" aria-hidden="true">more_vert</span></button>'
             + '</div>';
         row.querySelector('.ch-row-title').textContent = entry.label || item.Key;
@@ -1728,12 +1746,19 @@
             + '<input type="text" class="ch-folder-name" maxlength="100" placeholder="' + escapeHtml(t('folderName')) + '" />'
             + '<div class="ch-row-actions">'
             + '<button type="button" class="ch-icon-btn ch-act-visibility" title="' + escapeHtml(item.Visible === false ? t('show') : t('hide')) + '"><span class="material-icons" aria-hidden="true">' + (item.Visible === false ? 'visibility_off' : 'visibility') + '</span></button>'
-            + '<button type="button" class="ch-icon-btn ch-act-up" title="' + escapeHtml(t('moveUp')) + '"' + (index === 0 ? ' disabled' : '') + '><span class="material-icons" aria-hidden="true">expand_less</span></button>'
-            + '<button type="button" class="ch-icon-btn ch-act-down" title="' + escapeHtml(t('moveDown')) + '"' + (index === siblings.length - 1 ? ' disabled' : '') + '><span class="material-icons" aria-hidden="true">expand_more</span></button>'
             + '<button type="button" class="ch-icon-btn ch-act-menu" title="' + escapeHtml(t('more')) + '"><span class="material-icons" aria-hidden="true">more_vert</span></button>'
             + '</div>';
         row.querySelector('.ch-folder-name').value = item.Name || '';
         return row;
+    }
+
+    function matchesQuery(item) {
+        if (!editor.query) {
+            return true;
+        }
+        const entry = editor.known[item.Key] || {};
+        const haystack = ((entry.label || '') + ' ' + (item.Label || '') + ' ' + (item.Key || '') + ' ' + (item.Name || '')).toLowerCase();
+        return haystack.indexOf(editor.query) >= 0;
     }
 
     function renderEditor() {
@@ -1744,19 +1769,26 @@
         const scrollTop = editor.body.scrollTop;
         list.innerHTML = '';
         const model = editor.model;
+        setClass(list, 'ch-filtered', !!editor.query);
 
         model.Items.forEach(function (item, index) {
             if (item.Type === 'folder') {
+                const members = (item.Items || []).filter(matchesQuery);
+                if (!members.length && !matchesQuery(item)) {
+                    return;
+                }
                 list.appendChild(renderFolderRow(item, index, model.Items));
-                (item.Items || []).forEach(function (member, memberIndex) {
+                members.forEach(function (member, memberIndex) {
                     list.appendChild(renderSectionRow(member, item, memberIndex, item.Items));
                 });
-            } else {
+            } else if (matchesQuery(item)) {
                 list.appendChild(renderSectionRow(item, null, index, model.Items));
             }
         });
 
-        const unlisted = unlistedEntries();
+        const unlisted = unlistedEntries().filter(function (entry) {
+            return matchesQuery({ Key: entry.key, Label: entry.label });
+        });
         if (unlisted.length) {
             const header = el('div', 'ch-hint', '');
             header.style.marginTop = '1em';
@@ -1770,8 +1802,8 @@
             });
         }
 
-        if (!model.Items.length && !unlisted.length) {
-            list.appendChild(el('div', 'ch-empty', escapeHtml(t('empty'))));
+        if (!list.children.length) {
+            list.appendChild(el('div', 'ch-empty', escapeHtml(editor.query ? t('searchNoResult') : t('empty'))));
         }
         editor.body.scrollTop = scrollTop;
     }
@@ -2129,7 +2161,7 @@
                 return;
             }
             const row = handle.closest('.ch-row');
-            if (!row || !row._item) {
+            if (!row || !row._item || editor.query) {
                 return;
             }
             e.preventDefault();
@@ -2227,6 +2259,9 @@
             }
             toast(t('saved'));
             closeEditor();
+            if (current.embedded) {
+                openEditor(current.options);
+            }
         }).catch(function (error) {
             console.error('[CustomizedHome] save failed', error);
             saveButton.disabled = false;

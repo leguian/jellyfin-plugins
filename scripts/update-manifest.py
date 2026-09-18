@@ -25,6 +25,7 @@ def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--manifest", default="manifest.json")
     parser.add_argument("--base-url", required=True, help="URL prefix where the zip files are published")
+    parser.add_argument("--image-url-base", default=None, help="URL prefix of the repository files (the plugin logo is <base>/<plugin>/logo.png)")
     parser.add_argument("summaries", nargs="+")
     args = parser.parse_args()
 
@@ -51,6 +52,8 @@ def main() -> int:
         plugin["overview"] = summary["overview"]
         plugin["owner"] = summary["owner"]
         plugin["category"] = summary["category"]
+        if args.image_url_base and summary.get("hasLogo"):
+            plugin["imageUrl"] = args.image_url_base.rstrip("/") + "/" + summary["plugin"] + "/logo.png"
         file_name = pathlib.Path(summary["file"]).name
         entry = {
             "version": summary["version"],

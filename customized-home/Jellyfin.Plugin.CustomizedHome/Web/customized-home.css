@@ -628,3 +628,60 @@
     border-radius: 1em;
     background: rgba(255, 255, 255, 0.08);
 }
+
+/* Search box in the editor toolbar */
+.ch-search-box {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.3em;
+    background: rgba(0, 0, 0, 0.25);
+    border: 1px solid rgba(255, 255, 255, 0.15);
+    border-radius: 0.3em;
+    padding: 0.2em 0.5em;
+    flex: 1;
+    min-width: 12em;
+}
+
+.ch-search-box .material-icons {
+    opacity: 0.6;
+}
+
+.ch-search {
+    background: transparent;
+    border: 0;
+    color: inherit;
+    font: inherit;
+    width: 100%;
+    outline: none;
+}
+
+.ch-list.ch-filtered .ch-handle {
+    visibility: hidden;
+}
+
+/* Embedded editor (administration page) */
+.ch-embedded .ch-dialog {
+    max-width: none;
+    max-height: none;
+    background: transparent;
+    box-shadow: none;
+    border-radius: 0;
+}
+
+.ch-embedded .ch-dialog-header {
+    display: none;
+}
+
+.ch-embedded .ch-dialog-body {
+    overflow: visible;
+    padding: 0;
+}
+
+.ch-embedded .ch-dialog-footer {
+    padding: 0.8em 0;
+    justify-content: flex-start;
+}
+
+.ch-embedded .ch-list {
+    padding-bottom: 1em;
+}

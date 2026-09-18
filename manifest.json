@@ -6,7 +6,7 @@
     "overview": "Reorder, hide and group the home screen sections into folders.",
     "owner": "leguian",
     "category": "General",
-    "imageUrl": "",
+    "imageUrl": "https://raw.githubusercontent.com/leguian/jellyfin-plugins/main/customized-home/logo.png",
     "versions": [
       {
         "version": "1.0.0.0",

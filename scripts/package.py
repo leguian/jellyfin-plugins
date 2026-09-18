@@ -132,7 +132,7 @@ def main() -> int:
         "version": version,
         "status": 0,
         "autoUpdate": True,
-        "imagePath": "",
+        "imagePath": "logo.png" if (plugin_dir / "logo.png").exists() else "",
         "assemblies": artifacts,
     }
 
@@ -148,6 +148,8 @@ def main() -> int:
                 return 1
             archive.write(source, artifact)
         archive.writestr("meta.json", json.dumps(manifest, indent=2))
+        if manifest["imagePath"]:
+            archive.write(plugin_dir / "logo.png", manifest["imagePath"])
 
     checksum = hashlib.md5(zip_path.read_bytes()).hexdigest()  # noqa: S324 - Jellyfin manifests use MD5
     summary = {
@@ -164,6 +166,7 @@ def main() -> int:
         "overview": meta.get("overview", ""),
         "owner": meta.get("owner", ""),
         "category": meta.get("category", "General"),
+        "hasLogo": bool(manifest["imagePath"]),
     }
     print(json.dumps(summary, indent=2))
     return 0
