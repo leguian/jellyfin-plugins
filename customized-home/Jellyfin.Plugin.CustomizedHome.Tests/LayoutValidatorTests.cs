@@ -132,7 +132,8 @@ public class LayoutValidatorTests
     [Theory]
     [InlineData(-5, 0)]
     [InlineData(0, 0)]
-    [InlineData(1, 4)]
+    [InlineData(1, 3)]
+    [InlineData(3, 3)]
     [InlineData(15, 15)]
     [InlineData(9999, 60)]
     public void Hero_interval_is_off_or_clamped(int input, int expected)

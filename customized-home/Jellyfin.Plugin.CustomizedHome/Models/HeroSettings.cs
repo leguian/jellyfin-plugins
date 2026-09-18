@@ -79,7 +79,7 @@ public static class HeroLimits
     public const int DefaultCount = 6;
 
     /// <summary>Shortest automatic rotation delay, in seconds (0 means no rotation).</summary>
-    public const int MinIntervalSeconds = 4;
+    public const int MinIntervalSeconds = 3;
 
     /// <summary>Longest automatic rotation delay, in seconds.</summary>
     public const int MaxIntervalSeconds = 60;
