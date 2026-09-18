@@ -1,1 +1,29 @@
-[]
+[
+  {
+    "guid": "7c99a4bf-cd3b-4bc8-b941-7ddccd816f3c",
+    "name": "Customized Home",
+    "description": "Customized Home lets every user reorganize the Jellyfin home screen: reorder sections by drag and drop, hide or show them, and group them into collapsible folders (for example a \"Series\" folder holding every series related section). Works with the built-in sections and with sections added by other plugins (Home Screen Sections, Jellyfin Enhanced, ...). Requires the File Transformation plugin to inject the client script.",
+    "overview": "Reorder, hide and group the home screen sections into folders.",
+    "owner": "leguian",
+    "category": "General",
+    "imageUrl": "",
+    "versions": [
+      {
+        "version": "1.0.0.0",
+        "changelog": "Initial release.",
+        "targetAbi": "12.0.0.0",
+        "sourceUrl": "https://github.com/leguian/jellyfin-plugins/releases/download/customized-home-v1.0.0.0/customized-home_1.0.0.0_jellyfin-12.zip",
+        "checksum": "129fad14b9c2c72fb9c6ac429f299730",
+        "timestamp": "2026-09-18T07:11:35Z"
+      },
+      {
+        "version": "1.0.0.0",
+        "changelog": "Initial release.",
+        "targetAbi": "10.11.0.0",
+        "sourceUrl": "https://github.com/leguian/jellyfin-plugins/releases/download/customized-home-v1.0.0.0/customized-home_1.0.0.0_jellyfin-10.11.zip",
+        "checksum": "4100032f457f1aff6032230278558eb6",
+        "timestamp": "2026-09-18T07:11:35Z"
+      }
+    ]
+  }
+]
