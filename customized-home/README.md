@@ -6,9 +6,9 @@ Plugin Jellyfin qui permet de réorganiser la page d'accueil du client web :
 
 | Fonction | Détail |
 | --- | --- |
-| Ordre | Glisser-déposer des sections (souris et tactile), boutons monter/descendre en secours |
+| Ordre | Glisser-déposer des sections (souris et tactile) |
 | Afficher / masquer | Chaque section (et chaque dossier) peut être masquée sans être supprimée de la liste |
-| Dossiers | Regroupement de sections sous un en-tête (icône, nom), repliable au clic, replié par défaut ou non |
+| Dossiers | Pris en charge par le modèle (en-tête repliable) mais plus créables depuis l'éditeur ; utilisables via l'API |
 | Par utilisateur | Chaque utilisateur enregistre sa propre disposition côté serveur (suivie sur tous ses appareils) |
 | Disposition par défaut | Définie par l'administrateur, appliquée aux utilisateurs sans disposition, peut être forcée pour tous |
 | Sections inconnues | Toute section ajoutée par un autre plugin est détectée et peut être rangée (clé dérivée de son titre) |
@@ -44,9 +44,10 @@ Installation manuelle : dézipper `customized-home_<version>_jellyfin-<abi>.zip`
 ### Éditeur (utilisateur)
 
 - Ouvrir via le bouton en bas de l'accueil ou le menu utilisateur → **Personnaliser l'accueil**.
-- Glisser la poignée `⋮⋮` pour réordonner. Déposer une section juste sous l'en-tête d'un dossier, entre ses membres, ou décalée vers la droite après son dernier membre pour la ranger dedans. Un dossier se déplace avec son contenu.
-- `👁` masque / affiche. `⋮` : déplacer dans un dossier, sortir du dossier, replié par défaut, supprimer le dossier (les sections sont conservées).
-- **Nouveau dossier** : nom libre, icône Material au choix.
+- Glisser la poignée `⋮⋮` pour réordonner (désactivé pendant une recherche).
+- Champ **Rechercher une section** : filtre la liste et retrouve aussi les sections connues mais pas encore affichées.
+- `👁` masque / affiche. `⋮` : format d'affichage.
+- Sous-titre d'une ligne : origine de la section (Jellyfin, Home Screen Sections, Customized Home) et « non affichée actuellement » quand la section est connue mais pas rendue sur l'accueil en ce moment (désactivée dans les réglages d'accueil Jellyfin, vide, plugin absent).
 - **Masquer les sections absentes de cette liste** : sinon, toute nouvelle section (plugin installé plus tard, nouvelle médiathèque) est ajoutée en fin de page.
 - **Afficher toutes les sections connues** : liste aussi les sections du catalogue non présentes actuellement (utile pour préparer une disposition).
 - Menu `⋮` → **Format d'affichage** : forme, taille et titres de la section. Sur les sections natives ou HSS le changement de forme est appliqué en CSS (recadrage de l'image existante) ; sur les sections intégrées l'image adaptée est chargée (affiche pour portrait, vignette / fond pour paysage).
@@ -55,6 +56,8 @@ Installation manuelle : dézipper `customized-home_<version>_jellyfin-<abi>.zip`
 - L'état replié / déplié d'un dossier est mémorisé par appareil (localStorage).
 
 ### Page de configuration (administrateur)
+
+Deux onglets : **Options** (statut File Transformation + réglages) et **Layouts** (éditeur de la disposition par défaut intégré à la page, liste des utilisateurs ayant leur propre disposition avec réinitialisation).
 
 | Option | Effet |
 | --- | --- |
@@ -66,7 +69,7 @@ Installation manuelle : dézipper `customized-home_<version>_jellyfin-<abi>.zip`
 | Offer the sections rendered by this plugin | Propose les sections intégrées dans l'éditeur |
 | Developer mode | Désactive le cache des assets client |
 
-La disposition par défaut s'édite avec le même éditeur (bouton **Edit default layout**). La liste **User layouts** permet de réinitialiser un utilisateur.
+La disposition par défaut s'édite dans l'onglet **Layouts** avec le même éditeur que les utilisateurs.
 
 ## Sections reconnues
 

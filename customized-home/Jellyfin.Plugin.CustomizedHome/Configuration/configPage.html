@@ -8,32 +8,99 @@
     <div id="CustomizedHomeConfigPage" data-role="page" class="page type-interior pluginConfigurationPage" data-require="emby-input,emby-button,emby-checkbox">
         <div data-role="content">
             <div class="content-primary">
-                <form id="CustomizedHomeConfigForm">
-                    <div class="verticalSection verticalSection-extrabottompadding">
-                        <h2 class="sectionTitle">Customized Home</h2>
-                        <p class="fieldDescription">
-                            Reorder, hide and group the home screen sections into folders. Each user can arrange their own home page;
-                            administrators define the default layout applied to everybody else.
-                        </p>
-                    </div>
+                <div class="verticalSection">
+                    <h2 class="sectionTitle"><span class="material-icons" aria-hidden="true" style="vertical-align: middle; margin-right: 0.3em;">other_houses</span>Customized Home</h2>
+                    <p class="fieldDescription">
+                        Reorder, hide and group the home screen sections. Each user arranges their own home page from the
+                        "Customize home" button; the default layout below applies to everybody else.
+                    </p>
+                </div>
 
-                    <div class="verticalSection verticalSection-extrabottompadding">
-                        <h3 class="sectionTitle">Status</h3>
-                        <div id="chStatus" class="fieldDescription">Loading…</div>
-                        <div style="margin-top: 0.6em;">
-                            <button is="emby-button" type="button" id="chRetryRegistration" class="raised emby-button">
-                                <span>Retry File Transformation registration</span>
+                <div is="emby-tabs" class="tabs-viewmenubar chTabs" data-index="0" style="margin: 1em 0;">
+                    <div class="emby-tabs-slider">
+                        <button type="button" is="emby-button" class="emby-tab-button emby-tab-button-active" data-index="0">Options</button>
+                        <button type="button" is="emby-button" class="emby-tab-button" data-index="1">Layouts</button>
+                    </div>
+                </div>
+
+                <!-- Tab 0: options -->
+                <div class="chTab" data-tab="0">
+                    <form id="CustomizedHomeConfigForm">
+                        <div class="verticalSection verticalSection-extrabottompadding">
+                            <h3 class="sectionTitle">Status</h3>
+                            <div id="chStatus" class="fieldDescription">Loading…</div>
+                            <div style="margin-top: 0.6em;">
+                                <button is="emby-button" type="button" id="chRetryRegistration" class="raised emby-button">
+                                    <span>Retry File Transformation registration</span>
+                                </button>
+                            </div>
+                        </div>
+
+                        <div class="verticalSection verticalSection-extrabottompadding">
+                            <h3 class="sectionTitle">Options</h3>
+                            <div class="checkboxContainer checkboxContainer-withDescription">
+                                <label class="emby-checkbox-label">
+                                    <input id="chAllowUserCustomization" type="checkbox" is="emby-checkbox" />
+                                    <span>Allow users to customize their own home page</span>
+                                </label>
+                                <div class="fieldDescription checkboxFieldDescription">When disabled, every user gets the default layout. Administrators can always customize their own page.</div>
+                            </div>
+                            <div class="checkboxContainer checkboxContainer-withDescription">
+                                <label class="emby-checkbox-label">
+                                    <input id="chForceDefaultLayout" type="checkbox" is="emby-checkbox" />
+                                    <span>Force the default layout for everybody</span>
+                                </label>
+                                <div class="fieldDescription checkboxFieldDescription">Ignores the layouts saved by users (they are kept and used again when this option is turned off).</div>
+                            </div>
+                            <div class="checkboxContainer checkboxContainer-withDescription">
+                                <label class="emby-checkbox-label">
+                                    <input id="chShowCustomizeButtonOnHome" type="checkbox" is="emby-checkbox" />
+                                    <span>Show a "Customize home" button at the bottom of the home page</span>
+                                </label>
+                            </div>
+                            <div class="checkboxContainer checkboxContainer-withDescription">
+                                <label class="emby-checkbox-label">
+                                    <input id="chShowUserMenuEntry" type="checkbox" is="emby-checkbox" />
+                                    <span>Add a "Customize home" entry to the user menu</span>
+                                </label>
+                            </div>
+                            <div class="checkboxContainer checkboxContainer-withDescription">
+                                <label class="emby-checkbox-label">
+                                    <input id="chFoldersCollapsible" type="checkbox" is="emby-checkbox" />
+                                    <span>Folders can be collapsed and expanded by clicking their header</span>
+                                </label>
+                                <div class="fieldDescription checkboxFieldDescription">The collapsed state is remembered per device.</div>
+                            </div>
+                            <div class="checkboxContainer checkboxContainer-withDescription">
+                                <label class="emby-checkbox-label">
+                                    <input id="chEnableIntegratedSections" type="checkbox" is="emby-checkbox" />
+                                    <span>Offer the sections rendered by this plugin</span>
+                                </label>
+                                <div class="fieldDescription checkboxFieldDescription">Continue Watching / Next Up (combined), Latest Movies and Shows by release date, Collections, Watch Again, Because You Watched, Genre. Users enable them in the editor; no other plugin required.</div>
+                            </div>
+                            <div class="checkboxContainer checkboxContainer-withDescription">
+                                <label class="emby-checkbox-label">
+                                    <input id="chDeveloperMode" type="checkbox" is="emby-checkbox" />
+                                    <span>Developer mode (client assets are never cached)</span>
+                                </label>
+                            </div>
+                        </div>
+
+                        <div>
+                            <button is="emby-button" type="submit" class="raised button-submit block emby-button">
+                                <span>Save</span>
                             </button>
                         </div>
-                    </div>
+                    </form>
+                </div>
 
+                <!-- Tab 1: layouts -->
+                <div class="chTab hide" data-tab="1">
                     <div class="verticalSection verticalSection-extrabottompadding">
                         <h3 class="sectionTitle">Default layout</h3>
                         <p class="fieldDescription" id="chDefaultSummary">Loading…</p>
-                        <div style="display: flex; gap: 0.6em; flex-wrap: wrap;">
-                            <button is="emby-button" type="button" id="chEditDefault" class="raised button-submit emby-button">
-                                <span>Edit default layout</span>
-                            </button>
+                        <div id="chDefaultEditor"></div>
+                        <div style="margin-top: 0.6em;">
                             <button is="emby-button" type="button" id="chClearDefault" class="raised emby-button">
                                 <span>Clear default layout</span>
                             </button>
@@ -41,66 +108,10 @@
                     </div>
 
                     <div class="verticalSection verticalSection-extrabottompadding">
-                        <h3 class="sectionTitle">Options</h3>
-                        <div class="checkboxContainer checkboxContainer-withDescription">
-                            <label class="emby-checkbox-label">
-                                <input id="chAllowUserCustomization" type="checkbox" is="emby-checkbox" />
-                                <span>Allow users to customize their own home page</span>
-                            </label>
-                            <div class="fieldDescription checkboxFieldDescription">When disabled, every user gets the default layout. Administrators can always customize their own page.</div>
-                        </div>
-                        <div class="checkboxContainer checkboxContainer-withDescription">
-                            <label class="emby-checkbox-label">
-                                <input id="chForceDefaultLayout" type="checkbox" is="emby-checkbox" />
-                                <span>Force the default layout for everybody</span>
-                            </label>
-                            <div class="fieldDescription checkboxFieldDescription">Ignores the layouts saved by users (they are kept and used again when this option is turned off).</div>
-                        </div>
-                        <div class="checkboxContainer checkboxContainer-withDescription">
-                            <label class="emby-checkbox-label">
-                                <input id="chShowCustomizeButtonOnHome" type="checkbox" is="emby-checkbox" />
-                                <span>Show a "Customize home" button at the bottom of the home page</span>
-                            </label>
-                        </div>
-                        <div class="checkboxContainer checkboxContainer-withDescription">
-                            <label class="emby-checkbox-label">
-                                <input id="chShowUserMenuEntry" type="checkbox" is="emby-checkbox" />
-                                <span>Add a "Customize home" entry to the user menu</span>
-                            </label>
-                        </div>
-                        <div class="checkboxContainer checkboxContainer-withDescription">
-                            <label class="emby-checkbox-label">
-                                <input id="chFoldersCollapsible" type="checkbox" is="emby-checkbox" />
-                                <span>Folders can be collapsed and expanded by clicking their header</span>
-                            </label>
-                            <div class="fieldDescription checkboxFieldDescription">The collapsed state is remembered per device.</div>
-                        </div>
-                        <div class="checkboxContainer checkboxContainer-withDescription">
-                            <label class="emby-checkbox-label">
-                                <input id="chEnableIntegratedSections" type="checkbox" is="emby-checkbox" />
-                                <span>Offer the sections rendered by this plugin</span>
-                            </label>
-                            <div class="fieldDescription checkboxFieldDescription">Continue Watching / Next Up (combined), Latest Movies and Shows by release date, Collections, Watch Again, Because You Watched, Genre. Users enable them in the editor; no other plugin required.</div>
-                        </div>
-                        <div class="checkboxContainer checkboxContainer-withDescription">
-                            <label class="emby-checkbox-label">
-                                <input id="chDeveloperMode" type="checkbox" is="emby-checkbox" />
-                                <span>Developer mode (client assets are never cached)</span>
-                            </label>
-                        </div>
+                        <h3 class="sectionTitle">User layouts</h3>
+                        <p class="fieldDescription">Users that saved their own layout. Resetting a user sends them back to the default layout.</p>
+                        <div id="chUserLayouts" class="paperList" style="margin-top: 0.6em;"></div>
                     </div>
-
-                    <div>
-                        <button is="emby-button" type="submit" class="raised button-submit block emby-button">
-                            <span>Save</span>
-                        </button>
-                    </div>
-                </form>
-
-                <div class="verticalSection verticalSection-extrabottompadding" style="margin-top: 2em;">
-                    <h3 class="sectionTitle">User layouts</h3>
-                    <p class="fieldDescription">Users that saved their own layout. Resetting a user sends them back to the default layout.</p>
-                    <div id="chUserLayouts" class="paperList" style="margin-top: 0.6em;"></div>
                 </div>
             </div>
         </div>
@@ -109,6 +120,7 @@
                 var pluginId = '7c99a4bf-cd3b-4bc8-b941-7ddccd816f3c';
                 var page = document.querySelector('#CustomizedHomeConfigPage');
                 var fields = ['AllowUserCustomization', 'ForceDefaultLayout', 'ShowCustomizeButtonOnHome', 'ShowUserMenuEntry', 'FoldersCollapsible', 'EnableIntegratedSections', 'DeveloperMode'];
+                var editorOpened = false;
 
                 function escapeHtml(value) {
                     return String(value == null ? '' : value).replace(/[&<>"']/g, function (c) {
@@ -121,26 +133,18 @@
                     if (!items.length) {
                         return 'No default layout: the home page is left untouched for users without a layout of their own.';
                     }
-                    var folders = 0;
                     var sections = 0;
                     var hidden = 0;
                     items.forEach(function (item) {
-                        if (item.Type === 'folder') {
-                            folders++;
-                            (item.Items || []).forEach(function (member) {
-                                sections++;
-                                if (member.Visible === false) {
-                                    hidden++;
-                                }
-                            });
-                        } else {
+                        var members = item.Type === 'folder' ? (item.Items || []) : [item];
+                        members.forEach(function (member) {
                             sections++;
-                            if (item.Visible === false) {
+                            if (member.Visible === false) {
                                 hidden++;
                             }
-                        }
+                        });
                     });
-                    return sections + ' section(s), ' + folders + ' folder(s), ' + hidden + ' hidden' + (layout.HideUnlisted ? ', unlisted sections hidden' : '') + '.';
+                    return sections + ' section(s), ' + hidden + ' hidden' + (layout.HideUnlisted ? ', unlisted sections hidden' : '') + '.';
                 }
 
                 function formatDate(value) {
@@ -187,7 +191,7 @@
                                 '<span class="material-icons listItemIcon person" aria-hidden="true"></span>' +
                                 '<div class="listItemBody">' +
                                 '<div class="listItemBodyText">' + escapeHtml(info.UserName || info.UserId) + '</div>' +
-                                '<div class="listItemBodyText secondary">' + info.SectionCount + ' section(s), ' + info.FolderCount + ' folder(s), saved ' + escapeHtml(formatDate(info.ModifiedUtc)) + '</div>' +
+                                '<div class="listItemBodyText secondary">' + info.SectionCount + ' section(s), saved ' + escapeHtml(formatDate(info.ModifiedUtc)) + '</div>' +
                                 '</div>' +
                                 '<button type="button" is="paper-icon-button-light" class="listItemButton chResetUser" data-userid="' + escapeHtml(info.UserId) + '" title="Reset"><span class="material-icons delete" aria-hidden="true"></span></button>' +
                                 '</div>';
@@ -208,10 +212,53 @@
                     });
                 }
 
+                function openDefaultEditor() {
+                    var container = document.querySelector('#chDefaultEditor');
+                    if (!window.CustomizedHome || !window.CustomizedHome.openEditor) {
+                        container.innerHTML = '<div class="fieldDescription">The client script is not loaded on this page. Check the File Transformation status in the Options tab and refresh the page (Ctrl+F5).</div>';
+                        return;
+                    }
+                    editorOpened = true;
+                    window.CustomizedHome.openEditor({
+                        mode: 'default',
+                        container: container,
+                        onSaved: function (layout) {
+                            document.querySelector('#chDefaultSummary').textContent = describeLayout(layout);
+                        }
+                    });
+                }
+
+                function showTab(index) {
+                    page.querySelectorAll('.chTab').forEach(function (tab) {
+                        tab.classList.toggle('hide', tab.getAttribute('data-tab') !== String(index));
+                    });
+                    page.querySelectorAll('.emby-tab-button').forEach(function (button) {
+                        button.classList.toggle('emby-tab-button-active', button.getAttribute('data-index') === String(index));
+                    });
+                    if (index === 1) {
+                        loadUserLayouts();
+                        if (!editorOpened) {
+                            openDefaultEditor();
+                        }
+                    }
+                }
+
+                var tabs = page.querySelector('.chTabs');
+                tabs.addEventListener('tabchange', function (e) {
+                    showTab(parseInt(e.detail.selectedTabIndex, 10));
+                });
+                tabs.addEventListener('click', function (e) {
+                    var button = e.target.closest('.emby-tab-button');
+                    if (button) {
+                        showTab(parseInt(button.getAttribute('data-index'), 10));
+                    }
+                });
+
                 page.addEventListener('pageshow', function () {
+                    editorOpened = false;
                     loadConfig();
                     loadStatus();
-                    loadUserLayouts();
+                    showTab(0);
                 });
 
                 document.querySelector('#CustomizedHomeConfigForm').addEventListener('submit', function (e) {
@@ -232,19 +279,6 @@
                     ApiClient.ajax({ type: 'POST', url: ApiClient.getUrl('CustomizedHome/Status/Retry'), dataType: 'json' }).then(renderStatus).catch(loadStatus);
                 });
 
-                document.querySelector('#chEditDefault').addEventListener('click', function () {
-                    if (!window.CustomizedHome || !window.CustomizedHome.openEditor) {
-                        Dashboard.alert('The client script is not loaded on this page. Check the File Transformation status above and refresh the page.');
-                        return;
-                    }
-                    window.CustomizedHome.openEditor({
-                        mode: 'default',
-                        onSaved: function (layout) {
-                            document.querySelector('#chDefaultSummary').textContent = describeLayout(layout);
-                        }
-                    });
-                });
-
                 document.querySelector('#chClearDefault').addEventListener('click', function () {
                     if (!window.confirm('Clear the default layout?')) {
                         return;
@@ -257,6 +291,8 @@
                         dataType: 'json'
                     }).then(function (layout) {
                         document.querySelector('#chDefaultSummary').textContent = describeLayout(layout);
+                        editorOpened = false;
+                        openDefaultEditor();
                     });
                 });
 
