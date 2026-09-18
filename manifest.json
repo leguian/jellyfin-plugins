@@ -9,6 +9,22 @@
     "imageUrl": "https://raw.githubusercontent.com/leguian/jellyfin-plugins/main/customized-home/logo.png",
     "versions": [
       {
+        "version": "1.2.0.0",
+        "changelog": "Editor in two columns (customized home page / sections not in the layout) with drag and drop between them, \"move to the very top\" shortcut on search results, redesigned administration page (tabs, cards, switches, status), save button on top of the default layout, browser test suite.",
+        "targetAbi": "12.0.0.0",
+        "sourceUrl": "https://github.com/leguian/jellyfin-plugins/releases/download/customized-home-v1.2.0.0/customized-home_1.2.0.0_jellyfin-12.zip",
+        "checksum": "a285c49d4d27073cc02e1836b6406d63",
+        "timestamp": "2026-09-18T14:37:56Z"
+      },
+      {
+        "version": "1.2.0.0",
+        "changelog": "Editor in two columns (customized home page / sections not in the layout) with drag and drop between them, \"move to the very top\" shortcut on search results, redesigned administration page (tabs, cards, switches, status), save button on top of the default layout, browser test suite.",
+        "targetAbi": "10.11.0.0",
+        "sourceUrl": "https://github.com/leguian/jellyfin-plugins/releases/download/customized-home-v1.2.0.0/customized-home_1.2.0.0_jellyfin-10.11.zip",
+        "checksum": "a02431d34ae28d44680b39021520d7d7",
+        "timestamp": "2026-09-18T14:37:56Z"
+      },
+      {
         "version": "1.1.0.0",
         "changelog": "Sections rendered by the plugin (combined continue watching / next up, latest by release date, collections, watch again, because you watched, genre), per-section display format (shape, size, titles), search in the editor, administration page with Options / Layouts tabs, plugin logo.",
         "targetAbi": "12.0.0.0",
