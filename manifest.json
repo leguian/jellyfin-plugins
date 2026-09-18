@@ -2,12 +2,28 @@
   {
     "guid": "7c99a4bf-cd3b-4bc8-b941-7ddccd816f3c",
     "name": "Customized Home",
-    "description": "Customized Home lets every user reorganize the Jellyfin home screen: reorder sections by drag and drop, show or hide them, choose a display format per section (poster, landscape, square, size, titles) and search among all known sections. Adds its own sections without any other plugin: Continue Watching / Next Up combined, latest movies and shows by release date, collections, watch again, because you watched, genre. Works with the built-in sections and with sections added by other plugins (Home Screen Sections, ...). Administrators define a default layout. Requires the File Transformation plugin.",
+    "description": "Customized Home lets every user reorganize the Jellyfin home screen: reorder sections by drag and drop, show or hide them, choose a display format per section (poster, landscape, square, size, titles) and search among all known sections. Optional hero banner at the top: a carousel of featured media (random, recently added, latest releases) with backdrop, logo, synopsis, ratings and play / resume / trailer / favorite actions. Adds its own sections without any other plugin: Continue Watching / Next Up combined, latest movies and shows by release date, collections, watch again, because you watched, genre. Works with the built-in sections and with sections added by other plugins (Home Screen Sections, ...). Administrators define a default layout. Requires the File Transformation plugin.",
     "overview": "Easily edit and organize the sections on your homepage",
     "owner": "leguian",
     "category": "General",
     "imageUrl": "https://raw.githubusercontent.com/leguian/jellyfin-plugins/main/customized-home/logo.png",
     "versions": [
+      {
+        "version": "1.8.0.0",
+        "changelog": "New hero banner at the top of the home page: a carousel of featured media with backdrop, logo, synopsis, runtime, year and ratings, and actions to play or resume, watch the trailer, mark as favorite or watched. Sources can be combined (random, recently added movies / shows, latest movies / shows), with an adjustable number of media and rotation delay. Configured from the layout editor, per user and in the default layout.",
+        "targetAbi": "12.0.0.0",
+        "sourceUrl": "https://github.com/leguian/jellyfin-plugins/releases/download/customized-home-v1.8.0.0/customized-home_1.8.0.0_jellyfin-12.zip",
+        "checksum": "de1bb27f7b2bf85a7c7a2b95c993e2ef",
+        "timestamp": "2026-09-18T19:12:38Z"
+      },
+      {
+        "version": "1.8.0.0",
+        "changelog": "New hero banner at the top of the home page: a carousel of featured media with backdrop, logo, synopsis, runtime, year and ratings, and actions to play or resume, watch the trailer, mark as favorite or watched. Sources can be combined (random, recently added movies / shows, latest movies / shows), with an adjustable number of media and rotation delay. Configured from the layout editor, per user and in the default layout.",
+        "targetAbi": "10.11.0.0",
+        "sourceUrl": "https://github.com/leguian/jellyfin-plugins/releases/download/customized-home-v1.8.0.0/customized-home_1.8.0.0_jellyfin-10.11.zip",
+        "checksum": "3d4c50eac2014df484044247c51dc64d",
+        "timestamp": "2026-09-18T19:12:38Z"
+      },
       {
         "version": "1.7.0.0",
         "changelog": "Custom genre thumbnails now come in three shapes (poster, landscape, square): the \"All genres\" section uses the one matching its card shape. The Genres tab shows the optimal image sizes. Thumbnails uploaded before this version are kept as poster thumbnails.",
