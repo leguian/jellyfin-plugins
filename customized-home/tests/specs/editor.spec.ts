@@ -4,69 +4,100 @@ import { openEditor, openHome, recordedRequests, rowTitles, visibleSectionTitles
 const LIST = '.ch-overlay .ch-list';
 const UNLISTED = '.ch-overlay .ch-unlisted';
 
-test('shows the home sections on the left and the other known sections on the right', async ({ page }) => {
+const LAYOUT: Layout = {
+    Version: 1,
+    HideUnlisted: true,
+    Items: [
+        { Type: 'section', Key: 'jf:smalllibrarytiles', Visible: true },
+        { Type: 'section', Key: 'jf:resume', Visible: true },
+        { Type: 'section', Key: 'jf:nextup', Visible: true }
+    ]
+};
+
+async function openEmptyEditor(page: import('@playwright/test').Page): Promise<void> {
+    await page.click('.ch-customize-button');
+    await page.waitForSelector(`${UNLISTED} .ch-row`);
+}
+
+test('without a layout the left column is empty and every home section sits on the right', async ({ page }) => {
     await openHome(page);
-    await openEditor(page);
-    // Sections rendered by the web client but currently empty (hidden) are listed too.
-    expect(await rowTitles(page, LIST)).toEqual([
-        'My Media', 'Continue Watching', 'Continue Listening', 'Continue Reading', 'Next Up', 'Recently Added in Movies', 'Recently Added in Shows'
+    await openEmptyEditor(page);
+    expect(await rowTitles(page, LIST)).toEqual([]);
+    await expect(page.locator(`${LIST} .ch-empty`)).toContainText('the default home page is displayed');
+    expect(await rowTitles(page, UNLISTED)).toEqual([
+        'Continue Listening', 'Continue Reading', 'Continue Watching', 'My Media', 'Next Up', 'Recently Added in Movies', 'Recently Added in Shows'
     ]);
-    await expect(page.locator('.ch-overlay .ch-col-layout .ch-col-title')).toHaveText('Customized home page');
-    await expect(page.locator('.ch-overlay .ch-col-unlisted .ch-col-title')).toHaveText('Sections not in the layout');
-    // No up/down arrows, no folder creation, and the top save button is reserved to the embedded editor.
-    await expect(page.locator('.ch-act-up, .ch-act-down, .ch-new-folder')).toHaveCount(0);
+    // Removed from the editor: arrows, folder creation, "hide unlisted" toggle; top save is for the embedded editor only.
+    await expect(page.locator('.ch-act-up, .ch-act-down, .ch-new-folder, .ch-hide-unlisted')).toHaveCount(0);
     await expect(page.locator('.ch-overlay .ch-save-top')).toBeHidden();
 });
 
-test('row menu offers format and removal, never a folder entry', async ({ page }) => {
-    await openHome(page);
+test('right column rows only offer "add", which puts the section at the very top', async ({ page }) => {
+    await openHome(page, { layout: LAYOUT });
     await openEditor(page);
-    await page.locator(`${LIST} .ch-row`).first().locator('.ch-act-menu').click();
-    const entries = await page.locator('.ch-popup button, .ch-popup .ch-popup-label').allTextContents();
-    expect(entries.map((text) => text.replace(/^[a-z_]+/, '').trim())).toEqual(['Display format', 'Remove from the layout']);
+    const row = page.locator(`${UNLISTED} .ch-row`, { hasText: 'Recently Added in Shows' });
+    await expect(row.locator('.ch-act-visibility, .ch-act-menu, .ch-act-top, .ch-act-remove')).toHaveCount(0);
+    await row.locator('.ch-act-add').click();
+    expect(await rowTitles(page, LIST)).toEqual(['Recently Added in Shows', 'My Media', 'Continue Watching', 'Next Up']);
+    expect(await rowTitles(page, UNLISTED)).not.toContain('Recently Added in Shows');
 });
 
-test('search finds sections that are not displayed and moves one to the very top', async ({ page }) => {
-    await openHome(page);
+test('left column: the menu button opens the display format options directly, remove has its own action', async ({ page }) => {
+    await openHome(page, { layout: LAYOUT });
+    await openEditor(page);
+    const row = page.locator(`${LIST} .ch-row`, { hasText: 'My Media' });
+    await row.locator('.ch-act-menu').click();
+    const labels = await page.locator('.ch-popup .ch-popup-label').allTextContents();
+    expect(labels).toEqual(['Card shape', 'Card size']);
+    await expect(page.locator('.ch-popup')).not.toContainText('Remove from the layout');
+    await page.locator('.ch-popup button', { hasText: 'Landscape' }).click();
+    await expect(row.locator('.ch-row-format')).toHaveText('Landscape');
+
+    await row.locator('.ch-act-remove').click();
+    expect(await rowTitles(page, LIST)).toEqual(['Continue Watching', 'Next Up']);
+    expect(await rowTitles(page, UNLISTED)).toContain('My Media');
+});
+
+test('search: left rows get "move to top", right rows get "add" and no "move to top"', async ({ page }) => {
+    await openHome(page, { layout: LAYOUT });
     await openEditor(page);
     await expect(page.locator('.ch-act-top')).toHaveCount(0);
 
     await page.fill('.ch-overlay .ch-search', 'live');
     expect(await rowTitles(page, LIST)).toEqual([]);
     expect(await rowTitles(page, UNLISTED)).toEqual(['Live TV']);
+    await expect(page.locator(`${UNLISTED} .ch-act-top`)).toHaveCount(0);
+    await page.locator(`${UNLISTED} .ch-row .ch-act-add`).click();
 
-    const row = page.locator(`${UNLISTED} .ch-row`).first();
-    await row.hover();
-    await row.locator('.ch-act-top').click();
-    await page.fill('.ch-overlay .ch-search', '');
-    expect((await rowTitles(page, LIST))[0]).toBe('Live TV');
-});
-
-test('saves the edited layout and applies it to the home page', async ({ page }) => {
-    await openHome(page);
-    await openEditor(page);
-    // Hide "Continue Watching", then move "Next Up" first through the search shortcut.
-    await page.locator(`${LIST} .ch-row`, { hasText: 'Continue Watching' }).locator('.ch-act-visibility').click();
-    await page.fill('.ch-overlay .ch-search', 'next up');
+    await page.fill('.ch-overlay .ch-search', 'next');
     const nextUp = page.locator(`${LIST} .ch-row`, { hasText: 'Next Up' });
     await nextUp.hover();
     await nextUp.locator('.ch-act-top').click();
+    await page.fill('.ch-overlay .ch-search', '');
+    expect(await rowTitles(page, LIST)).toEqual(['Next Up', 'Live TV', 'My Media', 'Continue Watching']);
+});
+
+test('saved layout replaces the default home page', async ({ page }) => {
+    await openHome(page);
+    await openEmptyEditor(page);
+    await page.locator(`${UNLISTED} .ch-row`, { hasText: 'My Media' }).locator('.ch-act-add').click();
+    await page.locator(`${UNLISTED} .ch-row`, { hasText: 'Continue Watching' }).locator('.ch-act-add').click();
+    await page.locator(`${UNLISTED} .ch-row`, { hasText: 'Next Up' }).locator('.ch-act-add').click();
+    await page.locator(`${LIST} .ch-row`, { hasText: 'Continue Watching' }).locator('.ch-act-visibility').click();
     await page.locator('.ch-overlay .ch-dialog-footer .ch-save').click();
     await expect(page.locator('.ch-overlay')).toHaveCount(0);
 
     const post = (await recordedRequests(page)).find((request) => request.method === 'POST' && request.path === 'CustomizedHome/Layout');
     const saved = post?.body as Layout;
-    expect(saved.Items.map((item) => item.Key)).toEqual([
-        'jf:nextup', 'jf:smalllibrarytiles', 'jf:resume', 'jf:resumeaudio', 'jf:resumebook', 'jf:latestmedia:lib-movies', 'jf:latestmedia:lib-shows'
-    ]);
+    expect(saved.Items.map((item) => item.Key)).toEqual(['jf:nextup', 'jf:resume', 'jf:smalllibrarytiles']);
+    expect(saved.HideUnlisted).toBe(true);
     expect(saved.Items.find((item) => item.Key === 'jf:resume')?.Visible).toBe(false);
-    await expect.poll(() => visibleSectionTitles(page)).toEqual([
-        'Next Up', 'My Media', 'Recently Added in Movies', 'Recently Added in Shows'
-    ]);
+    // Only the listed, visible sections remain: the "Recently Added" rows are gone.
+    await expect.poll(() => visibleSectionTitles(page)).toEqual(['Next Up', 'My Media']);
 });
 
 test('drag and drop reorders sections and dropping on the right column removes them', async ({ page }) => {
-    await openHome(page);
+    await openHome(page, { layout: LAYOUT });
     await openEditor(page);
 
     const source = page.locator(`${LIST} .ch-row`, { hasText: 'Next Up' }).locator('.ch-handle');

@@ -21,17 +21,16 @@ test('keeps the native order without a layout', async ({ page }) => {
 
 test('applies order, visibility and display format from the layout', async ({ page }) => {
     await openHome(page, { layout: LAYOUT });
-    await expect.poll(() => visibleSectionTitles(page)).toEqual([
-        'Next Up', 'Recently Added in Shows', 'My Media', 'Recently Added in Movies'
-    ]);
+    // "Recently Added in Movies" is not part of the layout: a non-empty layout replaces the default home page.
+    await expect.poll(() => visibleSectionTitles(page)).toEqual(['Next Up', 'Recently Added in Shows', 'My Media']);
     const shows = page.locator('#homeTab .verticalSection', { hasText: 'Recently Added in Shows' });
     await expect(shows).toHaveClass(/ch-shape-landscape/);
     await expect(shows).toHaveClass(/ch-size-large/);
     await expect(shows).toHaveClass(/ch-notitle/);
 });
 
-test('hides unlisted sections when the layout asks for it', async ({ page }) => {
-    await openHome(page, { layout: { ...LAYOUT, HideUnlisted: true } });
+test('ignores the stored HideUnlisted flag: any non-empty layout hides the unlisted sections', async ({ page }) => {
+    await openHome(page, { layout: { ...LAYOUT, HideUnlisted: false } });
     await expect.poll(() => visibleSectionTitles(page)).toEqual(['Next Up', 'Recently Added in Shows', 'My Media']);
 });
 
