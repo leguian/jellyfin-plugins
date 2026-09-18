@@ -6,6 +6,8 @@
     <style>
         body { background: #101010; color: #ddd; font-family: sans-serif; margin: 0; }
         .hide { display: none !important; }
+        /* Same rule as jellyfin-web src/styles/site.scss: plugin pages must override it on purpose. */
+        @media all and (min-width: 50em) { form { max-width: 54em; } }
         .verticalSection { padding: 0.5em 1em; }
         .card { display: inline-block; width: 8em; height: 4em; background: #333; margin-right: 0.5em; }
     </style>

@@ -1,10 +1,10 @@
 ---
 name: "Customized Home"
 guid: "7c99a4bf-cd3b-4bc8-b941-7ddccd816f3c"
-version: "1.4.0.0"
+version: "1.4.0.1"
 targetAbi: "12.0.0.0"
 framework: "net10.0"
-overview: "Reorder, hide and format the home screen sections, per user, with drag and drop."
+overview: "Easily edit and organize the sections on your homepage"
 description: >
   Customized Home lets every user reorganize the Jellyfin home screen: reorder sections by
   drag and drop, show or hide them, choose a display format per section (poster, landscape,
@@ -18,6 +18,4 @@ owner: "leguian"
 artifacts:
 - "Jellyfin.Plugin.CustomizedHome.dll"
 changelog: >
-  Genres: new "All genres" section (one card per genre, opens the genre list) and the "Genre"
-  section can now show chosen genres, one row each (automatic pick when none is chosen).
-  Sections of the Home Screen Sections plugin are no longer listed when that plugin is absent.
+  Options form uses the full page width, plugin description aligned everywhere.
