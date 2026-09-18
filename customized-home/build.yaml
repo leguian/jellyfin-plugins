@@ -1,7 +1,7 @@
 ---
 name: "Customized Home"
 guid: "7c99a4bf-cd3b-4bc8-b941-7ddccd816f3c"
-version: "1.5.0.0"
+version: "1.6.0.0"
 targetAbi: "12.0.0.0"
 framework: "net10.0"
 overview: "Easily edit and organize the sections on your homepage"
@@ -18,8 +18,5 @@ owner: "leguian"
 artifacts:
 - "Jellyfin.Plugin.CustomizedHome.dll"
 changelog: >
-  Editor: tooltips on every icon, legend and new pictograms (house = Customized Home section,
-  Jellyfin logo = default section), section title can be hidden, format menu stays open while
-  picking several options, sections rendered by the plugin are always listed. Genre cards now
-  show a poster shaped collage of four distinct posters; administrators can upload a thumbnail
-  per genre (new Genres tab).
+  "All genres" section: choose the look of the cards from the format menu - posters of the genre,
+  custom images uploaded by the administrator, or genre names on colored backgrounds.

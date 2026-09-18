@@ -27,6 +27,16 @@ test('home with genre cards', async ({ page }) => {
     await page.locator('[data-ch-key="ch:allGenres"]').screenshot({ path: `${OUTPUT_DIR}/home-all-genres.png` });
 });
 
+test('home with colored genre cards', async ({ page }) => {
+    await openHome(page, {
+        enableIntegratedSections: true,
+        layout: { Version: 1, HideUnlisted: true, Items: [{ Type: 'section', Key: 'ch:allGenres', Visible: true, GenreStyle: 'colors' }] }
+    });
+    await page.addStyleTag({ content: '.ch-items{display:flex;gap:12px}.ch-card{width:240px}.cardPadder-overflowBackdrop{padding-bottom:56.25%}.cardImageContainer{position:absolute;inset:0}' });
+    await page.locator('[data-ch-key="ch:allGenres"] .ch-genre-color').first().waitFor();
+    await page.locator('[data-ch-key="ch:allGenres"]').screenshot({ path: `${OUTPUT_DIR}/home-all-genres-colors.png` });
+});
+
 test('user editor', async ({ page }) => {
     await openHome(page, { enableIntegratedSections: true, layout: DEFAULT_LAYOUT });
     await page.addStyleTag({ url: MATERIAL_ICONS });

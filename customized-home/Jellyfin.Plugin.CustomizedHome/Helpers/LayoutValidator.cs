@@ -146,7 +146,8 @@ public static partial class LayoutValidator
             Size = NormalizeChoice(item.Size, LayoutFormats.Sizes, LayoutFormats.SizeNormal),
             ShowTitle = item.ShowTitle,
             ShowSectionTitle = item.ShowSectionTitle,
-            Genres = NormalizeGenres(item.Genres)
+            Genres = NormalizeGenres(item.Genres),
+            GenreStyle = NormalizeChoice(item.GenreStyle, LayoutFormats.GenreStyles, LayoutFormats.GenreStylePosters)
         };
     }
 

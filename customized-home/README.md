@@ -82,7 +82,7 @@ Clés stables utilisées dans les dispositions (`GET /CustomizedHome/Catalog`). 
 | --- | --- | --- |
 | Customized Home | `ch:combined`, `ch:latestMovies`, `ch:latestShows`, `ch:collections`, `ch:watchAgain` | Continuer à regarder / À suivre, Derniers films (date de sortie), Dernières séries (date de sortie), Collections, Regarder à nouveau |
 | Customized Home | `ch:becauseYouWatched`, `ch:genre` (familles) | Parce que vous avez regardé {0} (3 derniers visionnages, items similaires), Genre : {0} (une ligne par genre choisi via bouton format → Choisir les genres ; sans choix, 2 genres pondérés par l'historique) |
-| Customized Home | `ch:allGenres` | Tous les genres : une carte par genre au format affiche, clic = liste des médias du genre. Miniature = image envoyée par l'administrateur (onglet Genres), sinon collage de 4 affiches distinctes du genre |
+| Customized Home | `ch:allGenres` | Tous les genres : une carte par genre, clic = liste des médias du genre. Apparence au choix (bouton format → Cartes des genres) : **Affiches du genre** (collage de 4 affiches distinctes, par défaut), **Images personnalisées** (miniatures de l'onglet admin Genres, collage pour les genres sans image) ou **Noms sur fonds de couleur** (aucune requête supplémentaire, couleur stable par genre) |
 | jellyfin-web | `jf:smalllibrarytiles`, `jf:librarybuttons` | Mes médias, Mes médias (petit) |
 | jellyfin-web | `jf:resume`, `jf:resumeaudio`, `jf:resumebook`, `jf:nextup` | Continuer de regarder, Reprendre l'écoute, Reprendre la lecture, À suivre |
 | jellyfin-web | `jf:latestmedia:<idMédiathèque>` | « <Médiathèque>, ajouts récents » (une clé par médiathèque) |

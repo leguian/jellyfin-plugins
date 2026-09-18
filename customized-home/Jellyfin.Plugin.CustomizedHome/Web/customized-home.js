@@ -13,7 +13,7 @@
         return;
     }
 
-    const VERSION = '1.5.0';
+    const VERSION = '1.6.0';
     const API = 'CustomizedHome';
     const ORDER_STEP = 1000;
     const ORDER_UNLISTED_BASE = 1000000000;
@@ -95,6 +95,10 @@
             genresCount: '{0} genre(s)',
             genresLoading: 'Loading genres…',
             genresNone: 'No genre found in your libraries.',
+            genreStyle: 'Genre cards',
+            genreStylePosters: 'Posters of the genre',
+            genreStyleCustom: 'Custom images',
+            genreStyleColors: 'Names on colored backgrounds',
             becauseYouWatched: 'Because you watched {0}',
             genreTitle: 'Genre: {0}',
             format: 'Display format (shape, size, titles)',
@@ -179,6 +183,10 @@
             genresCount: '{0} genre(s)',
             genresLoading: 'Chargement des genres…',
             genresNone: 'Aucun genre trouvé dans vos médiathèques.',
+            genreStyle: 'Cartes des genres',
+            genreStylePosters: 'Affiches du genre',
+            genreStyleCustom: 'Images personnalisées',
+            genreStyleColors: 'Noms sur fonds de couleur',
             becauseYouWatched: 'Parce que vous avez regardé {0}',
             genreTitle: 'Genre : {0}',
             format: "Format d'affichage (forme, taille, titres)",
@@ -567,9 +575,54 @@
         return apiUrl('GenreImages/Image', { name: entry.Name, v: entry.Version });
     }
 
-    // Genre cards: the thumbnail uploaded by the administrator, else a collage of distinct posters of the genre.
-    function fetchGenreCards() {
-        return Promise.all([fetchGenreList(), fetchGenreImages()]).then(function (results) {
+    // Backgrounds of the "colors" genre cards: picked from the genre name, so a genre keeps its color.
+    const GENRE_GRADIENTS = [
+        ['#e53935', '#8e24aa'], ['#1e88e5', '#00acc1'], ['#43a047', '#c0ca33'], ['#fb8c00', '#f4511e'],
+        ['#6d4c41', '#d81b60'], ['#3949ab', '#8e24aa'], ['#00897b', '#1e88e5'], ['#c2185b', '#ff7043'],
+        ['#5e35b1', '#1e88e5'], ['#7cb342', '#00897b'], ['#f4511e', '#ffb300'], ['#546e7a', '#3949ab']
+    ];
+
+    function genreStyleOf(item) {
+        const style = item && item.GenreStyle;
+        return style === 'custom' || style === 'colors' ? style : 'posters';
+    }
+
+    function genreGradient(name) {
+        const pair = GENRE_GRADIENTS[textHash(String(name).toUpperCase()) % GENRE_GRADIENTS.length];
+        return 'linear-gradient(135deg, ' + pair[0] + ', ' + pair[1] + ')';
+    }
+
+    function withPosterCollage(genre) {
+        return itemsQuery({ genreIds: genre.Id, includeItemTypes: 'Movie,Series', recursive: true, sortBy: 'Random', imageTypes: 'Primary', limit: GENRE_COLLAGE_SIZE, fields: 'PrimaryImageAspectRatio' })
+            .then(function (items) {
+                genre._chCollage = dedupeItems(items).filter(function (item) {
+                    return item.ImageTags && item.ImageTags.Primary;
+                }).map(function (item) {
+                    return apiClient().getImageUrl(item.Id, { type: 'Primary', maxWidth: 240, tag: item.ImageTags.Primary });
+                });
+                return genre;
+            })
+            .catch(function () {
+                return genre;
+            });
+    }
+
+    // Genre cards, per style chosen on the section:
+    //   posters - collage of distinct posters of the genre (one request per genre)
+    //   custom  - thumbnail uploaded by the administrator, poster collage for genres without one
+    //   colors  - genre name on a colored background (no extra request)
+    function fetchGenreCards(item) {
+        const style = genreStyleOf(item);
+        if (style === 'colors') {
+            return fetchGenreList().then(function (genres) {
+                genres.forEach(function (genre) {
+                    genre._chColor = genreGradient(genre.Name);
+                });
+                return genres;
+            });
+        }
+        const images = style === 'custom' ? fetchGenreImages() : Promise.resolve({});
+        return Promise.all([fetchGenreList(), images]).then(function (results) {
             const custom = results[1];
             return mapLimit(results[0], GENRE_FETCH_CONCURRENCY, function (genre) {
                 const uploaded = custom[String(genre.Name).toUpperCase()];
@@ -577,18 +630,7 @@
                     genre._chImage = genreImageUrl(uploaded);
                     return Promise.resolve(genre);
                 }
-                return itemsQuery({ genreIds: genre.Id, includeItemTypes: 'Movie,Series', recursive: true, sortBy: 'Random', imageTypes: 'Primary', limit: GENRE_COLLAGE_SIZE, fields: 'PrimaryImageAspectRatio' })
-                    .then(function (items) {
-                        genre._chCollage = dedupeItems(items).filter(function (item) {
-                            return item.ImageTags && item.ImageTags.Primary;
-                        }).map(function (item) {
-                            return apiClient().getImageUrl(item.Id, { type: 'Primary', maxWidth: 240, tag: item.ImageTags.Primary });
-                        });
-                        return genre;
-                    })
-                    .catch(function () {
-                        return genre;
-                    });
+                return withPosterCollage(genre);
             });
         });
     }
@@ -664,7 +706,7 @@
 
     // Settings of a layout entry that change what an integrated section fetches.
     function dataSignature(item) {
-        return ((item && item.Genres) || []).join('|');
+        return ((item && item.Genres) || []).join('|') + '#' + genreStyleOf(item);
     }
 
     const INTEGRATED = {
@@ -791,7 +833,9 @@
             : 'cardImageContainer cardContent defaultCardBackground defaultCardBackground' + (textHash(title) % 5 + 1);
         const imageStyle = image ? ' style="background-image:url(&quot;' + escapeHtml(image) + '&quot;)"' : '';
         let defaultText = '';
-        if (collage.length) {
+        if (item._chColor) {
+            defaultText = '<div class="ch-genre-color" style="background:' + escapeHtml(item._chColor) + '"><span>' + escapeHtml(title) + '</span></div>';
+        } else if (collage.length) {
             // Each cell keeps the poster ratio on portrait cards (2 x 2 posters = one poster shaped card).
             defaultText = '<div class="ch-collage ch-collage-' + collage.length + '">' + collage.map(function (url) {
                 return '<span class="ch-collage-cell" style="background-image:url(&quot;' + escapeHtml(url) + '&quot;)"></span>';
@@ -806,7 +850,8 @@
         html += '<div class="cardBox cardBox-bottompadded"><div class="cardScalable"><div class="cardPadder ' + padder + '"></div>';
         html += '<a href="' + href + '" class="' + imageClass + '"' + imageStyle + ' aria-label="' + escapeHtml(title) + '">' + defaultText + inner + '</a>';
         html += '</div>';
-        if (showTitle) {
+        // The name is already written on a colored card.
+        if (showTitle && !item._chColor) {
             html += '<div class="cardText cardTextCentered cardText-first"><bdi><a href="' + href + '" class="textActionButton" title="' + escapeHtml(title) + '">' + escapeHtml(title) + '</a></bdi></div>';
             html += '<div class="cardText cardTextCentered cardText-secondary"><bdi>' + escapeHtml(secondary) + '</bdi></div>';
         }
@@ -815,7 +860,8 @@
     }
 
     function formatFor(item, definition) {
-        const shape = item && item.Shape && item.Shape !== 'auto' ? item.Shape : definition.shape;
+        const natural = definition === INTEGRATED['ch:allGenres'] && genreStyleOf(item) === 'colors' ? 'landscape' : definition.shape;
+        const shape = item && item.Shape && item.Shape !== 'auto' ? item.Shape : natural;
         return { shape: shape, showTitle: !item || item.ShowTitle !== false };
     }
 
@@ -897,7 +943,7 @@
             } else {
                 const load = definition.family
                     ? definition.fetchInstances(wanted[key])
-                    : definition.fetch().then(function (items) {
+                    : definition.fetch(wanted[key]).then(function (items) {
                         return [{ title: t(definition.titleKey), items: items }];
                     });
                 dataPromise = load.then(function (data) {
@@ -1899,6 +1945,9 @@
         if (item.ShowSectionTitle === false) {
             parts.push(t('noSectionTitle'));
         }
+        if (item.Key === 'ch:allGenres' && genreStyleOf(item) !== 'posters') {
+            parts.push(t(genreStyleOf(item) === 'custom' ? 'genreStyleCustom' : 'genreStyleColors'));
+        }
         if (item.Key === 'ch:genre' && item.Genres && item.Genres.length) {
             parts.push(t('genresCount', item.Genres.length));
         }
@@ -1979,6 +2028,16 @@
             option('check', '', t('showTitles'), item.ShowTitle !== false, function () {
                 item.ShowTitle = item.ShowTitle === false;
             }).classList.add('ch-opt-card-titles');
+
+            if (item.Key === 'ch:allGenres') {
+                menu.appendChild(el('div', 'ch-popup-sep'));
+                group(t('genreStyle'));
+                [['posters', 'genreStylePosters', 'collections'], ['custom', 'genreStyleCustom', 'image'], ['colors', 'genreStyleColors', 'palette']].forEach(function (choice) {
+                    option('radio', choice[2], t(choice[1]), genreStyleOf(item) === choice[0], function () {
+                        item.GenreStyle = choice[0];
+                    }).classList.add('ch-opt-genre-style');
+                });
+            }
 
             if (item.Key === 'ch:genre') {
                 item.Genres = item.Genres || [];
@@ -2559,7 +2618,8 @@
                 Size: item.Size || 'normal',
                 ShowTitle: item.ShowTitle !== false,
                 ShowSectionTitle: item.ShowSectionTitle !== false,
-                Genres: item.Key === 'ch:genre' ? (item.Genres || []) : []
+                Genres: item.Key === 'ch:genre' ? (item.Genres || []) : [],
+                GenreStyle: item.Key === 'ch:allGenres' ? genreStyleOf(item) : 'posters'
             };
         }
         return {

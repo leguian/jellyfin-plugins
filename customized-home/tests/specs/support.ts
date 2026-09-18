@@ -23,6 +23,7 @@ export interface LayoutSection {
     ShowTitle?: boolean;
     ShowSectionTitle?: boolean;
     Genres?: string[];
+    GenreStyle?: 'posters' | 'custom' | 'colors';
 }
 
 export interface Layout {

@@ -1041,3 +1041,20 @@
 .ch-row-actions {
     flex-shrink: 0;
 }
+
+/* Genre cards: name on a colored background */
+.ch-genre-color {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0.6em;
+    text-align: center;
+    color: #fff;
+    font-size: 1.25em;
+    font-weight: 600;
+    line-height: 1.2;
+    text-shadow: 0 1px 3px rgba(0, 0, 0, 0.45);
+    overflow-wrap: anywhere;
+}
