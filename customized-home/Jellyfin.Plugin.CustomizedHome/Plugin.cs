@@ -45,7 +45,7 @@ public class Plugin : BasePlugin<PluginConfiguration>, IHasWebPages
     public override Guid Id => Guid.Parse(PluginGuid);
 
     /// <inheritdoc />
-    public override string Description => "Reorder, hide and group the home screen sections into folders.";
+    public override string Description => "Easily edit and organize the sections on your homepage";
 
     /// <summary>
     /// Gets the server configuration manager (used to resolve the configured base URL).
