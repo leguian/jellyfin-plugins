@@ -35,6 +35,9 @@ dotnet build customized-home/Jellyfin.Plugin.CustomizedHome/Jellyfin.Plugin.Cust
 # Tests unitaires C# (validation des dispositions, stockage des miniatures)
 dotnet test customized-home/Jellyfin.Plugin.CustomizedHome.Tests -p:JellyfinVersion=10.11.11
 
+# Packaging, identique à ce que fait la release (zip dans artifacts/, ignoré par git)
+python scripts/package.py customized-home --jellyfin 10.11.11 --output artifacts
+
 # Syntaxe du script client
 node --check customized-home/Jellyfin.Plugin.CustomizedHome/Web/customized-home.js
 
@@ -45,7 +48,7 @@ npm run typecheck
 npm run screenshots   # captures dans test-results/screenshots, à regarder après tout changement d'UI
 ```
 
-Avant tout push : build + `dotnet test` + `node --check` + `npm test` + `npm run typecheck`. Après un changement d'UI : `npm run screenshots` et contrôle visuel des captures.
+Avant tout push : build + `dotnet test` + `node --check` + `npm test` + `npm run typecheck` + **packaging** (`python scripts/package.py customized-home --jellyfin 10.11.11 --output artifacts`). Le packaging est ce que la release exécute : l'oublier a déjà cassé une release (ajout d'un second `.csproj`). Après un changement d'UI : `npm run screenshots` et contrôle visuel des captures.
 
 ## Tests
 

@@ -97,9 +97,11 @@ def main() -> int:
         print(f"build.yaml not found in {plugin_dir}", file=sys.stderr)
         return 1
     meta = read_build_yaml(build_yaml)
-    projects = list(plugin_dir.glob("*/*.csproj"))
+    # Test projects (<Name>.Tests.csproj) live next to the plugin project and are never packaged.
+    projects = [path for path in plugin_dir.glob("*/*.csproj") if not path.name.endswith(".Tests.csproj")]
     if len(projects) != 1:
-        print(f"expected exactly one csproj in {plugin_dir}/*/, found {len(projects)}", file=sys.stderr)
+        names = ", ".join(sorted(path.name for path in projects)) or "none"
+        print(f"expected exactly one plugin csproj in {plugin_dir}/*/, found {len(projects)}: {names}", file=sys.stderr)
         return 1
     project = projects[0]
 
