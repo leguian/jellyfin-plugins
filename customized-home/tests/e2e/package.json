@@ -1,0 +1,14 @@
+{
+  "name": "customized-home-e2e",
+  "private": true,
+  "description": "Playwright checks of the Customized Home plugin against a local Jellyfin server (see ../README.md)",
+  "scripts": {
+    "test:home": "node test-home.js",
+    "test:integrated": "node probe-integrated.js",
+    "test:admin": "node probe-admin.js",
+    "test:hss": "node probe-hss.js"
+  },
+  "devDependencies": {
+    "playwright": "^1.55.0"
+  }
+}
