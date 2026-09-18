@@ -58,9 +58,37 @@ test('uploaded thumbnails are only used when the section is set to custom images
     const comedy = page.locator('[data-ch-key="ch:allGenres"] .ch-card', { hasText: 'Comedy' });
     await expect(comedy.locator('.ch-collage')).toHaveCount(0);
     const background = await comedy.locator('a.cardImageContainer').evaluate((node) => (node as HTMLElement).style.backgroundImage);
-    expect(background).toContain('CustomizedHome/GenreImages/Image?name=Comedy&v=7');
+    expect(background).toContain('CustomizedHome/GenreImages/Image?name=Comedy&shape=portrait&v=7');
     // A genre without an upload falls back to the poster collage.
     await expect(page.locator('[data-ch-key="ch:allGenres"] .ch-card', { hasText: 'Action' }).locator('.ch-collage')).toHaveCount(1);
+});
+
+test('custom thumbnails follow the card shape, and fall back to another uploaded shape', async ({ page }) => {
+    const genreImages = [
+        { Name: 'Comedy', Shape: 'portrait' as const, Version: 1 },
+        { Name: 'Comedy', Shape: 'landscape' as const, Version: 2 },
+        { Name: 'Drama', Shape: 'square' as const, Version: 3 }
+    ];
+    const backgroundOf = (genre: string): Promise<string> => page
+        .locator('[data-ch-key="ch:allGenres"] .ch-card', { hasText: genre })
+        .locator('a.cardImageContainer')
+        .evaluate((node) => (node as HTMLElement).style.backgroundImage);
+
+    await openHome(page, {
+        enableIntegratedSections: true,
+        genreImages,
+        layout: layoutWith([{ Type: 'section', Key: 'ch:allGenres', Visible: true, GenreStyle: 'custom', Shape: 'landscape' }])
+    });
+    expect(await backgroundOf('Comedy')).toContain('name=Comedy&shape=landscape&v=2');
+    // Drama only has a square thumbnail: better than nothing on a landscape card.
+    expect(await backgroundOf('Drama')).toContain('name=Drama&shape=square&v=3');
+
+    await openHome(page, {
+        enableIntegratedSections: true,
+        genreImages,
+        layout: layoutWith([{ Type: 'section', Key: 'ch:allGenres', Visible: true, GenreStyle: 'custom' }])
+    });
+    expect(await backgroundOf('Comedy')).toContain('name=Comedy&shape=portrait&v=1');
 });
 
 test('colors style writes the genre names on stable colored backgrounds, without any per genre request', async ({ page }) => {

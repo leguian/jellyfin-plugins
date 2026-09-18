@@ -55,7 +55,7 @@ test('user editor', async ({ page }) => {
 });
 
 test('administration page', async ({ page }) => {
-    await openAdminPage(page, { defaultLayout: DEFAULT_LAYOUT, enableIntegratedSections: true });
+    await openAdminPage(page, { defaultLayout: DEFAULT_LAYOUT, enableIntegratedSections: true, genreImages: [{ Name: 'Comedy', Shape: 'portrait', Version: 1 }] });
     await page.addStyleTag({ url: MATERIAL_ICONS });
     await page.waitForTimeout(500);
     await page.screenshot({ path: `${OUTPUT_DIR}/admin-options.png`, fullPage: true });

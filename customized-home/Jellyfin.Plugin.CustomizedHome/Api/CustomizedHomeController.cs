@@ -308,21 +308,22 @@ public class CustomizedHomeController : ControllerBase
     [ProducesResponseType(StatusCodes.Status200OK)]
     public ActionResult<IReadOnlyList<GenreImageInfo>> GetGenreImages()
     {
-        return Ok(_genreImages.List().Select(entry => new GenreImageInfo { Name = entry.Name, Version = entry.Version }).ToList());
+        return Ok(_genreImages.List().Select(entry => new GenreImageInfo { Name = entry.Name, Shape = entry.Shape, Version = entry.Version }).ToList());
     }
 
     /// <summary>
     /// Serves the custom thumbnail of a genre. Anonymous like every Jellyfin image: it is loaded by plain image requests.
     /// </summary>
     /// <param name="name">The genre name.</param>
+    /// <param name="shape">The card shape: portrait (default), landscape or square.</param>
     /// <returns>The image.</returns>
     [HttpGet("GenreImages/Image")]
     [AllowAnonymous]
     [ProducesResponseType(StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
-    public ActionResult GetGenreImage([FromQuery] string? name)
+    public ActionResult GetGenreImage([FromQuery] string? name, [FromQuery] string? shape)
     {
-        (byte[] Data, string ContentType)? image = _genreImages.Read(name);
+        (byte[] Data, string ContentType)? image = _genreImages.Read(name, shape);
         if (image is null)
         {
             return NotFound();
@@ -367,26 +368,27 @@ public class CustomizedHomeController : ControllerBase
             return BadRequest("Image data is not valid base64.");
         }
 
-        GenreImageEntry? entry = _genreImages.Save(upload.Name, data, out string? error);
+        GenreImageEntry? entry = _genreImages.Save(upload.Name, upload.Shape, data, out string? error);
         if (entry is null)
         {
             return BadRequest(error);
         }
 
-        return new GenreImageInfo { Name = entry.Name, Version = entry.Version };
+        return new GenreImageInfo { Name = entry.Name, Shape = entry.Shape, Version = entry.Version };
     }
 
     /// <summary>
     /// Deletes the thumbnail of a genre (administrators).
     /// </summary>
     /// <param name="name">The genre name.</param>
+    /// <param name="shape">The card shape: portrait (default), landscape or square.</param>
     /// <returns>No content.</returns>
     [HttpDelete("GenreImages")]
     [Authorize(Policy = Policies.RequiresElevation)]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
-    public ActionResult DeleteGenreImage([FromQuery] string? name)
+    public ActionResult DeleteGenreImage([FromQuery] string? name, [FromQuery] string? shape)
     {
-        _genreImages.Delete(name);
+        _genreImages.Delete(name, shape);
         return NoContent();
     }
 

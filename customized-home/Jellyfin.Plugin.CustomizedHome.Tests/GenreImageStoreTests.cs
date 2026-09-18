@@ -39,11 +39,11 @@ public sealed class GenreImageStoreTests : IDisposable
     {
         GenreImageStore store = CreateStore();
 
-        GenreImageEntry? entry = store.Save("Comedy", Png, out string? error);
+        GenreImageEntry? entry = store.Save("Comedy", "portrait", Png, out string? error);
 
         Assert.Null(error);
         Assert.NotNull(entry);
-        (byte[] Data, string ContentType)? image = store.Read("Comedy");
+        (byte[] Data, string ContentType)? image = store.Read("Comedy", "portrait");
         Assert.NotNull(image);
         Assert.Equal(Png, image.Value.Data);
         Assert.Equal("image/png", image.Value.ContentType);
@@ -57,9 +57,9 @@ public sealed class GenreImageStoreTests : IDisposable
         GenreImageStore store = CreateStore();
         byte[] data = kind == "jpeg" ? Jpeg : Webp;
 
-        store.Save("Drama", data, out _);
+        store.Save("Drama", "portrait", data, out _);
 
-        Assert.Equal(kind == "jpeg" ? "image/jpeg" : "image/webp", store.Read("Drama")!.Value.ContentType);
+        Assert.Equal(kind == "jpeg" ? "image/jpeg" : "image/webp", store.Read("Drama", "portrait")!.Value.ContentType);
     }
 
     [Fact]
@@ -68,11 +68,11 @@ public sealed class GenreImageStoreTests : IDisposable
         GenreImageStore store = CreateStore();
         byte[] svg = "<svg xmlns=\"http://www.w3.org/2000/svg\"><script>alert(1)</script></svg>"u8.ToArray();
 
-        GenreImageEntry? entry = store.Save("Action", svg, out string? error);
+        GenreImageEntry? entry = store.Save("Action", "portrait", svg, out string? error);
 
         Assert.Null(entry);
         Assert.NotNull(error);
-        Assert.Null(store.Read("Action"));
+        Assert.Null(store.Read("Action", "portrait"));
         Assert.False(Directory.Exists(GenresDirectory) && Directory.EnumerateFiles(GenresDirectory).Any());
     }
 
@@ -83,8 +83,8 @@ public sealed class GenreImageStoreTests : IDisposable
         byte[] tooBig = new byte[GenreImageStore.MaxImageBytes + 1];
         Png.CopyTo(tooBig, 0);
 
-        Assert.Null(store.Save("Action", tooBig, out _));
-        Assert.Null(store.Save("Action", [], out _));
+        Assert.Null(store.Save("Action", "portrait", tooBig, out _));
+        Assert.Null(store.Save("Action", "portrait", [], out _));
     }
 
     [Theory]
@@ -95,14 +95,14 @@ public sealed class GenreImageStoreTests : IDisposable
     {
         GenreImageStore store = CreateStore();
 
-        GenreImageEntry? entry = store.Save(hostileName, Png, out _);
+        GenreImageEntry? entry = store.Save(hostileName, "portrait", Png, out _);
 
         Assert.NotNull(entry);
         string[] files = Directory.GetFiles(_root, "*", SearchOption.AllDirectories);
         Assert.All(files, file => Assert.StartsWith(GenresDirectory, file, StringComparison.Ordinal));
         string image = files.Single(file => !file.EndsWith("index.json", StringComparison.Ordinal));
-        Assert.Matches("^[0-9A-F]{32}\\.png$", Path.GetFileName(image));
-        Assert.Equal(Png, store.Read(hostileName)!.Value.Data);
+        Assert.Matches("^[0-9A-F]{32}-portrait\\.png$", Path.GetFileName(image));
+        Assert.Equal(Png, store.Read(hostileName, "portrait")!.Value.Data);
     }
 
     [Fact]
@@ -110,38 +110,91 @@ public sealed class GenreImageStoreTests : IDisposable
     {
         GenreImageStore store = CreateStore();
 
-        Assert.Null(store.Save("   ", Png, out _));
-        Assert.Null(store.Save(new string('x', 101), Png, out _));
-        Assert.Null(store.Read(null));
+        Assert.Null(store.Save("   ", "portrait", Png, out _));
+        Assert.Null(store.Save(new string('x', 101), "portrait", Png, out _));
+        Assert.Null(store.Read(null, "portrait"));
     }
 
     [Fact]
     public void Names_are_case_insensitive_and_replacing_bumps_the_version_and_drops_the_old_file()
     {
         GenreImageStore store = CreateStore();
-        GenreImageEntry first = store.Save("Sci-Fi", Png, out _)!;
+        GenreImageEntry first = store.Save("Sci-Fi", "portrait", Png, out _)!;
 
-        GenreImageEntry second = store.Save("SCI-FI", Jpeg, out _)!;
+        GenreImageEntry second = store.Save("SCI-FI", "portrait", Jpeg, out _)!;
 
         Assert.True(second.Version > first.Version);
         Assert.Single(store.List());
-        Assert.Equal("image/jpeg", store.Read("sci-fi")!.Value.ContentType);
+        Assert.Equal("image/jpeg", store.Read("sci-fi", "portrait")!.Value.ContentType);
         Assert.Single(Directory.GetFiles(GenresDirectory), file => !file.EndsWith("index.json", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void A_genre_holds_one_thumbnail_per_shape_independently()
+    {
+        GenreImageStore store = CreateStore();
+        store.Save("Action", "portrait", Png, out _);
+        store.Save("Action", "landscape", Jpeg, out _);
+        store.Save("Action", "square", Webp, out _);
+
+        Assert.Equal(["landscape", "portrait", "square"], store.List().Select(entry => entry.Shape));
+        Assert.Equal("image/jpeg", store.Read("Action", "LANDSCAPE")!.Value.ContentType);
+
+        Assert.True(store.Delete("Action", "landscape"));
+        Assert.Null(store.Read("Action", "landscape"));
+        Assert.NotNull(store.Read("Action", "portrait"));
+        Assert.NotNull(store.Read("Action", "square"));
+    }
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("hexagon")]
+    [InlineData("../../landscape")]
+    public void Unknown_shapes_are_the_portrait_shape(string? shape)
+    {
+        GenreImageStore store = CreateStore();
+
+        GenreImageEntry entry = store.Save("Action", shape, Png, out _)!;
+
+        Assert.Equal("portrait", entry.Shape);
+        Assert.EndsWith("-portrait.png", entry.FileName, StringComparison.Ordinal);
+        Assert.NotNull(store.Read("Action", "portrait"));
+    }
+
+    [Fact]
+    public void Thumbnails_stored_before_shapes_existed_are_kept_as_portrait()
+    {
+        Directory.CreateDirectory(GenresDirectory);
+        File.WriteAllBytes(Path.Combine(GenresDirectory, "LEGACYHASH.png"), Png);
+        File.WriteAllText(
+            Path.Combine(GenresDirectory, "index.json"),
+            "{\"LEGACYHASH\":{\"Name\":\"Comedy\",\"FileName\":\"LEGACYHASH.png\",\"ContentType\":\"image/png\",\"Version\":5}}");
+
+        GenreImageStore store = CreateStore();
+
+        GenreImageEntry legacy = Assert.Single(store.List());
+        Assert.Equal("portrait", legacy.Shape);
+        Assert.Equal(Png, store.Read("Comedy", "portrait")!.Value.Data);
+
+        // Replacing it removes the legacy file and keeps the version growing.
+        GenreImageEntry replaced = store.Save("Comedy", "portrait", Jpeg, out _)!;
+        Assert.True(replaced.Version > 5);
+        Assert.False(File.Exists(Path.Combine(GenresDirectory, "LEGACYHASH.png")));
     }
 
     [Fact]
     public void Delete_removes_the_file_and_the_entry_and_survives_a_restart()
     {
         GenreImageStore store = CreateStore();
-        store.Save("Horror", Png, out _);
-        store.Save("Comedy", Png, out _);
+        store.Save("Horror", "portrait", Png, out _);
+        store.Save("Comedy", "portrait", Png, out _);
 
-        Assert.True(store.Delete("Horror"));
-        Assert.False(store.Delete("Horror"));
+        Assert.True(store.Delete("Horror", "portrait"));
+        Assert.False(store.Delete("Horror", "portrait"));
 
         GenreImageStore reloaded = CreateStore();
         Assert.Equal(["Comedy"], reloaded.List().Select(entry => entry.Name));
-        Assert.Null(reloaded.Read("Horror"));
-        Assert.NotNull(reloaded.Read("Comedy"));
+        Assert.Null(reloaded.Read("Horror", "portrait"));
+        Assert.NotNull(reloaded.Read("Comedy", "portrait"));
     }
 }

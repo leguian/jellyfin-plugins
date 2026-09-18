@@ -60,7 +60,15 @@ Installation manuelle : dézipper `customized-home_<version>_jellyfin-<abi>.zip`
 
 ### Page de configuration (administrateur)
 
-Trois onglets : **Options** (statut File Transformation + réglages), **Layouts** (éditeur de la disposition par défaut intégré à la page, liste des utilisateurs ayant leur propre disposition avec réinitialisation) et **Genres** (miniature par genre pour la section « Tous les genres » : PNG, JPEG ou WebP, 5 Mo max, ratio affiche 2:3 conseillé).
+Trois onglets : **Options** (statut File Transformation + réglages), **Layouts** (éditeur de la disposition par défaut intégré à la page, liste des utilisateurs ayant leur propre disposition avec réinitialisation) et **Genres** (miniatures par genre pour la section « Tous les genres », une par forme de carte ; PNG, JPEG ou WebP, 5 Mo max).
+
+| Forme | Ratio | Dimensions optimales |
+| --- | --- | --- |
+| Affiche | 2:3 | 600 × 900 px |
+| Paysage | 16:9 | 960 × 540 px |
+| Carré | 1:1 | 600 × 600 px |
+
+La section prend la miniature de la forme de ses cartes, sinon une autre miniature envoyée (recadrée), sinon le collage d'affiches. Les miniatures envoyées avant la 1.7.0.0 sont conservées comme « affiche ».
 
 | Option | Effet |
 | --- | --- |
@@ -116,9 +124,9 @@ Les sections « famille » (Parce que vous avez regardé, Genre, Réalisé par, 
 | GET | `/CustomizedHome/Catalog` | utilisateur | sections connues |
 | GET | `/CustomizedHome/Status`, POST `/CustomizedHome/Status/Retry` | admin | statut File Transformation |
 | GET | `/CustomizedHome/UserLayouts` | admin | utilisateurs ayant une disposition |
-| GET | `/CustomizedHome/GenreImages` | utilisateur | genres ayant une miniature (nom + version) |
-| GET | `/CustomizedHome/GenreImages/Image?name=&v=` | anonyme | miniature d'un genre (comme toute image Jellyfin) |
-| POST / DELETE | `/CustomizedHome/GenreImages` | admin | envoi (JSON `{ Name, Data }` en base64) / suppression |
+| GET | `/CustomizedHome/GenreImages` | utilisateur | miniatures existantes (nom, forme, version) |
+| GET | `/CustomizedHome/GenreImages/Image?name=&shape=&v=` | anonyme | miniature d'un genre pour une forme (comme toute image Jellyfin) |
+| POST / DELETE | `/CustomizedHome/GenreImages` | admin | envoi (JSON `{ Name, Shape, Data }` en base64) / suppression (`?name=&shape=`). `Shape` : portrait (défaut), landscape, square |
 
 Format d'une disposition (`Shape` : auto | portrait | landscape | square ; `Size` : small | normal | large) :
 

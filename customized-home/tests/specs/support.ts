@@ -52,7 +52,7 @@ export interface MockOptions {
     hasUserLayout?: boolean;
     canCustomize?: boolean;
     enableIntegratedSections?: boolean;
-    genreImages?: { Name: string; Version: number }[];
+    genreImages?: { Name: string; Shape?: 'portrait' | 'landscape' | 'square'; Version: number }[];
 }
 
 interface MockWindow {
