@@ -44,7 +44,8 @@ Installation manuelle : dézipper `customized-home_<version>_jellyfin-<abi>.zip`
 ### Éditeur (utilisateur)
 
 - Ouvrir via le bouton en bas de l'accueil ou le menu utilisateur → **Personnaliser l'accueil**.
-- Glisser la poignée `⋮⋮` pour réordonner (désactivé pendant une recherche).
+- Deux colonnes : **Page d'accueil modifiée** (disposition) et **Sections hors disposition**. Glisser la poignée `⋮⋮` pour réordonner, glisser d'une colonne à l'autre pour ajouter ou retirer une section (désactivé pendant une recherche).
+- Pendant une recherche, un bouton au survol **Remonter cette section tout en haut** place la section en première position.
 - Champ **Rechercher une section** : filtre la liste et retrouve aussi les sections connues mais pas encore affichées.
 - `👁` masque / affiche. `⋮` : format d'affichage.
 - Sous-titre d'une ligne : origine de la section (Jellyfin, Home Screen Sections, Customized Home) et « non affichée actuellement » quand la section est connue mais pas rendue sur l'accueil en ce moment (désactivée dans les réglages d'accueil Jellyfin, vide, plugin absent).
@@ -143,6 +144,29 @@ python3 scripts/package.py customized-home --jellyfin 12.1.0 --output artifacts
 ```
 
 Release : pousser un tag `customized-home-v<version>` ; le workflow `release.yml` construit les deux cibles, publie la release GitHub et met à jour `manifest.json`.
+
+## Tests
+
+Tests navigateur (Playwright, TypeScript) du script client contre une page d'accueil jellyfin-web simulée et un `ApiClient` factice : aucun serveur Jellyfin requis.
+
+```bash
+cd customized-home/tests
+npm install
+npx playwright install chromium
+npm test              # ordre, masquage, formats, éditeur, recherche, glisser-déposer, page admin
+npm run typecheck
+npm run screenshots   # captures dans test-results/screenshots pour revue visuelle
+```
+
+| Fichier | Rôle |
+| --- | --- |
+| `fixtures/home.html` | DOM de l'accueil jellyfin-web (`#homeTab .sections`, `sectionN`, wrapper médias récents) |
+| `fixtures/apiClientStub.js` | `ApiClient` / `Dashboard` factices, requêtes enregistrées dans `window.__mock.requests` |
+| `specs/home.spec.ts` | application de la disposition sur l'accueil |
+| `specs/editor.spec.ts` | éditeur utilisateur (colonnes, menu, recherche, enregistrement, glisser-déposer) |
+| `specs/admin.spec.ts` | page d'administration (onglets, éditeur intégré, 960px, bouton haut) |
+
+Limite : ces tests valident le script contre un DOM simulé. Ils ne détectent pas un changement de structure de jellyfin-web ; après une mise à jour majeure de Jellyfin, vérifier sur un serveur réel.
 
 ## Points de vigilance
 

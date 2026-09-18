@@ -13,7 +13,7 @@
         return;
     }
 
-    const VERSION = '1.1.0';
+    const VERSION = '1.2.0';
     const API = 'CustomizedHome';
     const ORDER_STEP = 1000;
     const ORDER_UNLISTED_BASE = 1000000000;
@@ -43,6 +43,11 @@
             showAll: 'Show every known section',
             hint: 'Drag the handles to reorder. Hidden sections stay in the list so you can show them again. Use the search box to find a section, including the ones not displayed yet.',
             search: 'Search a section',
+            colLayout: 'Customized home page',
+            colUnlisted: 'Sections not in the layout',
+            moveToTop: 'Move this section to the very top',
+            removeFromLayout: 'Remove from the layout',
+            dropToRemove: 'Drop here to remove from the layout',
             searchNoResult: 'No section matches.',
             show: 'Show',
             hide: 'Hide',
@@ -104,6 +109,11 @@
             showAll: 'Afficher toutes les sections connues',
             hint: 'Glissez les poignées pour réordonner. Les sections masquées restent listées pour pouvoir les réafficher. La recherche retrouve aussi les sections pas encore affichées.',
             search: 'Rechercher une section',
+            colLayout: "Page d'accueil modifiée",
+            colUnlisted: 'Sections hors disposition',
+            moveToTop: 'Remonter cette section tout en haut',
+            removeFromLayout: 'Retirer de la disposition',
+            dropToRemove: 'Déposer ici pour retirer de la disposition',
             searchNoResult: 'Aucune section ne correspond.',
             show: 'Afficher',
             hide: 'Masquer',
@@ -1522,8 +1532,12 @@
             + '<div class="ch-search-box"><span class="material-icons" aria-hidden="true">search</span><input type="search" class="ch-search" autocomplete="off" /></div>'
             + '<label><input type="checkbox" class="ch-hide-unlisted" /> <span></span></label>'
             + '<label><input type="checkbox" class="ch-show-all" /> <span></span></label>'
+            + '<button type="button" class="ch-btn ch-btn-primary ch-save ch-save-top"></button>'
             + '</div>'
-            + '<div class="ch-list"></div>'
+            + '<div class="ch-columns">'
+            + '<div class="ch-col ch-col-layout"><h3 class="ch-col-title"></h3><div class="ch-list"></div></div>'
+            + '<div class="ch-col ch-col-unlisted"><h3 class="ch-col-title"></h3><div class="ch-unlisted"></div></div>'
+            + '</div>'
             + '</div>'
             + '<div class="ch-dialog-footer">'
             + '<button type="button" class="ch-btn ch-btn-danger ch-reset"></button>'
@@ -1539,6 +1553,13 @@
 
         editor.overlay = overlay;
         editor.list = dialog.querySelector('.ch-list');
+        editor.unlisted = dialog.querySelector('.ch-unlisted');
+        editor.columns = dialog.querySelector('.ch-columns');
+        dialog.querySelector('.ch-col-layout .ch-col-title').textContent = t('colLayout');
+        dialog.querySelector('.ch-col-unlisted .ch-col-title').textContent = t('colUnlisted');
+        if (!embedded) {
+            dialog.querySelector('.ch-save-top').style.display = 'none';
+        }
         editor.body = dialog.querySelector('.ch-dialog-body');
 
         dialog.querySelector('.ch-dialog-title').textContent = mode === 'default' ? t('defaultTitle') : t('editorTitle');
@@ -1549,7 +1570,10 @@
         dialog.querySelector('.ch-show-all').checked = editor.showAll;
         dialog.querySelector('.ch-show-all').nextElementSibling.textContent = t('showAll');
         dialog.querySelector('.ch-cancel').textContent = t('cancel');
-        dialog.querySelector('.ch-save').textContent = t('save');
+        Array.prototype.forEach.call(dialog.querySelectorAll('.ch-save'), function (button) {
+            button.textContent = t('save');
+            button.addEventListener('click', saveEditor);
+        });
         const resetButton = dialog.querySelector('.ch-reset');
         resetButton.textContent = t('reset');
         if (mode !== 'user' || !state.response.HasUserLayout) {
@@ -1566,7 +1590,6 @@
                 closeEditor();
             }
         });
-        dialog.querySelector('.ch-save').addEventListener('click', saveEditor);
         resetButton.addEventListener('click', resetEditor);
         dialog.querySelector('.ch-search').addEventListener('input', function (e) {
             editor.query = e.target.value.trim().toLowerCase();
@@ -1592,9 +1615,9 @@
                 }
             });
         }
-        editor.list.addEventListener('click', onListClick);
+        editor.columns.addEventListener('click', onListClick);
         editor.list.addEventListener('input', onListInput);
-        initDrag(editor.list);
+        initDrag(editor.columns, editor.list, editor.unlisted);
 
         renderEditor();
         if (!embedded) {
@@ -1671,6 +1694,7 @@
             + '<div class="ch-row-text"><div class="ch-row-title"></div><div class="ch-row-sub"></div></div>'
             + (badge ? '<span class="ch-row-format"></span>' : '')
             + '<div class="ch-row-actions">'
+            + (editor.query ? '<button type="button" class="ch-icon-btn ch-act-top" title="' + escapeHtml(t('moveToTop')) + '"><span class="material-icons" aria-hidden="true">vertical_align_top</span></button>' : '')
             + '<button type="button" class="ch-icon-btn ch-act-visibility" title="' + escapeHtml(item.Visible === false ? t('show') : t('hide')) + '"><span class="material-icons" aria-hidden="true">' + (item.Visible === false ? 'visibility_off' : 'visibility') + '</span></button>'
             + '<button type="button" class="ch-icon-btn ch-act-menu" title="' + escapeHtml(t('more')) + '"><span class="material-icons" aria-hidden="true">more_vert</span></button>'
             + '</div>';
@@ -1766,10 +1790,12 @@
             return;
         }
         const list = editor.list;
+        const side = editor.unlisted;
         const scrollTop = editor.body.scrollTop;
         list.innerHTML = '';
+        side.innerHTML = '';
         const model = editor.model;
-        setClass(list, 'ch-filtered', !!editor.query);
+        setClass(editor.columns, 'ch-filtered', !!editor.query);
 
         model.Items.forEach(function (item, index) {
             if (item.Type === 'folder') {
@@ -1789,21 +1815,18 @@
         const unlisted = unlistedEntries().filter(function (entry) {
             return matchesQuery({ Key: entry.key, Label: entry.label });
         });
-        if (unlisted.length) {
-            const header = el('div', 'ch-hint', '');
-            header.style.marginTop = '1em';
-            header.textContent = t('unlisted');
-            list.appendChild(header);
-            unlisted.forEach(function (entry) {
-                const item = { Type: 'section', Key: entry.key, Label: entry.label, Visible: INTEGRATED[entry.key] ? false : !model.HideUnlisted, _unlisted: true };
-                const row = renderSectionRow(item, null, -1, []);
-                row.classList.add('ch-row-unlisted');
-                list.appendChild(row);
-            });
-        }
+        unlisted.forEach(function (entry) {
+            const item = { Type: 'section', Key: entry.key, Label: entry.label, Visible: INTEGRATED[entry.key] ? false : !model.HideUnlisted, _unlisted: true };
+            const row = renderSectionRow(item, null, -1, []);
+            row.classList.add('ch-row-unlisted');
+            side.appendChild(row);
+        });
 
         if (!list.children.length) {
             list.appendChild(el('div', 'ch-empty', escapeHtml(editor.query ? t('searchNoResult') : t('empty'))));
+        }
+        if (!side.children.length) {
+            side.appendChild(el('div', 'ch-empty', escapeHtml(editor.query ? t('searchNoResult') : t('dropToRemove'))));
         }
         editor.body.scrollTop = scrollTop;
     }
@@ -1877,26 +1900,17 @@
         }
         const item = row._item;
         const parent = row._parent;
-        const siblings = parent ? parent.Items : editor.model.Items;
 
         if (button.classList.contains('ch-act-visibility')) {
             materialize(item);
             item.Visible = item.Visible === false;
             renderEditor();
-        } else if (button.classList.contains('ch-act-up')) {
-            const index = siblings.indexOf(item);
-            if (index > 0) {
-                siblings.splice(index, 1);
-                siblings.splice(index - 1, 0, item);
-                renderEditor();
-            }
-        } else if (button.classList.contains('ch-act-down')) {
-            const index = siblings.indexOf(item);
-            if (index >= 0 && index < siblings.length - 1) {
-                siblings.splice(index, 1);
-                siblings.splice(index + 1, 0, item);
-                renderEditor();
-            }
+        } else if (button.classList.contains('ch-act-top')) {
+            materialize(item);
+            removeItem(item);
+            item.Visible = true;
+            editor.model.Items.unshift(item);
+            renderEditor();
         } else if (button.classList.contains('ch-act-menu')) {
             openRowMenu(button, item, parent);
         } else if (button.classList.contains('ch-act-icon')) {
@@ -2000,10 +2014,11 @@
                     });
                 });
             }
-            if (!parent && !folders.length) {
-                const label = el('div', 'ch-popup-label');
-                label.textContent = t('moveToFolder') + ' — ' + t('newFolder');
-                menu.appendChild(label);
+            if (!item._unlisted) {
+                addAction('playlist_remove', t('removeFromLayout'), function () {
+                    removeItem(item);
+                    renderEditor();
+                });
             }
         }
         if (!menu.children.length) {
@@ -2033,8 +2048,13 @@
 
     /* ---- drag and drop (pointer based, works with mouse and touch) ---- */
 
-    function initDrag(list) {
+    function initDrag(root, list, side) {
         let drag = null;
+
+        function isInside(node, e) {
+            const rect = node.getBoundingClientRect();
+            return e.clientX >= rect.left && e.clientX <= rect.right && e.clientY >= rect.top && e.clientY <= rect.bottom;
+        }
 
         function rowsFor(draggingFolder) {
             return Array.prototype.filter.call(list.querySelectorAll('.ch-row'), function (row) {
@@ -2046,6 +2066,10 @@
         }
 
         function computeTarget(e) {
+            if (isInside(side.parentNode, e)) {
+                // Over the "not in the layout" column: a layout section is removed, anything else stays where it is.
+                return drag.item._unlisted || drag.item.Type === 'folder' ? null : { remove: true };
+            }
             const draggingFolder = drag.item.Type === 'folder';
             const rows = rowsFor(draggingFolder);
             let before = null;
@@ -2085,6 +2109,14 @@
         }
 
         function showIndicator(target) {
+            setClass(side.parentNode, 'ch-drop-remove', !!(target && target.remove));
+            if (!target || target.remove) {
+                const existing = list.querySelector('.ch-drop-indicator');
+                if (existing) {
+                    existing.remove();
+                }
+                return;
+            }
             let indicator = list.querySelector('.ch-drop-indicator');
             if (!indicator) {
                 indicator = el('div', 'ch-drop-indicator');
@@ -2147,15 +2179,19 @@
             if (indicator) {
                 indicator.remove();
             }
-            Array.prototype.forEach.call(list.querySelectorAll('.ch-dragging'), function (row) {
+            Array.prototype.forEach.call(root.querySelectorAll('.ch-dragging'), function (row) {
                 row.classList.remove('ch-dragging');
             });
-            if (apply && current.active && current.target) {
+            side.parentNode.classList.remove('ch-drop-remove');
+            if (apply && current.active && current.target && current.target.remove) {
+                removeItem(current.item);
+                renderEditor();
+            } else if (apply && current.active && current.target) {
                 moveItem(current.item, { folder: current.target.folder, before: current.target.before });
             }
         }
 
-        list.addEventListener('pointerdown', function (e) {
+        root.addEventListener('pointerdown', function (e) {
             const handle = e.target.closest('.ch-handle');
             if (!handle || e.button > 0) {
                 return;
@@ -2174,7 +2210,7 @@
             }
         });
 
-        list.addEventListener('pointermove', function (e) {
+        root.addEventListener('pointermove', function (e) {
             if (!drag || e.pointerId !== drag.pointerId) {
                 return;
             }
@@ -2192,12 +2228,12 @@
             autoScroll(e);
         });
 
-        list.addEventListener('pointerup', function (e) {
+        root.addEventListener('pointerup', function (e) {
             if (drag && e.pointerId === drag.pointerId) {
                 finish(true);
             }
         });
-        list.addEventListener('pointercancel', function () {
+        root.addEventListener('pointercancel', function () {
             finish(false);
         });
     }

@@ -44,12 +44,12 @@
 
 .ch-folder-header:hover:not(:disabled),
 .ch-folder-header:focus-visible {
-    background: rgba(255, 255, 255, 0.06);
+    background: color-mix(in srgb, currentColor 6%, transparent);
     outline: none;
 }
 
 .layout-tv .ch-folder-header:focus {
-    background: rgba(255, 255, 255, 0.12);
+    background: color-mix(in srgb, currentColor 12%, transparent);
 }
 
 .ch-folder-header .sectionTitle {
@@ -95,7 +95,7 @@
     display: inline-flex;
     align-items: center;
     gap: 0.4em;
-    background: rgba(255, 255, 255, 0.08);
+    background: color-mix(in srgb, currentColor 8%, transparent);
     color: inherit;
     border: 0;
     border-radius: 2em;
@@ -107,12 +107,12 @@
 
 .ch-customize-button:hover,
 .ch-customize-button:focus-visible {
-    background: rgba(255, 255, 255, 0.16);
+    background: color-mix(in srgb, currentColor 16%, transparent);
     outline: none;
 }
 
 .layout-tv .ch-customize-button:focus {
-    background: rgba(255, 255, 255, 0.25);
+    background: color-mix(in srgb, currentColor 25%, transparent);
 }
 
 /* User menu entry (MUI menu) */
@@ -138,7 +138,7 @@
     background: #202020;
     color: #ddd;
     width: 100%;
-    max-width: 44em;
+    max-width: 64em;
     max-height: 100%;
     border-radius: 0.5em;
     box-shadow: 0 0.5em 2em rgba(0, 0, 0, 0.6);
@@ -164,7 +164,7 @@
     align-items: center;
     gap: 0.6em;
     padding: 0.9em 1.1em;
-    border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+    border-bottom: 1px solid color-mix(in srgb, currentColor 8%, transparent);
 }
 
 .ch-dialog-title {
@@ -186,7 +186,7 @@
     justify-content: flex-end;
     gap: 0.6em;
     padding: 0.8em 1.1em;
-    border-top: 1px solid rgba(255, 255, 255, 0.08);
+    border-top: 1px solid color-mix(in srgb, currentColor 8%, transparent);
     flex-wrap: wrap;
 }
 
@@ -217,7 +217,7 @@
     display: inline-flex;
     align-items: center;
     gap: 0.35em;
-    background: rgba(255, 255, 255, 0.1);
+    background: color-mix(in srgb, currentColor 10%, transparent);
     color: inherit;
     border: 0;
     border-radius: 0.3em;
@@ -230,7 +230,7 @@
 
 .ch-btn:hover,
 .ch-btn:focus-visible {
-    background: rgba(255, 255, 255, 0.2);
+    background: color-mix(in srgb, currentColor 20%, transparent);
     outline: none;
 }
 
@@ -268,7 +268,7 @@
 
 .ch-icon-btn:hover,
 .ch-icon-btn:focus-visible {
-    background: rgba(255, 255, 255, 0.14);
+    background: color-mix(in srgb, currentColor 14%, transparent);
     outline: none;
 }
 
@@ -290,7 +290,7 @@
     display: flex;
     align-items: center;
     gap: 0.4em;
-    background: rgba(255, 255, 255, 0.06);
+    background: color-mix(in srgb, currentColor 6%, transparent);
     border-radius: 0.35em;
     padding: 0.35em 0.5em;
     min-height: 2.6em;
@@ -301,7 +301,7 @@
 
 .ch-row.ch-row-child {
     margin-left: 2em;
-    background: rgba(255, 255, 255, 0.045);
+    background: color-mix(in srgb, currentColor 4%, transparent);
 }
 
 .ch-row.ch-row-folder {
@@ -368,7 +368,7 @@
     min-width: 0;
     background: rgba(0, 0, 0, 0.25);
     color: inherit;
-    border: 1px solid rgba(255, 255, 255, 0.15);
+    border: 1px solid color-mix(in srgb, currentColor 15%, transparent);
     border-radius: 0.3em;
     padding: 0.35em 0.5em;
     font: inherit;
@@ -441,13 +441,13 @@
 
 .ch-popup button:hover,
 .ch-popup button:focus-visible {
-    background: rgba(255, 255, 255, 0.1);
+    background: color-mix(in srgb, currentColor 10%, transparent);
     outline: none;
 }
 
 .ch-popup .ch-popup-sep {
     height: 1px;
-    background: rgba(255, 255, 255, 0.1);
+    background: color-mix(in srgb, currentColor 10%, transparent);
     margin: 0.3em 0;
 }
 
@@ -464,7 +464,7 @@
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    background: rgba(255, 255, 255, 0.06);
+    background: color-mix(in srgb, currentColor 6%, transparent);
     border: 0;
     border-radius: 0.3em;
     color: inherit;
@@ -626,7 +626,7 @@
     white-space: nowrap;
     padding: 0.1em 0.5em;
     border-radius: 1em;
-    background: rgba(255, 255, 255, 0.08);
+    background: color-mix(in srgb, currentColor 8%, transparent);
 }
 
 /* Search box in the editor toolbar */
@@ -635,7 +635,7 @@
     align-items: center;
     gap: 0.3em;
     background: rgba(0, 0, 0, 0.25);
-    border: 1px solid rgba(255, 255, 255, 0.15);
+    border: 1px solid color-mix(in srgb, currentColor 15%, transparent);
     border-radius: 0.3em;
     padding: 0.2em 0.5em;
     flex: 1;
@@ -655,7 +655,7 @@
     outline: none;
 }
 
-.ch-list.ch-filtered .ch-handle {
+.ch-filtered .ch-handle {
     visibility: hidden;
 }
 
@@ -684,4 +684,194 @@
 
 .ch-embedded .ch-list {
     padding-bottom: 1em;
+}
+
+/* Two columns: customized home page / sections not in the layout */
+.ch-columns {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    gap: 1.2em;
+    align-items: start;
+}
+
+@media (max-width: 50em) {
+    .ch-columns {
+        grid-template-columns: minmax(0, 1fr);
+    }
+}
+
+.ch-col {
+    border-radius: 0.35em;
+    padding: 0.2em;
+}
+
+.ch-col-title {
+    margin: 0 0 0.5em;
+    font-size: 1em;
+    font-weight: 500;
+    opacity: 0.85;
+}
+
+.ch-unlisted {
+    display: flex;
+    flex-direction: column;
+    gap: 0.25em;
+}
+
+.ch-col-unlisted.ch-drop-remove {
+    outline: 2px dashed #ff7b7b;
+    outline-offset: 2px;
+}
+
+.ch-columns .ch-list {
+    padding-bottom: 1em;
+    min-height: 3em;
+}
+
+/* "Move to the very top": only rendered while a search is active, revealed on hover / focus */
+.ch-act-top {
+    opacity: 0;
+}
+
+.ch-row:hover .ch-act-top,
+.ch-act-top:focus-visible {
+    opacity: 1;
+}
+
+@media (hover: none) {
+    .ch-act-top {
+        opacity: 1;
+    }
+}
+
+.ch-save-top {
+    margin-left: auto;
+}
+
+.ch-embedded {
+    max-width: 960px;
+}
+
+/* ---------- Editor polish ---------- */
+.ch-dialog {
+    border: 1px solid color-mix(in srgb, currentColor 12%, transparent);
+    border-radius: 0.8em;
+}
+
+.ch-dialog-title {
+    font-weight: 600;
+}
+
+.ch-hint {
+    line-height: 1.5;
+}
+
+.ch-toolbar {
+    gap: 0.6em 1em;
+    padding: 0.2em 0 1em;
+}
+
+.ch-search-box {
+    padding: 0.45em 0.7em;
+    border-radius: 0.5em;
+    background: color-mix(in srgb, currentColor 6%, transparent);
+    border: 1px solid color-mix(in srgb, currentColor 14%, transparent);
+    transition: border-color 0.15s ease;
+}
+
+.ch-search-box:focus-within {
+    border-color: #00a4dc;
+}
+
+.ch-col {
+    background: color-mix(in srgb, currentColor 4%, transparent);
+    border: 1px solid color-mix(in srgb, currentColor 10%, transparent);
+    border-radius: 0.6em;
+    padding: 0.8em;
+}
+
+.ch-col-title {
+    display: flex;
+    align-items: center;
+    gap: 0.4em;
+    margin: 0 0 0.7em;
+    font-size: 0.82em;
+    font-weight: 600;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    opacity: 0.7;
+}
+
+.ch-row {
+    border: 1px solid color-mix(in srgb, currentColor 9%, transparent);
+    border-radius: 0.5em;
+    padding: 0.45em 0.6em;
+    transition: background 0.12s ease, border-color 0.12s ease;
+}
+
+.ch-row:hover {
+    background: color-mix(in srgb, currentColor 10%, transparent);
+    border-color: color-mix(in srgb, currentColor 18%, transparent);
+}
+
+.ch-row.ch-row-unlisted {
+    border-style: dashed;
+    background: transparent;
+}
+
+.ch-row-title {
+    font-weight: 500;
+}
+
+.ch-row-icon {
+    font-size: 1.25em;
+    color: #00a4dc;
+    opacity: 0.9;
+}
+
+.ch-icon-btn {
+    padding: 0.35em;
+}
+
+.ch-btn {
+    border-radius: 0.45em;
+    font-weight: 500;
+    padding: 0.55em 1.1em;
+}
+
+.ch-empty {
+    border: 1px dashed color-mix(in srgb, currentColor 16%, transparent);
+    border-radius: 0.5em;
+    padding: 1.4em 1em;
+    font-size: 0.9em;
+}
+
+.ch-popup {
+    border: 1px solid color-mix(in srgb, currentColor 12%, transparent);
+    border-radius: 0.6em;
+    padding: 0.35em;
+}
+
+.ch-popup button {
+    border-radius: 0.4em;
+}
+
+.ch-customize-button {
+    border: 1px solid color-mix(in srgb, currentColor 14%, transparent);
+    padding: 0.6em 1.3em;
+}
+
+/* Embedded editor sits inside an administration card: no second frame. */
+.ch-embedded .ch-dialog {
+    border: 0;
+}
+
+.ch-embedded .ch-dialog-footer {
+    border-top: 0;
+    justify-content: flex-end;
+}
+
+.ch-embedded .ch-popup,
+.ch-embedded ~ .ch-popup {
+    color: #eee;
 }
