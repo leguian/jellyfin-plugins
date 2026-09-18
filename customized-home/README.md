@@ -75,6 +75,7 @@ Carrousel de médias en tête de l'accueil, configuré dans l'éditeur : ligne �
 - Actions : **Lire** ou **Reprendre** (+ **Depuis le début**), **Bande-annonce**, favori, vu / non vu, **Plus d'infos**. Lecture, favori et vu passent par les composants natifs du client web (`itemAction`, `emby-ratingbutton`, `emby-playstatebutton`) : aucun lecteur maison.
 - Bande-annonce : locale → lue dans Jellyfin ; distante uniquement → ouverte dans un nouvel onglet (liens `http(s)` seulement).
 - Rotation en pause au survol, au focus clavier, onglet masqué ; désactivée si le système demande de réduire les animations. Flèches, points, touches gauche / droite (hors mode TV), balayage tactile.
+- Affichage : pleine largeur, départ sous le menu du haut, fondu dans la page en bas (masque CSS, donc quel que soit le fond du thème). Tant que le menu survole le hero, il devient transparent avec un léger dégradé sombre (classe `ch-hero-under-header` sur `<html>`) ; il retrouve son fond une fois le hero dépassé ou en quittant l'accueil. Les marges négatives sont mesurées par le script (hauteur du menu, marges du thème), pas codées en dur.
 - Nécessite l'option **sections intégrées** (le hero est rendu par le plugin). Cache 5 minutes, comme les sections intégrées : la source aléatoire ne change donc pas à chaque retour sur l'accueil.
 
 ### Page de configuration (administrateur)
@@ -217,4 +218,5 @@ Limite : ces tests valident le script contre un DOM simulé. Ils ne détectent p
 - Les sections intégrées ne se rafraîchissent pas en temps réel après un visionnage (cache 5 min, rechargement à la prochaine ouverture de l'accueil).
 - Miniatures de genres : type détecté sur les octets (le type déclaré n'est jamais cru), SVG refusé, 5 Mo max, fichier nommé par hash du genre (jamais par l'entrée utilisateur), servi avec `nosniff`.
 - Hero : une requête `Items` par source à l'ouverture de l'accueil (puis cache 5 min) ; la source aléatoire (`sortBy=Random`) coûte un tri complet côté serveur sur les très grosses bibliothèques. Les boutons d'action reposent sur le gestionnaire de clics de `emby-itemscontainer` du client web : à revérifier après une mise à jour majeure de Jellyfin.
+- Hero sous le menu : repose sur `.skinHeader` (menu fixe) et `.page` de jellyfin-web ; un thème CSS personnalisé qui restyle le menu peut entrer en conflit avec la transparence.
 - Les assets client sont servis sans authentification (comme HSS / Plugin Pages) : ils ne contiennent aucune donnée sensible.

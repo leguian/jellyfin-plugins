@@ -13,7 +13,7 @@
         return;
     }
 
-    const VERSION = '1.8.0';
+    const VERSION = '1.8.1';
     const API = 'CustomizedHome';
     const ORDER_STEP = 1000;
     const ORDER_UNLISTED_BASE = 1000000000;
@@ -1406,6 +1406,74 @@
         show(0);
     }
 
+    const HERO_UNDER_HEADER_CLASS = 'ch-hero-under-header';
+    const HERO_NAVIGATION_SETTLE_MS = 300;
+    let heroChromeReady = false;
+    let heroChromeScheduled = false;
+
+    function currentHero() {
+        const container = state.container;
+        const node = container && container.isConnected ? container.querySelector(':scope > .ch-hero') : null;
+        // offsetParent is null while the home page or its tab is hidden.
+        return node && node.offsetParent !== null ? node : null;
+    }
+
+    // Full bleed, starting under the header: the distances to the page edges are measured rather than assumed,
+    // since they come from the theme (header height, page and container paddings).
+    function layoutHero(node) {
+        const page = node.closest('.page') || document.documentElement;
+        node.style.marginTop = '0px';
+        node.style.marginLeft = '0px';
+        node.style.marginRight = '0px';
+        const rect = node.getBoundingClientRect();
+        const pageRect = page.getBoundingClientRect();
+        node.style.marginTop = (pageRect.top - rect.top) + 'px';
+        node.style.marginLeft = (pageRect.left - rect.left) + 'px';
+        node.style.marginRight = (rect.right - pageRect.right) + 'px';
+    }
+
+    // The header is see-through while it lies over the hero, and gets its background back below it.
+    function updateHeroChrome(relayout) {
+        const node = currentHero();
+        let under = false;
+        if (node) {
+            if (relayout) {
+                layoutHero(node);
+            }
+            const header = document.querySelector('.skinHeader');
+            under = node.getBoundingClientRect().bottom > (header ? header.offsetHeight : 0);
+        }
+        setClass(document.documentElement, HERO_UNDER_HEADER_CLASS, under);
+    }
+
+    function scheduleHeroChrome() {
+        if (heroChromeScheduled) {
+            return;
+        }
+        heroChromeScheduled = true;
+        requestAnimationFrame(function () {
+            heroChromeScheduled = false;
+            updateHeroChrome(false);
+        });
+    }
+
+    function initHeroChrome() {
+        if (heroChromeReady) {
+            return;
+        }
+        heroChromeReady = true;
+        function relayout() {
+            updateHeroChrome(true);
+        }
+        // Capture: also catches a scrolling element inside the page.
+        window.addEventListener('scroll', scheduleHeroChrome, { passive: true, capture: true });
+        window.addEventListener('resize', relayout);
+        document.addEventListener('viewshow', relayout);
+        window.addEventListener('hashchange', function () {
+            setTimeout(relayout, HERO_NAVIGATION_SETTLE_MS);
+        });
+    }
+
     function renderHero(container, hero, items) {
         const node = el('div', 'ch-hero');
         node.setAttribute('role', 'region');
@@ -1424,6 +1492,8 @@
         node.innerHTML = html;
         container.appendChild(node);
         startHero(node, hero.IntervalSeconds);
+        initHeroChrome();
+        updateHeroChrome(true);
         return node;
     }
 
@@ -1432,6 +1502,7 @@
             stopHero(node);
             node.remove();
         });
+        updateHeroChrome(false);
     }
 
     function syncHero(container, hero) {
@@ -1782,6 +1853,9 @@
         const layout = state.layout || { Items: [], HideUnlisted: false };
         syncIntegratedSections(container, wantedIntegrated(layout));
         syncHero(container, wantedHero(layout));
+        if (container._chHeroEntry) {
+            updateHeroChrome(true);
+        }
 
         const sections = collectSections(container, ctx);
         state.discovered = sections;
