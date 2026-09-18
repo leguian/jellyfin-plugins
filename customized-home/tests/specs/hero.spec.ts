@@ -85,6 +85,48 @@ test('shows the hero above the sections, mixing the sources in turn', async ({ p
     expect(isFirst).toBe(true);
 });
 
+test('spans the whole width, starts under the header and gives the header its background back below', async ({ page }) => {
+    await page.setViewportSize({ width: 1200, height: 700 });
+    await openHome(page, { layout: layout(hero()), enableIntegratedSections: true, heroItems: HERO_ITEMS });
+    const banner = page.locator('.ch-hero');
+    await expect(banner).toHaveCount(1);
+    const box = await banner.evaluate((node) => {
+        const rect = node.getBoundingClientRect();
+        return { top: rect.top + window.scrollY, left: rect.left, right: rect.right, width: document.documentElement.clientWidth };
+    });
+    // The fixture pads the page (header) and the container (gutters): both are compensated.
+    expect(box.top).toBeCloseTo(0, 0);
+    expect(box.left).toBeCloseTo(0, 0);
+    expect(box.right).toBeCloseTo(box.width, 0);
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth)).toBe(true);
+
+    const root = page.locator('html');
+    await expect(root).toHaveClass(/ch-hero-under-header/);
+    await expect(page.locator('.skinHeader')).toHaveCSS('background-color', 'rgba(0, 0, 0, 0)');
+    // The picture dissolves into the page instead of ending on an edge.
+    await expect(page.locator('.ch-hero-slide.ch-active .ch-hero-backdrop')).toHaveCSS('mask-image', /linear-gradient/);
+
+    await page.evaluate(() => {
+        document.body.style.minHeight = '400vh';
+        window.scrollTo(0, 3000);
+    });
+    await expect(root).not.toHaveClass(/ch-hero-under-header/);
+    await expect(page.locator('.skinHeader')).toHaveCSS('background-color', 'rgb(32, 32, 32)');
+
+    await page.evaluate(() => window.scrollTo(0, 0));
+    await expect(root).toHaveClass(/ch-hero-under-header/);
+
+    await page.setViewportSize({ width: 800, height: 700 });
+    await expect.poll(() => banner.evaluate((node) => Math.round(node.getBoundingClientRect().right))).toBe(
+        await page.evaluate(() => document.documentElement.clientWidth));
+});
+
+test('leaves the header alone when there is no hero', async ({ page }) => {
+    await openHome(page, { layout: layout(hero({ Enabled: false })), enableIntegratedSections: true, heroItems: HERO_ITEMS });
+    await expect(page.locator('.ch-hero')).toHaveCount(0);
+    await expect(page.locator('html')).not.toHaveClass(/ch-hero-under-header/);
+});
+
 test('fills a slide with the media details and the native actions', async ({ page }) => {
     await openHome(page, { layout: layout(hero()), enableIntegratedSections: true, heroItems: HERO_ITEMS });
     const slide = page.locator('.ch-hero-slide[data-id="movie-1"]');

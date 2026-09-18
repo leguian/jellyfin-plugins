@@ -1065,14 +1065,26 @@
     order: -1;
     position: relative;
     overflow: hidden;
-    /* Same side gutters as the section titles of the web client. */
-    margin: 0 max(env(safe-area-inset-right), 3.3%) 1.6em max(env(safe-area-inset-left), 3.3%);
-    min-height: clamp(20em, 56vh, 40em);
-    border-radius: 0.8em;
-    background: #101010;
+    /* Full bleed and under the header: the negative margins are measured by the script. */
+    /* The first section moves up into the dissolving part. */
+    margin: 0 0 -1.5em;
+    min-height: clamp(26em, 82vh, 56em);
     color: #fff;
     /* Horizontal swipes change the slide, vertical ones scroll the page. */
     touch-action: pan-y;
+}
+
+/* Header over the hero: see-through, with a shade that keeps its buttons readable. */
+html.ch-hero-under-header .skinHeader {
+    background: linear-gradient(to bottom, rgba(0, 0, 0, 0.65) 0%, rgba(0, 0, 0, 0) 100%) !important;
+    box-shadow: none !important;
+    -webkit-backdrop-filter: none !important;
+    backdrop-filter: none !important;
+    color: #fff;
+}
+
+.skinHeader {
+    transition: background-color 0.25s ease;
 }
 
 .ch-hero-slides {
@@ -1095,6 +1107,13 @@
     visibility: visible;
     z-index: 1;
     transition: opacity 0.6s ease;
+}
+
+/* The picture and its shade dissolve into the page: no edge, whatever the theme background is. */
+.ch-hero-backdrop,
+.ch-hero-shade {
+    -webkit-mask-image: linear-gradient(to bottom, #000 0%, #000 62%, rgba(0, 0, 0, 0) 100%);
+    mask-image: linear-gradient(to bottom, #000 0%, #000 62%, rgba(0, 0, 0, 0) 100%);
 }
 
 .ch-hero-backdrop {
@@ -1122,8 +1141,10 @@
 .ch-hero-content {
     position: relative;
     box-sizing: border-box;
-    width: min(100%, 44em);
-    padding: 2em 2.4em 3.2em;
+    width: min(100%, 46em);
+    /* Aligned with the section titles of the web client; kept above the dissolving part. */
+    padding: 2em 1.5em 7em max(env(safe-area-inset-left), 3.3%);
+    text-shadow: 0 1px 3px rgba(0, 0, 0, 0.6);
     display: flex;
     flex-direction: column;
     gap: 0.8em;
@@ -1295,8 +1316,8 @@
 
 .ch-hero-dots {
     position: absolute;
-    right: 1.6em;
-    bottom: 1.2em;
+    right: max(env(safe-area-inset-right), 3.3%);
+    bottom: 7.4em;
     z-index: 2;
     display: flex;
     gap: 0.45em;
@@ -1321,11 +1342,11 @@
 
 @media (max-width: 50em) {
     .ch-hero {
-        min-height: clamp(18em, 62vh, 30em);
+        min-height: clamp(22em, 72vh, 36em);
     }
 
     .ch-hero-content {
-        padding: 1.2em 1.2em 2.8em;
+        padding: 1.2em 1.2em 5.5em max(env(safe-area-inset-left), 3.3%);
     }
 
     .ch-hero-title {
@@ -1358,7 +1379,8 @@
 
     .ch-hero-dots {
         right: auto;
-        left: 1.2em;
+        left: max(env(safe-area-inset-left), 3.3%);
+        bottom: 3.6em;
     }
 }
 

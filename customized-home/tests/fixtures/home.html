@@ -9,11 +9,16 @@
         /* Same rule as jellyfin-web src/styles/site.scss: plugin pages must override it on purpose. */
         @media all and (min-width: 50em) { form { max-width: 54em; } }
         .verticalSection { padding: 0.5em 1em; }
+        /* Like jellyfin-web: a fixed header, and a page padded so that its content starts below it. */
+        .skinHeader { position: fixed; top: 0; left: 0; right: 0; height: 4em; z-index: 10; background-color: #202020; }
+        .page { padding-top: 5em; }
+        .sections { padding: 0 0.75em; }
         .card { display: inline-block; width: 8em; height: 4em; background: #333; margin-right: 0.5em; }
     </style>
 </head>
 <body>
     <!-- Same structure as jellyfin-web: #homeTab .sections > .verticalSection.sectionN -->
+    <div class="skinHeader skinHeader-withBackground"></div>
     <div id="indexPage" class="page homePage">
         <div id="homeTab">
             <div class="sections homeSectionsContainer">

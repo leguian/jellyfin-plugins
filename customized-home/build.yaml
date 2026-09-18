@@ -1,7 +1,7 @@
 ---
 name: "Customized Home"
 guid: "7c99a4bf-cd3b-4bc8-b941-7ddccd816f3c"
-version: "1.8.0.0"
+version: "1.8.1.0"
 targetAbi: "12.0.0.0"
 framework: "net10.0"
 overview: "Easily edit and organize the sections on your homepage"
@@ -20,8 +20,6 @@ owner: "leguian"
 artifacts:
 - "Jellyfin.Plugin.CustomizedHome.dll"
 changelog: >
-  New hero banner at the top of the home page: a carousel of featured media with backdrop, logo,
-  synopsis, runtime, year and ratings, and actions to play or resume, watch the trailer, mark as
-  favorite or watched. Sources can be combined (random, recently added movies / shows, latest
-  movies / shows), with an adjustable number of media and rotation delay. Configured from the
-  layout editor, per user and in the default layout.
+  The hero banner now spans the whole width of the page, starts under the top menu (which becomes
+  see-through while it lies over the hero) and dissolves into the page below instead of ending on
+  an edge.
