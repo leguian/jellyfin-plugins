@@ -2,8 +2,8 @@
   {
     "guid": "7c99a4bf-cd3b-4bc8-b941-7ddccd816f3c",
     "name": "Customized Home",
-    "description": "Customized Home lets every user reorganize the Jellyfin home screen: reorder sections by drag and drop, hide or show them, and group them into collapsible folders (for example a \"Series\" folder holding every series related section). Works with the built-in sections and with sections added by other plugins (Home Screen Sections, Jellyfin Enhanced, ...). Requires the File Transformation plugin to inject the client script.",
-    "overview": "Reorder, hide and group the home screen sections into folders.",
+    "description": "Customized Home lets every user reorganize the Jellyfin home screen: reorder sections by drag and drop, show or hide them, choose a display format per section (poster, landscape, square, size, titles) and search among all known sections. Adds its own sections without any other plugin: Continue Watching / Next Up combined, latest movies and shows by release date, collections, watch again, because you watched, genre. Works with the built-in sections and with sections added by other plugins (Home Screen Sections, ...). Administrators define a default layout. Requires the File Transformation plugin.",
+    "overview": "Reorder, hide and format the home screen sections, per user, with drag and drop.",
     "owner": "leguian",
     "category": "General",
     "imageUrl": "https://raw.githubusercontent.com/leguian/jellyfin-plugins/main/customized-home/logo.png",

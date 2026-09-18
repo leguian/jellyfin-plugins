@@ -1,6 +1,6 @@
 # Customized Home (plugin Jellyfin)
 
-> **EN summary** – Customized Home lets every Jellyfin user reorganize the home screen: reorder sections by drag and drop, hide/show them and group them into collapsible folders. Administrators define a default layout. Works with the built-in sections and with sections injected by other plugins (Home Screen Sections, Jellyfin Enhanced…). Requires the [File Transformation](https://github.com/IAmParadox27/jellyfin-plugin-file-transformation) plugin. Builds for Jellyfin 12.x (net10.0) and 10.11.x (net9.0).
+> **EN summary** – Customized Home lets every Jellyfin user reorganize the home screen: reorder sections by drag and drop, hide/show them, pick a display format per section and enable extra sections rendered by the plugin (combined continue watching / next up, latest by release date, collections, watch again, because you watched, genre). Administrators define a default layout. Works with the built-in sections and with sections injected by other plugins (Home Screen Sections, Jellyfin Enhanced…). Requires the [File Transformation](https://github.com/IAmParadox27/jellyfin-plugin-file-transformation) plugin. Builds for Jellyfin 12.x (net10.0) and 10.11.x (net9.0).
 
 Plugin Jellyfin qui permet de réorganiser la page d'accueil du client web :
 
