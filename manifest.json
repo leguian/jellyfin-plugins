@@ -13,16 +13,16 @@
         "changelog": "Initial release.",
         "targetAbi": "12.0.0.0",
         "sourceUrl": "https://github.com/leguian/jellyfin-plugins/releases/download/customized-home-v1.0.0.0/customized-home_1.0.0.0_jellyfin-12.zip",
-        "checksum": "129fad14b9c2c72fb9c6ac429f299730",
-        "timestamp": "2026-09-18T07:11:35Z"
+        "checksum": "89e40516aa0ce3d9c26c54b53a8b30f9",
+        "timestamp": "2026-09-18T07:14:09Z"
       },
       {
         "version": "1.0.0.0",
         "changelog": "Initial release.",
         "targetAbi": "10.11.0.0",
         "sourceUrl": "https://github.com/leguian/jellyfin-plugins/releases/download/customized-home-v1.0.0.0/customized-home_1.0.0.0_jellyfin-10.11.zip",
-        "checksum": "4100032f457f1aff6032230278558eb6",
-        "timestamp": "2026-09-18T07:11:35Z"
+        "checksum": "87a53835d152201e3e5db15be885eb28",
+        "timestamp": "2026-09-18T07:14:09Z"
       }
     ]
   }
