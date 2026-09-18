@@ -16,6 +16,10 @@ https://raw.githubusercontent.com/leguian/jellyfin-plugins/main/manifest.json
 
 Le fichier `manifest.json` est mis à jour par la CI à chaque release (`scripts/update-manifest.py`).
 
+## Release
+
+Monter la version dans `<plugin>/build.yaml` (et le `<Version>` du csproj), fusionner dans `main` : le workflow `release.yml` crée le tag `<plugin>-v<version>`, construit les zips (Jellyfin 12.x et 10.11.x), publie la release GitHub et met à jour `manifest.json`. Un tag poussé à la main ou un « Run workflow » avec le nom du tag font la même chose.
+
 ## Build
 
 Chaque plugin se compile avec le SDK .NET 10 :

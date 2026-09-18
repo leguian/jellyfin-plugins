@@ -1,15 +1,24 @@
 name: Release plugin
 
 # Tag format: <plugin-folder>-v<version>, e.g. customized-home-v1.0.0.0
-# Either push the tag, or run the workflow manually with the tag name: the tag is then created by the workflow.
+# Three ways to release:
+#   - merge a version bump of <plugin>/build.yaml into main: the tag is created and released automatically;
+#   - push the tag yourself;
+#   - run the workflow manually with the tag name.
 on:
   push:
+    branches: [main]
+    paths: ["*/build.yaml", ".github/workflows/release.yml"]
     tags: ["*-v*"]
   workflow_dispatch:
     inputs:
       tag:
         description: "Release tag (<plugin>-v<version>)"
         required: true
+
+concurrency:
+  group: release
+  cancel-in-progress: false
 
 permissions:
   contents: write
@@ -24,18 +33,32 @@ jobs:
       - uses: actions/setup-dotnet@v4
         with:
           dotnet-version: "10.0.x"
-      - name: Resolve plugin and version from tag
+      - name: Resolve plugin and version
         id: meta
         env:
           INPUT_TAG: ${{ github.event.inputs.tag }}
         run: |
-          TAG="${INPUT_TAG:-${GITHUB_REF_NAME}}"
+          if [ "${GITHUB_REF_TYPE}" = "branch" ] && [ -z "${INPUT_TAG}" ]; then
+            # Push to main: release the plugin whose build.yaml changed (default: customized-home) if its version has no tag yet.
+            PLUGIN=$(git diff --name-only HEAD^ HEAD -- '*/build.yaml' 2>/dev/null | head -1 | cut -d/ -f1)
+            PLUGIN="${PLUGIN:-customized-home}"
+            VERSION=$(sed -n 's/^version: *"\(.*\)"/\1/p' "${PLUGIN}/build.yaml")
+            TAG="${PLUGIN}-v${VERSION}"
+            if git ls-remote --exit-code --tags origin "refs/tags/${TAG}" >/dev/null 2>&1; then
+              echo "tag ${TAG} already exists, nothing to release"
+              echo "skip=true" >> "$GITHUB_OUTPUT"
+            fi
+            echo "create=true" >> "$GITHUB_OUTPUT"
+          else
+            TAG="${INPUT_TAG:-${GITHUB_REF_NAME}}"
+            [ -n "${INPUT_TAG}" ] && echo "create=true" >> "$GITHUB_OUTPUT"
+          fi
           case "$TAG" in *-v*) ;; *) echo "invalid tag: $TAG"; exit 1;; esac
           echo "tag=${TAG}" >> "$GITHUB_OUTPUT"
           echo "plugin=${TAG%-v*}" >> "$GITHUB_OUTPUT"
           echo "version=${TAG##*-v}" >> "$GITHUB_OUTPUT"
-      - name: Create the tag when started manually
-        if: github.event_name == 'workflow_dispatch'
+      - name: Create the tag
+        if: steps.meta.outputs.create == 'true' && steps.meta.outputs.skip != 'true'
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
@@ -46,10 +69,13 @@ jobs:
             git push origin "refs/tags/${{ steps.meta.outputs.tag }}"
           fi
       - name: Package for Jellyfin 12
+        if: steps.meta.outputs.skip != 'true'
         run: python3 scripts/package.py ${{ steps.meta.outputs.plugin }} --jellyfin 12.1.0 --version ${{ steps.meta.outputs.version }} --output artifacts > summary-12.json
       - name: Package for Jellyfin 10.11
+        if: steps.meta.outputs.skip != 'true'
         run: python3 scripts/package.py ${{ steps.meta.outputs.plugin }} --jellyfin 10.11.11 --version ${{ steps.meta.outputs.version }} --output artifacts > summary-10.11.json
       - name: Create GitHub release
+        if: steps.meta.outputs.skip != 'true'
         uses: softprops/action-gh-release@v2
         with:
           files: artifacts/*.zip
@@ -57,6 +83,7 @@ jobs:
           name: ${{ steps.meta.outputs.tag }}
           generate_release_notes: true
       - name: Update manifest.json on main
+        if: steps.meta.outputs.skip != 'true'
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
