@@ -77,3 +77,13 @@ test('forcing the default layout comes first, turns off and locks the customizat
         await expect(page.locator(selector)).toBeEnabled();
     }
 });
+
+test('options form is as wide as the cards despite the dashboard form width cap', async ({ page }) => {
+    await openAdminPage(page);
+    const widths = await page.evaluate(() => {
+        const width = (selector: string): number => document.querySelector(selector)?.getBoundingClientRect().width ?? 0;
+        return { statusCard: width('#chPanelOptions > .cha-card'), form: width('#CustomizedHomeConfigForm') };
+    });
+    expect(widths.statusCard).toBeGreaterThan(0);
+    expect(widths.form).toBe(widths.statusCard);
+});

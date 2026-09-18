@@ -4,7 +4,7 @@ Plugins Jellyfin maintenus dans ce dépôt. Chaque plugin vit dans son propre so
 
 | Plugin | Dossier | Description |
 | --- | --- | --- |
-| Customized Home | [`customized-home/`](customized-home/) | Réorganise l'accueil Jellyfin : ordre des sections par glisser-déposer, masquage, dossiers repliables, disposition par défaut administrateur. |
+| Customized Home | [`customized-home/`](customized-home/) | Easily edit and organize the sections on your homepage. Ordre par glisser-déposer, masquage, format par section, sections intégrées (genres, collections, regarder à nouveau…), disposition par défaut administrateur. |
 
 ## Dépôt de plugins Jellyfin
 

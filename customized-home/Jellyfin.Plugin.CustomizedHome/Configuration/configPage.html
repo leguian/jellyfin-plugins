@@ -203,7 +203,10 @@
                 font-size: 0.82em;
             }
 
-            form#CustomizedHomeConfigForm { max-width: 100% }
+            /* The dashboard stylesheet caps every form at 54em: keep the options form as wide as the cards. */
+            form#CustomizedHomeConfigForm {
+                max-width: 100%;
+            }
 
             /* Option rows with switches */
             #CustomizedHomeConfigPage .cha-option {
@@ -400,7 +403,7 @@
                     <span class="cha-header-icon"><span class="material-icons" aria-hidden="true">other_houses</span></span>
                     <div>
                         <h1 class="cha-title">Customized Home</h1>
-                        <p class="cha-subtitle">Reorder, hide and format the home screen sections.</p>
+                        <p class="cha-subtitle">Easily edit and organize the sections on your homepage</p>
                     </div>
                     <span class="cha-version" id="chVersion"></span>
                 </header>
