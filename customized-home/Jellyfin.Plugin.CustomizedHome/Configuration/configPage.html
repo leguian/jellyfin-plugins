@@ -5,121 +5,507 @@
     <title>Customized Home</title>
 </head>
 <body>
-    <div id="CustomizedHomeConfigPage" data-role="page" class="page type-interior pluginConfigurationPage" data-require="emby-input,emby-button,emby-checkbox">
-        <div data-role="content">
-            <div class="content-primary">
-                <div class="verticalSection">
-                    <h2 class="sectionTitle"><span class="material-icons" aria-hidden="true" style="vertical-align: middle; margin-right: 0.3em;">other_houses</span>Customized Home</h2>
-                    <p class="fieldDescription">
-                        Reorder, hide and group the home screen sections. Each user arranges their own home page from the
-                        "Customize home" button; the default layout below applies to everybody else.
-                    </p>
-                </div>
+    <div id="CustomizedHomeConfigPage" data-role="page" class="page type-interior pluginConfigurationPage" data-require="emby-button">
+        <style>
+            /* Scoped to the plugin page. Surfaces derive from currentColor so both dashboard themes work. */
+            #CustomizedHomeConfigPage {
+                --cha-accent: #00a4dc;
+                --cha-surface: color-mix(in srgb, currentColor 5%, transparent);
+                --cha-surface-strong: color-mix(in srgb, currentColor 10%, transparent);
+                --cha-border: color-mix(in srgb, currentColor 14%, transparent);
+                --cha-muted: color-mix(in srgb, currentColor 62%, transparent);
+                --cha-ok: #3fb950;
+                --cha-warn: #d29922;
+                --cha-error: #f85149;
+            }
 
-                <div is="emby-tabs" class="tabs-viewmenubar chTabs" data-index="0" style="margin: 1em 0;">
-                    <div class="emby-tabs-slider">
-                        <button type="button" is="emby-button" class="emby-tab-button emby-tab-button-active" data-index="0">Options</button>
-                        <button type="button" is="emby-button" class="emby-tab-button" data-index="1">Layouts</button>
+            #CustomizedHomeConfigPage .cha-shell {
+                box-sizing: border-box;
+                max-width: 960px;
+                margin: 0 auto;
+                padding: 1.5em 1em 4em;
+            }
+
+            #CustomizedHomeConfigPage .cha-header {
+                display: flex;
+                align-items: center;
+                gap: 0.9em;
+                margin-bottom: 1.4em;
+            }
+
+            #CustomizedHomeConfigPage .cha-header-icon {
+                display: inline-flex;
+                align-items: center;
+                justify-content: center;
+                width: 2.6em;
+                height: 2.6em;
+                border-radius: 0.6em;
+                background: color-mix(in srgb, var(--cha-accent) 18%, transparent);
+                color: var(--cha-accent);
+                flex-shrink: 0;
+            }
+
+            #CustomizedHomeConfigPage .cha-header-icon .material-icons {
+                font-size: 1.6em;
+            }
+
+            #CustomizedHomeConfigPage .cha-title {
+                margin: 0;
+                font-size: 1.5em;
+                font-weight: 600;
+                line-height: 1.2;
+            }
+
+            #CustomizedHomeConfigPage .cha-subtitle {
+                margin: 0.15em 0 0;
+                color: var(--cha-muted);
+                font-size: 0.95em;
+            }
+
+            #CustomizedHomeConfigPage .cha-version {
+                margin-left: auto;
+                font-size: 0.8em;
+                color: var(--cha-muted);
+                border: 1px solid var(--cha-border);
+                border-radius: 2em;
+                padding: 0.25em 0.8em;
+                white-space: nowrap;
+            }
+
+            /* Tabs: segmented control with a visible track */
+            #CustomizedHomeConfigPage .cha-tabs {
+                display: inline-flex;
+                gap: 0.25em;
+                padding: 0.25em;
+                border-radius: 0.6em;
+                background: var(--cha-surface-strong);
+                border: 1px solid var(--cha-border);
+                margin-bottom: 1.4em;
+            }
+
+            #CustomizedHomeConfigPage .cha-tab {
+                display: inline-flex;
+                align-items: center;
+                gap: 0.45em;
+                border: 0;
+                background: transparent;
+                color: var(--cha-muted);
+                font: inherit;
+                font-weight: 500;
+                padding: 0.55em 1.2em;
+                border-radius: 0.45em;
+                cursor: pointer;
+                transition: background 0.15s ease, color 0.15s ease;
+            }
+
+            #CustomizedHomeConfigPage .cha-tab .material-icons {
+                font-size: 1.2em;
+            }
+
+            #CustomizedHomeConfigPage .cha-tab:hover {
+                color: inherit;
+            }
+
+            #CustomizedHomeConfigPage .cha-tab:focus-visible {
+                outline: 2px solid var(--cha-accent);
+                outline-offset: 1px;
+            }
+
+            #CustomizedHomeConfigPage .cha-tab[aria-selected="true"] {
+                background: var(--cha-accent);
+                color: #fff;
+            }
+
+            /* Cards */
+            #CustomizedHomeConfigPage .cha-card {
+                background: var(--cha-surface);
+                border: 1px solid var(--cha-border);
+                border-radius: 0.7em;
+                padding: 1.2em 1.3em;
+                margin-bottom: 1.2em;
+            }
+
+            #CustomizedHomeConfigPage .cha-card-head {
+                display: flex;
+                align-items: center;
+                gap: 0.6em;
+                margin-bottom: 0.9em;
+            }
+
+            #CustomizedHomeConfigPage .cha-card-title {
+                margin: 0;
+                font-size: 1.05em;
+                font-weight: 600;
+            }
+
+            #CustomizedHomeConfigPage .cha-card-desc {
+                margin: -0.5em 0 1em;
+                color: var(--cha-muted);
+                font-size: 0.92em;
+            }
+
+            #CustomizedHomeConfigPage .cha-card-head .cha-spacer {
+                flex: 1;
+            }
+
+            /* Status */
+            #CustomizedHomeConfigPage .cha-badge {
+                display: inline-flex;
+                align-items: center;
+                gap: 0.4em;
+                font-size: 0.82em;
+                font-weight: 500;
+                padding: 0.25em 0.75em;
+                border-radius: 2em;
+                border: 1px solid currentColor;
+            }
+
+            #CustomizedHomeConfigPage .cha-badge::before {
+                content: "";
+                width: 0.55em;
+                height: 0.55em;
+                border-radius: 50%;
+                background: currentColor;
+            }
+
+            #CustomizedHomeConfigPage .cha-badge-ok { color: var(--cha-ok); }
+            #CustomizedHomeConfigPage .cha-badge-warn { color: var(--cha-warn); }
+            #CustomizedHomeConfigPage .cha-badge-error { color: var(--cha-error); }
+
+            #CustomizedHomeConfigPage .cha-status-text {
+                margin: 0;
+                color: var(--cha-muted);
+                font-size: 0.92em;
+                line-height: 1.5;
+            }
+
+            #CustomizedHomeConfigPage .cha-stats {
+                display: grid;
+                grid-template-columns: repeat(auto-fit, minmax(10em, 1fr));
+                gap: 0.8em;
+                margin-top: 1em;
+            }
+
+            #CustomizedHomeConfigPage .cha-stat {
+                background: var(--cha-surface);
+                border: 1px solid var(--cha-border);
+                border-radius: 0.5em;
+                padding: 0.7em 0.9em;
+            }
+
+            #CustomizedHomeConfigPage .cha-stat-value {
+                font-size: 1.15em;
+                font-weight: 600;
+            }
+
+            #CustomizedHomeConfigPage .cha-stat-label {
+                color: var(--cha-muted);
+                font-size: 0.82em;
+            }
+
+            /* Option rows with switches */
+            #CustomizedHomeConfigPage .cha-option {
+                display: flex;
+                align-items: flex-start;
+                gap: 1em;
+                padding: 0.85em 0;
+                border-top: 1px solid var(--cha-border);
+                cursor: pointer;
+            }
+
+            #CustomizedHomeConfigPage .cha-option:first-of-type {
+                border-top: 0;
+                padding-top: 0.2em;
+            }
+
+            #CustomizedHomeConfigPage .cha-option-text {
+                flex: 1;
+                min-width: 0;
+            }
+
+            #CustomizedHomeConfigPage .cha-option-label {
+                display: block;
+                font-weight: 500;
+            }
+
+            #CustomizedHomeConfigPage .cha-option-help {
+                display: block;
+                color: var(--cha-muted);
+                font-size: 0.88em;
+                margin-top: 0.15em;
+                line-height: 1.45;
+            }
+
+            #CustomizedHomeConfigPage .cha-switch {
+                appearance: none;
+                -webkit-appearance: none;
+                position: relative;
+                color: inherit;
+                font-size: inherit;
+                width: 2.6em;
+                height: 1.45em;
+                border-radius: 1em;
+                background: var(--cha-surface-strong);
+                border: 1px solid var(--cha-border);
+                cursor: pointer;
+                flex-shrink: 0;
+                margin: 0.1em 0 0;
+                transition: background 0.15s ease, border-color 0.15s ease;
+            }
+
+            #CustomizedHomeConfigPage .cha-switch::after {
+                content: "";
+                position: absolute;
+                top: 50%;
+                left: 0.18em;
+                width: 1em;
+                height: 1em;
+                border-radius: 50%;
+                background: currentColor;
+                opacity: 0.75;
+                transform: translateY(-50%);
+                transition: left 0.15s ease, opacity 0.15s ease, background 0.15s ease;
+            }
+
+            #CustomizedHomeConfigPage .cha-switch:checked {
+                background: var(--cha-accent);
+                border-color: var(--cha-accent);
+            }
+
+            #CustomizedHomeConfigPage .cha-switch:checked::after {
+                left: calc(100% - 1.18em);
+                background: #fff;
+                opacity: 1;
+            }
+
+            #CustomizedHomeConfigPage .cha-switch:focus-visible {
+                outline: 2px solid var(--cha-accent);
+                outline-offset: 2px;
+            }
+
+            /* Buttons */
+            #CustomizedHomeConfigPage .cha-btn {
+                display: inline-flex;
+                align-items: center;
+                gap: 0.4em;
+                border: 1px solid var(--cha-border);
+                background: var(--cha-surface-strong);
+                color: inherit;
+                font: inherit;
+                font-size: 0.92em;
+                font-weight: 500;
+                padding: 0.5em 1em;
+                border-radius: 0.45em;
+                cursor: pointer;
+            }
+
+            #CustomizedHomeConfigPage .cha-btn:hover {
+                background: color-mix(in srgb, currentColor 16%, transparent);
+            }
+
+            #CustomizedHomeConfigPage .cha-btn:focus-visible {
+                outline: 2px solid var(--cha-accent);
+                outline-offset: 1px;
+            }
+
+            #CustomizedHomeConfigPage .cha-btn .material-icons {
+                font-size: 1.15em;
+            }
+
+            #CustomizedHomeConfigPage .cha-btn-primary {
+                background: var(--cha-accent);
+                border-color: var(--cha-accent);
+                color: #fff;
+            }
+
+            #CustomizedHomeConfigPage .cha-btn-primary:hover {
+                background: #0288b8;
+            }
+
+            #CustomizedHomeConfigPage .cha-btn-danger {
+                color: var(--cha-error);
+            }
+
+            #CustomizedHomeConfigPage .cha-actions {
+                display: flex;
+                justify-content: flex-end;
+                gap: 0.6em;
+            }
+
+            /* User layouts */
+            #CustomizedHomeConfigPage .cha-user {
+                display: flex;
+                align-items: center;
+                gap: 0.8em;
+                padding: 0.7em 0;
+                border-top: 1px solid var(--cha-border);
+            }
+
+            #CustomizedHomeConfigPage .cha-user:first-child {
+                border-top: 0;
+            }
+
+            #CustomizedHomeConfigPage .cha-avatar {
+                width: 2.2em;
+                height: 2.2em;
+                border-radius: 50%;
+                background: color-mix(in srgb, var(--cha-accent) 22%, transparent);
+                color: var(--cha-accent);
+                display: inline-flex;
+                align-items: center;
+                justify-content: center;
+                font-weight: 600;
+                text-transform: uppercase;
+                flex-shrink: 0;
+            }
+
+            #CustomizedHomeConfigPage .cha-user-text {
+                flex: 1;
+                min-width: 0;
+            }
+
+            #CustomizedHomeConfigPage .cha-user-name {
+                font-weight: 500;
+            }
+
+            #CustomizedHomeConfigPage .cha-user-meta,
+            #CustomizedHomeConfigPage .cha-empty {
+                color: var(--cha-muted);
+                font-size: 0.88em;
+            }
+
+            #CustomizedHomeConfigPage .hide {
+                display: none !important;
+            }
+        </style>
+
+        <div data-role="content">
+            <div class="content-primary cha-shell">
+                <header class="cha-header">
+                    <span class="cha-header-icon"><span class="material-icons" aria-hidden="true">other_houses</span></span>
+                    <div>
+                        <h1 class="cha-title">Customized Home</h1>
+                        <p class="cha-subtitle">Reorder, hide and format the home screen sections.</p>
                     </div>
+                    <span class="cha-version" id="chVersion"></span>
+                </header>
+
+                <div class="cha-tabs" role="tablist" aria-label="Customized Home">
+                    <button type="button" class="cha-tab" role="tab" id="chTabOptions" aria-controls="chPanelOptions" aria-selected="true" data-index="0">
+                        <span class="material-icons" aria-hidden="true">tune</span>Options
+                    </button>
+                    <button type="button" class="cha-tab" role="tab" id="chTabLayouts" aria-controls="chPanelLayouts" aria-selected="false" data-index="1" tabindex="-1">
+                        <span class="material-icons" aria-hidden="true">dashboard_customize</span>Layouts
+                    </button>
                 </div>
 
                 <!-- Tab 0: options -->
-                <div class="chTab" data-tab="0">
+                <section class="chTab" data-tab="0" id="chPanelOptions" role="tabpanel" aria-labelledby="chTabOptions">
+                    <div class="cha-card">
+                        <div class="cha-card-head">
+                            <h2 class="cha-card-title">Status</h2>
+                            <span id="chStatusBadge" class="cha-badge cha-badge-warn">Checking</span>
+                            <span class="cha-spacer"></span>
+                            <button type="button" id="chRetryRegistration" class="cha-btn">
+                                <span class="material-icons" aria-hidden="true">refresh</span>Retry registration
+                            </button>
+                        </div>
+                        <p id="chStatus" class="cha-status-text">Loading…</p>
+                        <div class="cha-stats">
+                            <div class="cha-stat"><div class="cha-stat-value" id="chStatFt">–</div><div class="cha-stat-label">File Transformation</div></div>
+                            <div class="cha-stat"><div class="cha-stat-value" id="chStatUsers">–</div><div class="cha-stat-label">Users with their own layout</div></div>
+                            <div class="cha-stat"><div class="cha-stat-value" id="chStatDefault">–</div><div class="cha-stat-label">Sections in the default layout</div></div>
+                        </div>
+                    </div>
+
                     <form id="CustomizedHomeConfigForm">
-                        <div class="verticalSection verticalSection-extrabottompadding">
-                            <h3 class="sectionTitle">Status</h3>
-                            <div id="chStatus" class="fieldDescription">Loading…</div>
-                            <div style="margin-top: 0.6em;">
-                                <button is="emby-button" type="button" id="chRetryRegistration" class="raised emby-button">
-                                    <span>Retry File Transformation registration</span>
-                                </button>
-                            </div>
+                        <div class="cha-card">
+                            <div class="cha-card-head"><h2 class="cha-card-title">Users</h2></div>
+                            <label class="cha-option">
+                                <span class="cha-option-text">
+                                    <span class="cha-option-label">Allow users to customize their own home page</span>
+                                    <span class="cha-option-help">When disabled, every user gets the default layout. Administrators can always customize their own page.</span>
+                                </span>
+                                <input id="chAllowUserCustomization" class="cha-switch" type="checkbox" role="switch" />
+                            </label>
+                            <label class="cha-option">
+                                <span class="cha-option-text">
+                                    <span class="cha-option-label">Force the default layout for everybody</span>
+                                    <span class="cha-option-help">Ignores the layouts saved by users. They are kept and used again when this option is turned off.</span>
+                                </span>
+                                <input id="chForceDefaultLayout" class="cha-switch" type="checkbox" role="switch" />
+                            </label>
                         </div>
 
-                        <div class="verticalSection verticalSection-extrabottompadding">
-                            <h3 class="sectionTitle">Options</h3>
-                            <div class="checkboxContainer checkboxContainer-withDescription">
-                                <label class="emby-checkbox-label">
-                                    <input id="chAllowUserCustomization" type="checkbox" is="emby-checkbox" />
-                                    <span>Allow users to customize their own home page</span>
-                                </label>
-                                <div class="fieldDescription checkboxFieldDescription">When disabled, every user gets the default layout. Administrators can always customize their own page.</div>
-                            </div>
-                            <div class="checkboxContainer checkboxContainer-withDescription">
-                                <label class="emby-checkbox-label">
-                                    <input id="chForceDefaultLayout" type="checkbox" is="emby-checkbox" />
-                                    <span>Force the default layout for everybody</span>
-                                </label>
-                                <div class="fieldDescription checkboxFieldDescription">Ignores the layouts saved by users (they are kept and used again when this option is turned off).</div>
-                            </div>
-                            <div class="checkboxContainer checkboxContainer-withDescription">
-                                <label class="emby-checkbox-label">
-                                    <input id="chShowCustomizeButtonOnHome" type="checkbox" is="emby-checkbox" />
-                                    <span>Show a "Customize home" button at the bottom of the home page</span>
-                                </label>
-                            </div>
-                            <div class="checkboxContainer checkboxContainer-withDescription">
-                                <label class="emby-checkbox-label">
-                                    <input id="chShowUserMenuEntry" type="checkbox" is="emby-checkbox" />
-                                    <span>Add a "Customize home" entry to the user menu</span>
-                                </label>
-                            </div>
-                            <div class="checkboxContainer checkboxContainer-withDescription">
-                                <label class="emby-checkbox-label">
-                                    <input id="chFoldersCollapsible" type="checkbox" is="emby-checkbox" />
-                                    <span>Folders can be collapsed and expanded by clicking their header</span>
-                                </label>
-                                <div class="fieldDescription checkboxFieldDescription">The collapsed state is remembered per device.</div>
-                            </div>
-                            <div class="checkboxContainer checkboxContainer-withDescription">
-                                <label class="emby-checkbox-label">
-                                    <input id="chEnableIntegratedSections" type="checkbox" is="emby-checkbox" />
-                                    <span>Offer the sections rendered by this plugin</span>
-                                </label>
-                                <div class="fieldDescription checkboxFieldDescription">Continue Watching / Next Up (combined), Latest Movies and Shows by release date, Collections, Watch Again, Because You Watched, Genre. Users enable them in the editor; no other plugin required.</div>
-                            </div>
-                            <div class="checkboxContainer checkboxContainer-withDescription">
-                                <label class="emby-checkbox-label">
-                                    <input id="chDeveloperMode" type="checkbox" is="emby-checkbox" />
-                                    <span>Developer mode (client assets are never cached)</span>
-                                </label>
-                            </div>
+                        <div class="cha-card">
+                            <div class="cha-card-head"><h2 class="cha-card-title">Interface</h2></div>
+                            <label class="cha-option">
+                                <span class="cha-option-text">
+                                    <span class="cha-option-label">"Customize home" button at the bottom of the home page</span>
+                                </span>
+                                <input id="chShowCustomizeButtonOnHome" class="cha-switch" type="checkbox" role="switch" />
+                            </label>
+                            <label class="cha-option">
+                                <span class="cha-option-text">
+                                    <span class="cha-option-label">"Customize home" entry in the user menu</span>
+                                </span>
+                                <input id="chShowUserMenuEntry" class="cha-switch" type="checkbox" role="switch" />
+                            </label>
+                            <label class="cha-option">
+                                <span class="cha-option-text">
+                                    <span class="cha-option-label">Offer the sections rendered by this plugin</span>
+                                    <span class="cha-option-help">Continue Watching / Next Up (combined), Latest Movies and Shows by release date, Collections, Watch Again, Because You Watched, Genre. Users enable them in the editor; no other plugin required.</span>
+                                </span>
+                                <input id="chEnableIntegratedSections" class="cha-switch" type="checkbox" role="switch" />
+                            </label>
                         </div>
 
-                        <div>
-                            <button is="emby-button" type="submit" class="raised button-submit block emby-button">
-                                <span>Save</span>
+                        <div class="cha-card">
+                            <div class="cha-card-head"><h2 class="cha-card-title">Advanced</h2></div>
+                            <label class="cha-option">
+                                <span class="cha-option-text">
+                                    <span class="cha-option-label">Developer mode</span>
+                                    <span class="cha-option-help">Client assets are never cached. Leave off in production.</span>
+                                </span>
+                                <input id="chDeveloperMode" class="cha-switch" type="checkbox" role="switch" />
+                            </label>
+                        </div>
+
+                        <div class="cha-actions">
+                            <button type="submit" class="cha-btn cha-btn-primary">
+                                <span class="material-icons" aria-hidden="true">save</span>Save options
                             </button>
                         </div>
                     </form>
-                </div>
+                </section>
 
                 <!-- Tab 1: layouts -->
-                <div class="chTab hide" data-tab="1">
-                    <div class="verticalSection verticalSection-extrabottompadding">
-                        <h3 class="sectionTitle">Default layout</h3>
-                        <p class="fieldDescription" id="chDefaultSummary">Loading…</p>
-                        <div id="chDefaultEditor"></div>
-                        <div style="margin-top: 0.6em;">
-                            <button is="emby-button" type="button" id="chClearDefault" class="raised emby-button">
-                                <span>Clear default layout</span>
+                <section class="chTab hide" data-tab="1" id="chPanelLayouts" role="tabpanel" aria-labelledby="chTabLayouts">
+                    <div class="cha-card">
+                        <div class="cha-card-head">
+                            <h2 class="cha-card-title">Default layout</h2>
+                            <span class="cha-spacer"></span>
+                            <button type="button" id="chClearDefault" class="cha-btn cha-btn-danger">
+                                <span class="material-icons" aria-hidden="true">delete_sweep</span>Clear
                             </button>
                         </div>
+                        <p class="cha-card-desc" id="chDefaultSummary">Loading…</p>
+                        <div id="chDefaultEditor"></div>
                     </div>
 
-                    <div class="verticalSection verticalSection-extrabottompadding">
-                        <h3 class="sectionTitle">User layouts</h3>
-                        <p class="fieldDescription">Users that saved their own layout. Resetting a user sends them back to the default layout.</p>
-                        <div id="chUserLayouts" class="paperList" style="margin-top: 0.6em;"></div>
+                    <div class="cha-card">
+                        <div class="cha-card-head"><h2 class="cha-card-title">User layouts</h2></div>
+                        <p class="cha-card-desc">Users that saved their own layout. Resetting a user sends them back to the default layout.</p>
+                        <div id="chUserLayouts"></div>
                     </div>
-                </div>
+                </section>
             </div>
         </div>
         <script type="text/javascript">
             (function () {
                 var pluginId = '7c99a4bf-cd3b-4bc8-b941-7ddccd816f3c';
                 var page = document.querySelector('#CustomizedHomeConfigPage');
-                var fields = ['AllowUserCustomization', 'ForceDefaultLayout', 'ShowCustomizeButtonOnHome', 'ShowUserMenuEntry', 'FoldersCollapsible', 'EnableIntegratedSections', 'DeveloperMode'];
+                var fields = ['AllowUserCustomization', 'ForceDefaultLayout', 'ShowCustomizeButtonOnHome', 'ShowUserMenuEntry', 'EnableIntegratedSections', 'DeveloperMode'];
                 var editorOpened = false;
 
                 function escapeHtml(value) {
@@ -128,23 +514,34 @@
                     });
                 }
 
+                function countSections(layout) {
+                    var count = 0;
+                    ((layout && layout.Items) || []).forEach(function (item) {
+                        count += item.Type === 'folder' ? (item.Items || []).length : 1;
+                    });
+                    return count;
+                }
+
                 function describeLayout(layout) {
                     var items = (layout && layout.Items) || [];
                     if (!items.length) {
-                        return 'No default layout: the home page is left untouched for users without a layout of their own.';
+                        return 'No default layout yet: the home page is left untouched for users without a layout of their own.';
                     }
-                    var sections = 0;
                     var hidden = 0;
                     items.forEach(function (item) {
                         var members = item.Type === 'folder' ? (item.Items || []) : [item];
                         members.forEach(function (member) {
-                            sections++;
                             if (member.Visible === false) {
                                 hidden++;
                             }
                         });
                     });
-                    return sections + ' section(s), ' + hidden + ' hidden' + (layout.HideUnlisted ? ', unlisted sections hidden' : '') + '.';
+                    return countSections(layout) + ' section(s), ' + hidden + ' hidden' + (layout.HideUnlisted ? ', unlisted sections hidden' : '') + '. Applied to users without a layout of their own.';
+                }
+
+                function updateDefaultSummary(layout) {
+                    page.querySelector('#chDefaultSummary').textContent = describeLayout(layout);
+                    page.querySelector('#chStatDefault').textContent = String(countSections(layout));
                 }
 
                 function formatDate(value) {
@@ -155,49 +552,62 @@
                     }
                 }
 
+                function setBadge(kind, text) {
+                    var badge = page.querySelector('#chStatusBadge');
+                    badge.className = 'cha-badge cha-badge-' + kind;
+                    badge.textContent = text;
+                }
+
                 function renderStatus(status) {
                     var inj = status.Injection || {};
-                    var lines = [];
-                    lines.push('Plugin version: ' + escapeHtml(status.PluginVersion));
+                    var text;
                     if (!inj.FileTransformationDetected) {
-                        lines.push('<span style="color:#ff9f43;">File Transformation plugin not detected.</span> Install it from the "iamparadox.dev" repository (https://www.iamparadox.dev/jellyfin/plugins/manifest.json) and restart the server: it injects the client script into the web client.');
+                        setBadge('warn', 'File Transformation missing');
+                        text = 'Install the File Transformation plugin (repository https://www.iamparadox.dev/jellyfin/plugins/manifest.json) and restart the server: it injects the client script into the web client.';
                     } else if (inj.Registered) {
-                        lines.push('<span style="color:#52c41a;">Client script registered with File Transformation ' + escapeHtml(inj.FileTransformationVersion || '') + '.</span> Users may need to refresh their browser once (Ctrl+F5).');
+                        setBadge('ok', 'Active');
+                        text = 'The client script is injected into the web client. After an update, users may need to refresh their browser once (Ctrl+F5).';
                     } else {
-                        lines.push('<span style="color:#ff4d4f;">File Transformation ' + escapeHtml(inj.FileTransformationVersion || '') + ' detected but the registration failed: ' + escapeHtml(inj.Error || 'unknown error') + '</span>');
+                        setBadge('error', 'Registration failed');
+                        text = 'File Transformation was detected but the registration failed: ' + (inj.Error || 'unknown error');
                     }
                     if (status.RootPath) {
-                        lines.push('Base URL prefix: ' + escapeHtml(status.RootPath));
+                        text += ' Base URL prefix: ' + status.RootPath + '.';
                     }
-                    lines.push('Users with their own layout: ' + status.UserLayoutCount);
-                    document.querySelector('#chStatus').innerHTML = lines.join('<br />');
+                    page.querySelector('#chStatus').textContent = text;
+                    page.querySelector('#chVersion').textContent = 'v' + status.PluginVersion;
+                    page.querySelector('#chStatFt').textContent = inj.FileTransformationDetected ? (inj.FileTransformationVersion || 'detected') : 'not installed';
+                    page.querySelector('#chStatUsers').textContent = String(status.UserLayoutCount);
                 }
 
                 function loadStatus() {
                     return ApiClient.getJSON(ApiClient.getUrl('CustomizedHome/Status')).then(renderStatus).catch(function () {
-                        document.querySelector('#chStatus').textContent = 'Could not read the plugin status.';
+                        setBadge('error', 'Unavailable');
+                        page.querySelector('#chStatus').textContent = 'Could not read the plugin status.';
                     });
                 }
 
                 function loadUserLayouts() {
-                    var container = document.querySelector('#chUserLayouts');
+                    var container = page.querySelector('#chUserLayouts');
                     return ApiClient.getJSON(ApiClient.getUrl('CustomizedHome/UserLayouts')).then(function (list) {
                         if (!list.length) {
-                            container.innerHTML = '<div class="fieldDescription">No user has saved a custom layout yet.</div>';
+                            container.innerHTML = '<div class="cha-empty">No user has saved a custom layout yet.</div>';
                             return;
                         }
                         container.innerHTML = list.map(function (info) {
-                            return '<div class="listItem">' +
-                                '<span class="material-icons listItemIcon person" aria-hidden="true"></span>' +
-                                '<div class="listItemBody">' +
-                                '<div class="listItemBodyText">' + escapeHtml(info.UserName || info.UserId) + '</div>' +
-                                '<div class="listItemBodyText secondary">' + info.SectionCount + ' section(s), saved ' + escapeHtml(formatDate(info.ModifiedUtc)) + '</div>' +
+                            var name = info.UserName || info.UserId;
+                            return '<div class="cha-user">' +
+                                '<span class="cha-avatar" aria-hidden="true">' + escapeHtml(String(name).charAt(0)) + '</span>' +
+                                '<div class="cha-user-text">' +
+                                '<div class="cha-user-name">' + escapeHtml(name) + '</div>' +
+                                '<div class="cha-user-meta">' + info.SectionCount + ' section(s) · saved ' + escapeHtml(formatDate(info.ModifiedUtc)) + '</div>' +
                                 '</div>' +
-                                '<button type="button" is="paper-icon-button-light" class="listItemButton chResetUser" data-userid="' + escapeHtml(info.UserId) + '" title="Reset"><span class="material-icons delete" aria-hidden="true"></span></button>' +
+                                '<button type="button" class="cha-btn cha-btn-danger chResetUser" data-userid="' + escapeHtml(info.UserId) + '">' +
+                                '<span class="material-icons" aria-hidden="true">restart_alt</span>Reset</button>' +
                                 '</div>';
                         }).join('');
                     }).catch(function () {
-                        container.innerHTML = '<div class="fieldDescription">Could not list the user layouts.</div>';
+                        container.innerHTML = '<div class="cha-empty">Could not list the user layouts.</div>';
                     });
                 }
 
@@ -205,26 +615,24 @@
                     Dashboard.showLoadingMsg();
                     return ApiClient.getPluginConfiguration(pluginId).then(function (config) {
                         fields.forEach(function (name) {
-                            document.querySelector('#ch' + name).checked = !!config[name];
+                            page.querySelector('#ch' + name).checked = !!config[name];
                         });
-                        document.querySelector('#chDefaultSummary').textContent = describeLayout(config.DefaultLayout);
+                        updateDefaultSummary(config.DefaultLayout);
                         Dashboard.hideLoadingMsg();
                     });
                 }
 
                 function openDefaultEditor() {
-                    var container = document.querySelector('#chDefaultEditor');
+                    var container = page.querySelector('#chDefaultEditor');
                     if (!window.CustomizedHome || !window.CustomizedHome.openEditor) {
-                        container.innerHTML = '<div class="fieldDescription">The client script is not loaded on this page. Check the File Transformation status in the Options tab and refresh the page (Ctrl+F5).</div>';
+                        container.innerHTML = '<div class="cha-empty">The client script is not loaded on this page. Check the status in the Options tab and refresh the page (Ctrl+F5).</div>';
                         return;
                     }
                     editorOpened = true;
                     window.CustomizedHome.openEditor({
                         mode: 'default',
                         container: container,
-                        onSaved: function (layout) {
-                            document.querySelector('#chDefaultSummary').textContent = describeLayout(layout);
-                        }
+                        onSaved: updateDefaultSummary
                     });
                 }
 
@@ -232,8 +640,10 @@
                     page.querySelectorAll('.chTab').forEach(function (tab) {
                         tab.classList.toggle('hide', tab.getAttribute('data-tab') !== String(index));
                     });
-                    page.querySelectorAll('.emby-tab-button').forEach(function (button) {
-                        button.classList.toggle('emby-tab-button-active', button.getAttribute('data-index') === String(index));
+                    page.querySelectorAll('.cha-tab').forEach(function (button) {
+                        var selected = button.getAttribute('data-index') === String(index);
+                        button.setAttribute('aria-selected', selected ? 'true' : 'false');
+                        button.tabIndex = selected ? 0 : -1;
                     });
                     if (index === 1) {
                         loadUserLayouts();
@@ -243,15 +653,22 @@
                     }
                 }
 
-                var tabs = page.querySelector('.chTabs');
-                tabs.addEventListener('tabchange', function (e) {
-                    showTab(parseInt(e.detail.selectedTabIndex, 10));
-                });
+                var tabs = page.querySelector('.cha-tabs');
                 tabs.addEventListener('click', function (e) {
-                    var button = e.target.closest('.emby-tab-button');
+                    var button = e.target.closest('.cha-tab');
                     if (button) {
                         showTab(parseInt(button.getAttribute('data-index'), 10));
                     }
+                });
+                tabs.addEventListener('keydown', function (e) {
+                    if (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight') {
+                        return;
+                    }
+                    var buttons = Array.prototype.slice.call(tabs.querySelectorAll('.cha-tab'));
+                    var current = buttons.indexOf(document.activeElement);
+                    var next = (current + (e.key === 'ArrowRight' ? 1 : buttons.length - 1)) % buttons.length;
+                    buttons[next].focus();
+                    showTab(next);
                 });
 
                 page.addEventListener('pageshow', function () {
@@ -261,12 +678,12 @@
                     showTab(0);
                 });
 
-                document.querySelector('#CustomizedHomeConfigForm').addEventListener('submit', function (e) {
+                page.querySelector('#CustomizedHomeConfigForm').addEventListener('submit', function (e) {
                     e.preventDefault();
                     Dashboard.showLoadingMsg();
                     ApiClient.getPluginConfiguration(pluginId).then(function (config) {
                         fields.forEach(function (name) {
-                            config[name] = document.querySelector('#ch' + name).checked;
+                            config[name] = page.querySelector('#ch' + name).checked;
                         });
                         ApiClient.updatePluginConfiguration(pluginId, config).then(function (result) {
                             Dashboard.processPluginConfigurationUpdateResult(result);
@@ -275,11 +692,11 @@
                     return false;
                 });
 
-                document.querySelector('#chRetryRegistration').addEventListener('click', function () {
+                page.querySelector('#chRetryRegistration').addEventListener('click', function () {
                     ApiClient.ajax({ type: 'POST', url: ApiClient.getUrl('CustomizedHome/Status/Retry'), dataType: 'json' }).then(renderStatus).catch(loadStatus);
                 });
 
-                document.querySelector('#chClearDefault').addEventListener('click', function () {
+                page.querySelector('#chClearDefault').addEventListener('click', function () {
                     if (!window.confirm('Clear the default layout?')) {
                         return;
                     }
@@ -290,13 +707,13 @@
                         contentType: 'application/json',
                         dataType: 'json'
                     }).then(function (layout) {
-                        document.querySelector('#chDefaultSummary').textContent = describeLayout(layout);
+                        updateDefaultSummary(layout);
                         editorOpened = false;
                         openDefaultEditor();
                     });
                 });
 
-                document.querySelector('#chUserLayouts').addEventListener('click', function (e) {
+                page.querySelector('#chUserLayouts').addEventListener('click', function (e) {
                     var button = e.target.closest('.chResetUser');
                     if (!button) {
                         return;

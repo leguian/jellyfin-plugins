@@ -1,0 +1,36 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <title>Mock jellyfin-web home</title>
+    <style>
+        body { background: #101010; color: #ddd; font-family: sans-serif; margin: 0; }
+        .hide { display: none !important; }
+        .verticalSection { padding: 0.5em 1em; }
+        .card { display: inline-block; width: 8em; height: 4em; background: #333; margin-right: 0.5em; }
+    </style>
+</head>
+<body>
+    <!-- Same structure as jellyfin-web: #homeTab .sections > .verticalSection.sectionN -->
+    <div id="indexPage" class="page homePage">
+        <div id="homeTab">
+            <div class="sections homeSectionsContainer">
+                <div class="verticalSection section0"><h2 class="sectionTitle">My Media</h2><div class="itemsContainer"><div class="card"></div></div></div>
+                <div class="verticalSection section1"><h2 class="sectionTitle">Continue Watching</h2><div class="itemsContainer"><div class="card"></div></div></div>
+                <div class="verticalSection section2 hide"><h2 class="sectionTitle">Continue Listening</h2><div class="itemsContainer"></div></div>
+                <div class="verticalSection section3 hide"><h2 class="sectionTitle">Continue Reading</h2><div class="itemsContainer"></div></div>
+                <div class="verticalSection section4"></div>
+                <div class="verticalSection section5"><h2 class="sectionTitle">Next Up</h2><div class="itemsContainer"><div class="card"></div></div></div>
+                <div class="section6">
+                    <div class="verticalSection"><div class="sectionTitleContainer"><a class="sectionTitleTextButton" href="#/movies?topParentId=lib-movies&collectionType=movies"><h2 class="sectionTitle">Recently Added in Movies</h2></a></div><div class="itemsContainer"><div class="card"></div></div></div>
+                    <div class="verticalSection"><div class="sectionTitleContainer"><a class="sectionTitleTextButton" href="#/tv?topParentId=lib-shows&collectionType=tvshows"><h2 class="sectionTitle">Recently Added in Shows</h2></a></div><div class="itemsContainer"><div class="card"></div></div></div>
+                </div>
+                <div class="verticalSection section7"></div>
+                <div class="verticalSection section8"></div>
+                <div class="verticalSection section9"></div>
+            </div>
+        </div>
+    </div>
+    <div id="adminHost"></div>
+</body>
+</html>
