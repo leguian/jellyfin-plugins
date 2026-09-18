@@ -9,6 +9,22 @@
     "imageUrl": "https://raw.githubusercontent.com/leguian/jellyfin-plugins/main/customized-home/logo.png",
     "versions": [
       {
+        "version": "1.7.0.0",
+        "changelog": "Custom genre thumbnails now come in three shapes (poster, landscape, square): the \"All genres\" section uses the one matching its card shape. The Genres tab shows the optimal image sizes. Thumbnails uploaded before this version are kept as poster thumbnails.",
+        "targetAbi": "12.0.0.0",
+        "sourceUrl": "https://github.com/leguian/jellyfin-plugins/releases/download/customized-home-v1.7.0.0/customized-home_1.7.0.0_jellyfin-12.zip",
+        "checksum": "a9450671749fe3c78b1d899a18fa61a5",
+        "timestamp": "2026-09-18T17:36:48Z"
+      },
+      {
+        "version": "1.7.0.0",
+        "changelog": "Custom genre thumbnails now come in three shapes (poster, landscape, square): the \"All genres\" section uses the one matching its card shape. The Genres tab shows the optimal image sizes. Thumbnails uploaded before this version are kept as poster thumbnails.",
+        "targetAbi": "10.11.0.0",
+        "sourceUrl": "https://github.com/leguian/jellyfin-plugins/releases/download/customized-home-v1.7.0.0/customized-home_1.7.0.0_jellyfin-10.11.zip",
+        "checksum": "0408d8edec4bd1b24575263914d1a4f7",
+        "timestamp": "2026-09-18T17:36:48Z"
+      },
+      {
         "version": "1.6.0.0",
         "changelog": "\"All genres\" section: choose the look of the cards from the format menu - posters of the genre, custom images uploaded by the administrator, or genre names on colored backgrounds.",
         "targetAbi": "12.0.0.0",
