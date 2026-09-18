@@ -9,6 +9,22 @@
     "imageUrl": "https://raw.githubusercontent.com/leguian/jellyfin-plugins/main/customized-home/logo.png",
     "versions": [
       {
+        "version": "1.8.1.0",
+        "changelog": "The hero banner now spans the whole width of the page, starts under the top menu (which becomes see-through while it lies over the hero) and dissolves into the page below instead of ending on an edge.",
+        "targetAbi": "12.0.0.0",
+        "sourceUrl": "https://github.com/leguian/jellyfin-plugins/releases/download/customized-home-v1.8.1.0/customized-home_1.8.1.0_jellyfin-12.zip",
+        "checksum": "a2e8781b797cd37eb578b21f1cfcaafb",
+        "timestamp": "2026-09-18T19:33:27Z"
+      },
+      {
+        "version": "1.8.1.0",
+        "changelog": "The hero banner now spans the whole width of the page, starts under the top menu (which becomes see-through while it lies over the hero) and dissolves into the page below instead of ending on an edge.",
+        "targetAbi": "10.11.0.0",
+        "sourceUrl": "https://github.com/leguian/jellyfin-plugins/releases/download/customized-home-v1.8.1.0/customized-home_1.8.1.0_jellyfin-10.11.zip",
+        "checksum": "59e67daac023b89dc085dd2971cf50ef",
+        "timestamp": "2026-09-18T19:33:27Z"
+      },
+      {
         "version": "1.8.0.0",
         "changelog": "New hero banner at the top of the home page: a carousel of featured media with backdrop, logo, synopsis, runtime, year and ratings, and actions to play or resume, watch the trailer, mark as favorite or watched. Sources can be combined (random, recently added movies / shows, latest movies / shows), with an adjustable number of media and rotation delay. Configured from the layout editor, per user and in the default layout.",
         "targetAbi": "12.0.0.0",
