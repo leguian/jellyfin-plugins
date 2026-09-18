@@ -84,6 +84,65 @@ public class LayoutValidatorTests
     }
 
     [Fact]
+    public void Hero_defaults_to_disabled_with_safe_settings()
+    {
+        HeroSettings hero = LayoutValidator.Normalize(new HomeLayout(), out _)!.Hero;
+
+        Assert.False(hero.Enabled);
+        Assert.Empty(hero.Sources);
+        Assert.Equal(6, hero.Count);
+        Assert.Equal(10, hero.IntervalSeconds);
+        Assert.True(hero.ExcludePlayed);
+        Assert.True(hero.RequireBackdrop);
+    }
+
+    [Fact]
+    public void Hero_sources_are_filtered_deduplicated_and_ordered()
+    {
+        HomeLayout layout = new()
+        {
+            Hero = new HeroSettings { Enabled = true, Sources = ["latestShows", "<script>", " RANDOM ", "random", "recentMovies"] }
+        };
+
+        HeroSettings hero = LayoutValidator.Normalize(layout, out _)!.Hero;
+
+        Assert.True(hero.Enabled);
+        Assert.Equal(["random", "recentMovies", "latestShows"], hero.Sources);
+    }
+
+    [Fact]
+    public void Hero_without_a_valid_source_cannot_be_enabled()
+    {
+        HomeLayout layout = new() { Hero = new HeroSettings { Enabled = true, Sources = ["nope"] } };
+
+        Assert.False(LayoutValidator.Normalize(layout, out _)!.Hero.Enabled);
+    }
+
+    [Theory]
+    [InlineData(0, 1)]
+    [InlineData(500, 12)]
+    [InlineData(8, 8)]
+    public void Hero_count_is_clamped(int input, int expected)
+    {
+        HomeLayout layout = new() { Hero = new HeroSettings { Count = input } };
+
+        Assert.Equal(expected, LayoutValidator.Normalize(layout, out _)!.Hero.Count);
+    }
+
+    [Theory]
+    [InlineData(-5, 0)]
+    [InlineData(0, 0)]
+    [InlineData(1, 4)]
+    [InlineData(15, 15)]
+    [InlineData(9999, 60)]
+    public void Hero_interval_is_off_or_clamped(int input, int expected)
+    {
+        HomeLayout layout = new() { Hero = new HeroSettings { IntervalSeconds = input } };
+
+        Assert.Equal(expected, LayoutValidator.Normalize(layout, out _)!.Hero.IntervalSeconds);
+    }
+
+    [Fact]
     public void Too_many_items_are_rejected()
     {
         HomeLayout layout = new() { Items = Enumerable.Range(0, 501).Select(index => Section("key:" + index)).ToList() };

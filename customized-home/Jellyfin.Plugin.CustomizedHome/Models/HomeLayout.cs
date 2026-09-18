@@ -20,6 +20,11 @@ public class HomeLayout
     public bool HideUnlisted { get; set; }
 
     /// <summary>
+    /// Gets or sets the hero banner shown above the sections.
+    /// </summary>
+    public HeroSettings Hero { get; set; } = new HeroSettings();
+
+    /// <summary>
     /// Gets or sets the ordered top level items (sections or folders).
     /// </summary>
     [XmlArrayItem("Item")]

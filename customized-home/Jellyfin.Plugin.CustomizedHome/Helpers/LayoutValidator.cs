@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Globalization;
+using System.Linq;
 using System.Text.RegularExpressions;
 using Jellyfin.Plugin.CustomizedHome.Models;
 
@@ -37,7 +38,8 @@ public static partial class LayoutValidator
         HomeLayout result = new()
         {
             Version = 1,
-            HideUnlisted = layout.HideUnlisted
+            HideUnlisted = layout.HideUnlisted,
+            Hero = NormalizeHero(layout.Hero)
         };
 
         int count = 0;
@@ -149,6 +151,30 @@ public static partial class LayoutValidator
             Genres = NormalizeGenres(item.Genres),
             GenreStyle = NormalizeChoice(item.GenreStyle, LayoutFormats.GenreStyles, LayoutFormats.GenreStylePosters)
         };
+    }
+
+    private static HeroSettings NormalizeHero(HeroSettings? hero)
+    {
+        HeroSettings result = new();
+        if (hero is null)
+        {
+            return result;
+        }
+
+        // Known sources only, in the canonical order, without duplicates.
+        result.Sources = HeroSources.All
+            .Where(known => hero.Sources is not null && hero.Sources.Any(source => string.Equals(source?.Trim(), known, StringComparison.OrdinalIgnoreCase)))
+            .ToList();
+
+        // A hero without any source has nothing to show.
+        result.Enabled = hero.Enabled && result.Sources.Count > 0;
+        result.Count = Math.Clamp(hero.Count, HeroLimits.MinCount, HeroLimits.MaxCount);
+        result.IntervalSeconds = hero.IntervalSeconds <= 0
+            ? 0
+            : Math.Clamp(hero.IntervalSeconds, HeroLimits.MinIntervalSeconds, HeroLimits.MaxIntervalSeconds);
+        result.ExcludePlayed = hero.ExcludePlayed;
+        result.RequireBackdrop = hero.RequireBackdrop;
+        return result;
     }
 
     private static List<string> NormalizeGenres(List<string>? genres)

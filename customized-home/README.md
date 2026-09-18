@@ -58,6 +58,25 @@ Installation manuelle : dézipper `customized-home_<version>_jellyfin-<abi>.zip`
 - **Réinitialiser** : supprime la disposition personnelle → retour à la disposition par défaut.
 - L'état replié / déplié d'un dossier est mémorisé par appareil (localStorage).
 
+### Hero (bannière à la une)
+
+Carrousel de médias en tête de l'accueil, configuré dans l'éditeur : ligne épinglée **Bannière « hero »** au-dessus de la colonne de gauche (interrupteur + bouton réglages). Enregistré avec la disposition, donc par utilisateur, et dans la disposition par défaut côté administrateur. Une disposition peut ne contenir que le hero : il s'ajoute alors au-dessus de la page d'accueil Jellyfin inchangée.
+
+| Réglage | Valeurs | Défaut |
+|---------|---------|--------|
+| Sources (cumulables) | Aléatoire, Films ajoutés récemment, Séries ajoutées récemment, Derniers films (date de sortie), Dernières séries (date de sortie) | Films + séries ajoutés récemment à l'activation |
+| Nombre de médias | 1 à 12 | 6 |
+| Rotation automatique | manuelle, 6, 10, 15, 20, 30 s (4 à 60 s acceptées par l'API) | 10 s |
+| Exclure les médias déjà vus | oui / non | oui |
+| Uniquement les médias avec image de fond | oui / non | oui |
+
+- Les sources sont mélangées à tour de rôle (une de chaque), sans doublon, jusqu'au nombre demandé. Désactiver la dernière source désactive le hero.
+- Chaque média affiche : image de fond, logo (titre à défaut), année, durée, classification, note de la communauté, note des critiques, genres, synopsis.
+- Actions : **Lire** ou **Reprendre** (+ **Depuis le début**), **Bande-annonce**, favori, vu / non vu, **Plus d'infos**. Lecture, favori et vu passent par les composants natifs du client web (`itemAction`, `emby-ratingbutton`, `emby-playstatebutton`) : aucun lecteur maison.
+- Bande-annonce : locale → lue dans Jellyfin ; distante uniquement → ouverte dans un nouvel onglet (liens `http(s)` seulement).
+- Rotation en pause au survol, au focus clavier, onglet masqué ; désactivée si le système demande de réduire les animations. Flèches, points, touches gauche / droite (hors mode TV), balayage tactile.
+- Nécessite l'option **sections intégrées** (le hero est rendu par le plugin). Cache 5 minutes, comme les sections intégrées : la source aléatoire ne change donc pas à chaque retour sur l'accueil.
+
 ### Page de configuration (administrateur)
 
 Trois onglets : **Options** (statut File Transformation + réglages), **Layouts** (éditeur de la disposition par défaut intégré à la page, liste des utilisateurs ayant leur propre disposition avec réinitialisation) et **Genres** (miniatures par genre pour la section « Tous les genres », une par forme de carte ; PNG, JPEG ou WebP, 5 Mo max).
@@ -197,4 +216,5 @@ Limite : ces tests valident le script contre un DOM simulé. Ils ne détectent p
 - Forme forcée sur une section native/HSS : l'image reste celle choisie par le rendu d'origine (vignette 16:9 recadrée en affiche, par exemple). Les sections intégrées chargent l'image adaptée.
 - Les sections intégrées ne se rafraîchissent pas en temps réel après un visionnage (cache 5 min, rechargement à la prochaine ouverture de l'accueil).
 - Miniatures de genres : type détecté sur les octets (le type déclaré n'est jamais cru), SVG refusé, 5 Mo max, fichier nommé par hash du genre (jamais par l'entrée utilisateur), servi avec `nosniff`.
+- Hero : une requête `Items` par source à l'ouverture de l'accueil (puis cache 5 min) ; la source aléatoire (`sortBy=Random`) coûte un tri complet côté serveur sur les très grosses bibliothèques. Les boutons d'action reposent sur le gestionnaire de clics de `emby-itemscontainer` du client web : à revérifier après une mise à jour majeure de Jellyfin.
 - Les assets client sont servis sans authentification (comme HSS / Plugin Pages) : ils ne contiennent aucune donnée sensible.

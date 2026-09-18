@@ -12,6 +12,7 @@
         userLayouts: [],
         genres: [],
         genreImages: [],
+        heroItems: {},
         pluginConfiguration: {},
         status: {
             PluginVersion: '0.0.0.0',
@@ -24,7 +25,7 @@
 
     function route(method, url, body) {
         const path = url.split('?')[0];
-        mock.requests.push({ method: method, path: path, body: body === undefined ? null : body });
+        mock.requests.push({ method: method, path: path, url: url, body: body === undefined ? null : body });
         if (path === 'CustomizedHome/Layout' && method === 'GET') {
             return mock.layoutResponse;
         }
@@ -75,6 +76,19 @@
         }
         if (path === 'Genres') {
             return { Items: mock.genres };
+        }
+        if (path === 'Items' && /[?&]fields=Overview/.test(url)) {
+            // Hero query: one list per source, recognized by its sort order and item type.
+            const sortBy = decodeURIComponent((/[?&]sortBy=([^&]+)/.exec(url) || [])[1] || '');
+            const types = decodeURIComponent((/[?&]includeItemTypes=([^&]+)/.exec(url) || [])[1] || '');
+            const limit = parseInt((/[?&]limit=(\d+)/.exec(url) || [])[1] || '100', 10);
+            let source = 'random';
+            if (sortBy.indexOf('DateCreated') === 0) {
+                source = types === 'Movie' ? 'recentMovies' : 'recentShows';
+            } else if (sortBy.indexOf('PremiereDate') === 0) {
+                source = types === 'Movie' ? 'latestMovies' : 'latestShows';
+            }
+            return { Items: (mock.heroItems[source] || []).slice(0, limit) };
         }
         if (path === 'Items') {
             // Items of one genre: two movies named after it. Any other item query (history...) is empty.

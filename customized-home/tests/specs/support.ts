@@ -26,9 +26,41 @@ export interface LayoutSection {
     GenreStyle?: 'posters' | 'custom' | 'colors';
 }
 
+export type HeroSource = 'random' | 'recentMovies' | 'recentShows' | 'latestMovies' | 'latestShows';
+
+export interface HeroSettings {
+    Enabled: boolean;
+    Sources: HeroSource[];
+    Count: number;
+    IntervalSeconds: number;
+    ExcludePlayed: boolean;
+    RequireBackdrop: boolean;
+}
+
+export interface HeroItem {
+    Id: string;
+    Name: string;
+    Type: 'Movie' | 'Series';
+    MediaType?: string;
+    IsFolder?: boolean;
+    Overview?: string;
+    ProductionYear?: number;
+    RunTimeTicks?: number;
+    OfficialRating?: string;
+    CommunityRating?: number;
+    CriticRating?: number;
+    Genres?: string[];
+    LocalTrailerCount?: number;
+    RemoteTrailers?: { Url: string }[];
+    ImageTags?: Record<string, string>;
+    BackdropImageTags?: string[];
+    UserData?: { PlaybackPositionTicks?: number; IsFavorite?: boolean; Played?: boolean };
+}
+
 export interface Layout {
     Version: number;
     HideUnlisted: boolean;
+    Hero?: HeroSettings;
     Items: LayoutSection[];
 }
 
@@ -43,6 +75,7 @@ export interface CatalogEntry {
 export interface MockRequest {
     method: string;
     path: string;
+    url?: string;
     body: unknown;
 }
 
@@ -53,6 +86,7 @@ export interface MockOptions {
     canCustomize?: boolean;
     enableIntegratedSections?: boolean;
     genreImages?: { Name: string; Shape?: 'portrait' | 'landscape' | 'square'; Version: number }[];
+    heroItems?: Partial<Record<HeroSource, HeroItem[]>>;
 }
 
 interface MockWindow {
@@ -90,6 +124,7 @@ function mockState(options: MockOptions): Record<string, unknown> {
         catalog: CATALOG,
         genres: GENRES,
         genreImages: options.genreImages ?? [],
+        heroItems: options.heroItems ?? {},
         defaultLayout: options.defaultLayout ?? EMPTY_LAYOUT,
         // The administration page reads the default layout summary from the plugin configuration.
         pluginConfiguration: { DefaultLayout: options.defaultLayout ?? EMPTY_LAYOUT },

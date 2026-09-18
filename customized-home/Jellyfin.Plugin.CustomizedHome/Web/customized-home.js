@@ -13,7 +13,7 @@
         return;
     }
 
-    const VERSION = '1.7.0';
+    const VERSION = '1.8.0';
     const API = 'CustomizedHome';
     const ORDER_STEP = 1000;
     const ORDER_UNLISTED_BASE = 1000000000;
@@ -112,7 +112,41 @@
             sizeNormal: 'Normal',
             sizeLarge: 'Large',
             showTitles: 'Show the card titles',
-            noTitles: 'no card titles'
+            noTitles: 'no card titles',
+            heroTitle: 'Hero banner',
+            heroHint: 'Carousel of featured media at the top of the home page',
+            heroEnable: 'Turn the hero on',
+            heroDisable: 'Turn the hero off',
+            heroSettings: 'Hero settings',
+            heroSources: 'Sources (combined)',
+            heroSrcRandom: 'Random',
+            heroSrcRecentMovies: 'Recently added movies',
+            heroSrcRecentShows: 'Recently added shows',
+            heroSrcLatestMovies: 'Latest movies (release date)',
+            heroSrcLatestShows: 'Latest shows (release date)',
+            heroNoSource: 'no source selected',
+            heroCount: 'Number of media',
+            heroCountBadge: '{0} media',
+            heroLess: 'Fewer media',
+            heroMoreCount: 'More media',
+            heroInterval: 'Automatic rotation',
+            heroIntervalOff: 'manual',
+            heroSeconds: '{0} s',
+            heroFilters: 'Filters',
+            heroExcludePlayed: 'Skip media already watched',
+            heroRequireBackdrop: 'Only media with a backdrop image',
+            heroPlay: 'Play',
+            heroResume: 'Resume',
+            heroRestart: 'From the beginning',
+            heroTrailer: 'Trailer',
+            heroFavorite: 'Favorite',
+            heroPlayed: 'Watched',
+            heroMore: 'More info',
+            heroPrev: 'Previous media',
+            heroNext: 'Next media',
+            heroPosition: '{0} of {1}',
+            heroHours: '{0} h {1} min',
+            heroMinutes: '{0} min'
         },
         fr: {
             customize: "Personnaliser l'accueil",
@@ -200,7 +234,41 @@
             sizeNormal: 'Normale',
             sizeLarge: 'Grande',
             showTitles: 'Afficher les titres des cartes',
-            noTitles: 'sans titres de cartes'
+            noTitles: 'sans titres de cartes',
+            heroTitle: 'Bannière « hero »',
+            heroHint: "Carrousel de médias à la une, en haut de l'accueil",
+            heroEnable: 'Activer le hero',
+            heroDisable: 'Désactiver le hero',
+            heroSettings: 'Réglages du hero',
+            heroSources: 'Sources (cumulables)',
+            heroSrcRandom: 'Aléatoire',
+            heroSrcRecentMovies: 'Films ajoutés récemment',
+            heroSrcRecentShows: 'Séries ajoutées récemment',
+            heroSrcLatestMovies: 'Derniers films (date de sortie)',
+            heroSrcLatestShows: 'Dernières séries (date de sortie)',
+            heroNoSource: 'aucune source sélectionnée',
+            heroCount: 'Nombre de médias',
+            heroCountBadge: '{0} médias',
+            heroLess: 'Moins de médias',
+            heroMoreCount: 'Plus de médias',
+            heroInterval: 'Rotation automatique',
+            heroIntervalOff: 'manuelle',
+            heroSeconds: '{0} s',
+            heroFilters: 'Filtres',
+            heroExcludePlayed: 'Exclure les médias déjà vus',
+            heroRequireBackdrop: 'Uniquement les médias avec image de fond',
+            heroPlay: 'Lire',
+            heroResume: 'Reprendre',
+            heroRestart: 'Depuis le début',
+            heroTrailer: 'Bande-annonce',
+            heroFavorite: 'Favori',
+            heroPlayed: 'Vu',
+            heroMore: "Plus d'infos",
+            heroPrev: 'Média précédent',
+            heroNext: 'Média suivant',
+            heroPosition: '{0} sur {1}',
+            heroHours: '{0} h {1} min',
+            heroMinutes: '{0} min'
         }
     };
 
@@ -1016,6 +1084,398 @@
     }
 
     /* ------------------------------------------------------------------ */
+    /* Hero: carousel of featured media above the sections                 */
+    /* ------------------------------------------------------------------ */
+
+    const HERO_FIELDS = 'Overview,Genres,CommunityRating,CriticRating,OfficialRating,RunTimeTicks,ProductionYear,PremiereDate,RemoteTrailers,LocalTrailerCount';
+    const HERO_IMAGE_TYPES = 'Backdrop,Logo,Primary';
+    const HERO_DEFAULTS = { Enabled: false, Sources: [], Count: 6, IntervalSeconds: 10, ExcludePlayed: true, RequireBackdrop: true };
+    const HERO_DEFAULT_SOURCES = ['recentMovies', 'recentShows'];
+    const HERO_MIN_COUNT = 1;
+    const HERO_MAX_COUNT = 12;
+    const HERO_INTERVALS = [0, 6, 10, 15, 20, 30];
+    const HERO_BACKDROP_WIDTHS = [960, 1280, 1920];
+    const HERO_LOGO_WIDTH = 600;
+    const HERO_MAX_GENRES = 3;
+    const HERO_SWIPE_PX = 40;
+    const TICKS_PER_MINUTE = 600000000;
+
+    // Order matters: it is the order of the settings menu and of the round robin between sources.
+    const HERO_SOURCES = {
+        random: { labelKey: 'heroSrcRandom', query: { includeItemTypes: 'Movie,Series', sortBy: 'Random' } },
+        recentMovies: { labelKey: 'heroSrcRecentMovies', query: { includeItemTypes: 'Movie', sortBy: 'DateCreated,SortName', sortOrder: 'Descending' } },
+        recentShows: { labelKey: 'heroSrcRecentShows', query: { includeItemTypes: 'Series', sortBy: 'DateCreated,SortName', sortOrder: 'Descending' } },
+        latestMovies: { labelKey: 'heroSrcLatestMovies', query: { includeItemTypes: 'Movie', sortBy: 'PremiereDate,SortName', sortOrder: 'Descending' } },
+        latestShows: { labelKey: 'heroSrcLatestShows', query: { includeItemTypes: 'Series', sortBy: 'PremiereDate,SortName', sortOrder: 'Descending' } }
+    };
+
+    function normalizeHero(hero) {
+        const result = Object.assign({}, HERO_DEFAULTS, hero || {});
+        const sources = Array.isArray(result.Sources) ? result.Sources : [];
+        result.Sources = Object.keys(HERO_SOURCES).filter(function (source) {
+            return sources.indexOf(source) >= 0;
+        });
+        const count = parseInt(result.Count, 10);
+        result.Count = Math.max(HERO_MIN_COUNT, Math.min(HERO_MAX_COUNT, isNaN(count) ? HERO_DEFAULTS.Count : count));
+        const interval = parseInt(result.IntervalSeconds, 10);
+        result.IntervalSeconds = isNaN(interval) || interval < 0 ? HERO_DEFAULTS.IntervalSeconds : interval;
+        result.Enabled = !!result.Enabled;
+        result.ExcludePlayed = result.ExcludePlayed !== false;
+        result.RequireBackdrop = result.RequireBackdrop !== false;
+        return result;
+    }
+
+    // The hero to show for a layout, or null. It relies on the sections rendered by the plugin being allowed.
+    function wantedHero(layout) {
+        if (!state.response || !state.response.EnableIntegratedSections || !layout || !layout.Hero) {
+            return null;
+        }
+        const hero = normalizeHero(layout.Hero);
+        return hero.Enabled && hero.Sources.length ? hero : null;
+    }
+
+    function heroDataSignature(hero) {
+        return hero.Sources.join('|') + '#' + hero.Count + '#' + (hero.ExcludePlayed ? 1 : 0) + (hero.RequireBackdrop ? 1 : 0);
+    }
+
+    function fetchHeroItems(hero) {
+        return Promise.all(hero.Sources.map(function (source) {
+            const query = Object.assign({ recursive: true, limit: hero.Count, fields: HERO_FIELDS, enableImageTypes: HERO_IMAGE_TYPES }, HERO_SOURCES[source].query);
+            if (hero.ExcludePlayed) {
+                query.isPlayed = false;
+            }
+            if (hero.RequireBackdrop) {
+                query.imageTypes = 'Backdrop';
+            }
+            return itemsQuery(query).catch(function () {
+                return [];
+            });
+        })).then(function (lists) {
+            // Round robin between the sources, so that each of them is represented.
+            const mixed = [];
+            for (let i = 0; i < hero.Count; i++) {
+                lists.forEach(function (list) {
+                    if (list[i]) {
+                        mixed.push(list[i]);
+                    }
+                });
+            }
+            return dedupeItems(mixed).slice(0, hero.Count);
+        });
+    }
+
+    function heroBackdropUrl(item) {
+        const client = apiClient();
+        const wanted = Math.round(window.innerWidth * (window.devicePixelRatio || 1));
+        const width = HERO_BACKDROP_WIDTHS.filter(function (candidate) {
+            return candidate >= wanted;
+        })[0] || HERO_BACKDROP_WIDTHS[HERO_BACKDROP_WIDTHS.length - 1];
+        const backdrops = item.BackdropImageTags || [];
+        if (backdrops.length) {
+            return { url: client.getImageUrl(item.Id, { type: 'Backdrop', maxWidth: width, tag: backdrops[0] }), backdrop: true };
+        }
+        const primary = (item.ImageTags || {}).Primary;
+        return primary ? { url: client.getImageUrl(item.Id, { type: 'Primary', maxWidth: HERO_BACKDROP_WIDTHS[0], tag: primary }), backdrop: false } : null;
+    }
+
+    function formatRuntime(ticks) {
+        const minutes = Math.round((ticks || 0) / TICKS_PER_MINUTE);
+        if (minutes <= 0) {
+            return '';
+        }
+        const hours = Math.floor(minutes / 60);
+        return hours > 0 ? t('heroHours', hours, minutes % 60) : t('heroMinutes', minutes);
+    }
+
+    // Remote trailers are opened in a new tab: only plain web links are accepted.
+    function remoteTrailerUrl(item) {
+        const trailers = item.RemoteTrailers || [];
+        for (let i = 0; i < trailers.length; i++) {
+            const url = trailers[i] && trailers[i].Url;
+            if (url && /^https?:\/\//i.test(url)) {
+                return url;
+            }
+        }
+        return null;
+    }
+
+    function heroMetaHtml(item) {
+        const parts = [];
+        const year = item.ProductionYear || (item.PremiereDate ? new Date(item.PremiereDate).getFullYear() : null);
+        if (year) {
+            parts.push('<span class="ch-hero-year">' + escapeHtml(year) + '</span>');
+        }
+        const runtime = formatRuntime(item.RunTimeTicks);
+        if (runtime) {
+            parts.push('<span class="ch-hero-runtime">' + escapeHtml(runtime) + '</span>');
+        }
+        if (item.OfficialRating) {
+            parts.push('<span class="ch-hero-official">' + escapeHtml(item.OfficialRating) + '</span>');
+        }
+        if (item.CommunityRating) {
+            parts.push('<span class="ch-hero-rating"><span class="material-icons" aria-hidden="true">star</span>' + escapeHtml(Number(item.CommunityRating).toFixed(1)) + '</span>');
+        }
+        if (item.CriticRating != null) {
+            parts.push('<span class="ch-hero-critic"><span class="material-icons" aria-hidden="true">reviews</span>' + escapeHtml(Math.round(item.CriticRating)) + ' %</span>');
+        }
+        const genres = (item.Genres || []).slice(0, HERO_MAX_GENRES);
+        if (genres.length) {
+            parts.push('<span class="ch-hero-genres">' + escapeHtml(genres.join(' · ')) + '</span>');
+        }
+        return parts.join('');
+    }
+
+    function heroButton(className, action, icon, label) {
+        return '<button is="emby-button" type="button" class="ch-hero-btn ' + className + ' itemAction" data-action="' + action + '" aria-label="' + escapeHtml(label) + '">'
+            + '<span class="material-icons" aria-hidden="true">' + icon + '</span><span>' + escapeHtml(label) + '</span></button>';
+    }
+
+    function heroSlideHtml(item, index, total) {
+        const serverId = item.ServerId || apiClient().serverId();
+        const userData = item.UserData || {};
+        const title = item.Name || '';
+        const href = '#/details?id=' + encodeURIComponent(item.Id) + '&serverId=' + encodeURIComponent(serverId);
+        const image = heroBackdropUrl(item);
+        const logoTag = (item.ImageTags || {}).Logo;
+        const resumable = userData.PlaybackPositionTicks > 0;
+        const ids = ' data-id="' + escapeHtml(item.Id) + '" data-serverid="' + escapeHtml(serverId) + '"';
+
+        // The native click handler of the items container reads the item from these attributes.
+        let html = '<div class="ch-hero-slide' + (index === 0 ? ' ch-active' : '') + '" role="group" aria-roledescription="slide" aria-label="' + escapeHtml(t('heroPosition', index + 1, total)) + '"'
+            + (index === 0 ? '' : ' aria-hidden="true"') + ids
+            + ' data-type="' + escapeHtml(item.Type || '') + '" data-isfolder="' + (item.IsFolder ? 'true' : 'false') + '"'
+            + (item.MediaType ? ' data-mediatype="' + escapeHtml(item.MediaType) + '"' : '')
+            + ' data-positionticks="' + escapeHtml(userData.PlaybackPositionTicks || 0) + '">';
+        html += '<div class="ch-hero-backdrop' + (image && !image.backdrop ? ' ch-hero-backdrop-poster' : '') + '"' + (image ? ' data-ch-bg="' + escapeHtml(image.url) + '"' : '') + '></div>';
+        html += '<div class="ch-hero-shade"></div><div class="ch-hero-content">';
+        html += logoTag
+            ? '<img class="ch-hero-logo" alt="' + escapeHtml(title) + '" loading="lazy" src="' + escapeHtml(apiClient().getImageUrl(item.Id, { type: 'Logo', maxWidth: HERO_LOGO_WIDTH, tag: logoTag })) + '" />'
+            : '<h2 class="ch-hero-title">' + escapeHtml(title) + '</h2>';
+        html += '<div class="ch-hero-meta">' + heroMetaHtml(item) + '</div>';
+        if (item.Overview) {
+            html += '<p class="ch-hero-overview">' + escapeHtml(item.Overview) + '</p>';
+        }
+        html += '<div class="ch-hero-actions">';
+        html += resumable
+            ? heroButton('ch-hero-play', 'resume', 'play_arrow', t('heroResume'))
+            : heroButton('ch-hero-play', 'play', 'play_arrow', t('heroPlay'));
+        if (resumable) {
+            html += heroButton('ch-hero-restart', 'play', 'replay', t('heroRestart'));
+        }
+        if (item.LocalTrailerCount > 0) {
+            html += heroButton('ch-hero-trailer', 'playtrailer', 'theaters', t('heroTrailer'));
+        } else if (remoteTrailerUrl(item)) {
+            html += '<a is="emby-linkbutton" class="ch-hero-btn ch-hero-trailer" target="_blank" rel="noopener noreferrer" aria-label="' + escapeHtml(t('heroTrailer')) + '" href="' + escapeHtml(remoteTrailerUrl(item)) + '">'
+                + '<span class="material-icons" aria-hidden="true">theaters</span><span>' + escapeHtml(t('heroTrailer')) + '</span></a>';
+        }
+        html += '<button is="emby-ratingbutton" type="button" class="ch-hero-round ch-hero-favorite' + (userData.IsFavorite ? ' ratingbutton-withrating' : '') + '"' + ids
+            + ' data-itemtype="' + escapeHtml(item.Type || '') + '" data-likes="' + (userData.Likes == null ? '' : escapeHtml(userData.Likes)) + '" data-isfavorite="' + (userData.IsFavorite ? 'true' : 'false') + '"'
+            + ' title="' + escapeHtml(t('heroFavorite')) + '" aria-label="' + escapeHtml(t('heroFavorite')) + '">'
+            + '<span class="material-icons favorite' + (userData.IsFavorite ? ' ratingbutton-icon-withrating' : '') + '" aria-hidden="true"></span></button>';
+        html += '<button is="emby-playstatebutton" type="button" class="ch-hero-round ch-hero-played' + (userData.Played ? ' playstatebutton-played' : '') + '"' + ids
+            + ' data-itemtype="' + escapeHtml(item.Type || '') + '" data-played="' + (userData.Played ? 'true' : 'false') + '"'
+            + ' title="' + escapeHtml(t('heroPlayed')) + '" aria-label="' + escapeHtml(t('heroPlayed')) + '">'
+            + '<span class="material-icons check' + (userData.Played ? ' playstatebutton-icon-played' : '') + '" aria-hidden="true"></span></button>';
+        html += '<a is="emby-linkbutton" class="ch-hero-btn ch-hero-more" aria-label="' + escapeHtml(t('heroMore')) + '" href="' + href + '"><span class="material-icons" aria-hidden="true">info</span><span>' + escapeHtml(t('heroMore')) + '</span></a>';
+        html += '</div></div></div>';
+        return html;
+    }
+
+    function stopHero(node) {
+        if (node && node._chHero) {
+            clearTimeout(node._chHero.timer);
+            node._chHero = null;
+        }
+    }
+
+    function startHero(node, intervalSeconds) {
+        const slides = node.querySelectorAll('.ch-hero-slide');
+        const dots = node.querySelectorAll('.ch-hero-dot');
+        const reducedMotion = !!(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches);
+        const carousel = { index: 0, timer: null, paused: false };
+        node._chHero = carousel;
+
+        function loadBackdrop(index) {
+            const backdrop = slides[index] && slides[index].querySelector('.ch-hero-backdrop[data-ch-bg]');
+            if (backdrop) {
+                backdrop.style.backgroundImage = 'url("' + backdrop.getAttribute('data-ch-bg').replace(/"/g, '%22') + '")';
+                backdrop.removeAttribute('data-ch-bg');
+            }
+        }
+
+        function schedule() {
+            clearTimeout(carousel.timer);
+            if (intervalSeconds <= 0 || reducedMotion || slides.length < 2 || carousel.paused || node._chHero !== carousel) {
+                return;
+            }
+            carousel.timer = setTimeout(function () {
+                if (!node.isConnected) {
+                    stopHero(node);
+                    return;
+                }
+                // Hidden tab or home tab not displayed: wait without moving.
+                if (document.hidden || node.offsetParent === null) {
+                    schedule();
+                    return;
+                }
+                show(carousel.index + 1);
+            }, intervalSeconds * 1000);
+        }
+
+        function show(index) {
+            carousel.index = (index + slides.length) % slides.length;
+            for (let i = 0; i < slides.length; i++) {
+                const active = i === carousel.index;
+                setClass(slides[i], 'ch-active', active);
+                if (active) {
+                    slides[i].removeAttribute('aria-hidden');
+                } else {
+                    slides[i].setAttribute('aria-hidden', 'true');
+                }
+                if (dots[i]) {
+                    setClass(dots[i], 'ch-active', active);
+                    dots[i].setAttribute('aria-current', active ? 'true' : 'false');
+                }
+            }
+            loadBackdrop(carousel.index);
+            loadBackdrop((carousel.index + 1) % slides.length);
+            schedule();
+        }
+
+        function pause(paused) {
+            carousel.paused = paused;
+            schedule();
+        }
+
+        node.addEventListener('click', function (e) {
+            const control = e.target.closest('.ch-hero-prev, .ch-hero-next, .ch-hero-dot');
+            if (control) {
+                if (control.classList.contains('ch-hero-dot')) {
+                    show(parseInt(control.dataset.chIndex, 10) || 0);
+                } else {
+                    show(carousel.index + (control.classList.contains('ch-hero-prev') ? -1 : 1));
+                }
+                return;
+            }
+            if (e.target.closest('.ch-hero-favorite, .ch-hero-played')) {
+                // The cached items no longer reflect the user data: fetch them again next time.
+                Object.keys(state.integratedCache).forEach(function (key) {
+                    if (key.indexOf('hero#') === 0) {
+                        delete state.integratedCache[key];
+                    }
+                });
+            }
+        });
+        node.addEventListener('mouseenter', function () {
+            pause(true);
+        });
+        node.addEventListener('mouseleave', function () {
+            pause(node.contains(document.activeElement));
+        });
+        node.addEventListener('focusin', function () {
+            pause(true);
+        });
+        node.addEventListener('focusout', function (e) {
+            if (!node.contains(e.relatedTarget)) {
+                pause(node.matches(':hover'));
+            }
+        });
+        node.addEventListener('keydown', function (e) {
+            // On TV the arrows move the focus: leave them alone.
+            if (document.documentElement.classList.contains('layout-tv') || (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight')) {
+                return;
+            }
+            e.preventDefault();
+            show(carousel.index + (e.key === 'ArrowLeft' ? -1 : 1));
+            const target = slides[carousel.index].querySelector('.ch-hero-play');
+            if (target) {
+                target.focus();
+            }
+        });
+        let swipeStart = null;
+        node.addEventListener('pointerdown', function (e) {
+            swipeStart = e.pointerType === 'touch' ? e.clientX : null;
+        });
+        node.addEventListener('pointerup', function (e) {
+            if (swipeStart !== null && Math.abs(e.clientX - swipeStart) >= HERO_SWIPE_PX) {
+                show(carousel.index + (e.clientX < swipeStart ? 1 : -1));
+            }
+            swipeStart = null;
+        });
+
+        show(0);
+    }
+
+    function renderHero(container, hero, items) {
+        const node = el('div', 'ch-hero');
+        node.setAttribute('role', 'region');
+        node.setAttribute('aria-roledescription', 'carousel');
+        node.setAttribute('aria-label', t('heroTitle'));
+        let html = '<div is="emby-itemscontainer" class="ch-hero-slides" data-multiselect="false">' + items.map(function (item, index) {
+            return heroSlideHtml(item, index, items.length);
+        }).join('') + '</div>';
+        if (items.length > 1) {
+            html += '<button type="button" class="ch-hero-nav ch-hero-prev" aria-label="' + escapeHtml(t('heroPrev')) + '"><span class="material-icons" aria-hidden="true">chevron_left</span></button>'
+                + '<button type="button" class="ch-hero-nav ch-hero-next" aria-label="' + escapeHtml(t('heroNext')) + '"><span class="material-icons" aria-hidden="true">chevron_right</span></button>'
+                + '<div class="ch-hero-dots">' + items.map(function (item, index) {
+                    return '<button type="button" class="ch-hero-dot" data-ch-index="' + index + '" aria-label="' + escapeHtml(t('heroPosition', index + 1, items.length)) + '"></button>';
+                }).join('') + '</div>';
+        }
+        node.innerHTML = html;
+        container.appendChild(node);
+        startHero(node, hero.IntervalSeconds);
+        return node;
+    }
+
+    function removeHero(container) {
+        Array.prototype.forEach.call(container.querySelectorAll(':scope > .ch-hero'), function (node) {
+            stopHero(node);
+            node.remove();
+        });
+    }
+
+    function syncHero(container, hero) {
+        if (!hero) {
+            if (container._chHeroEntry) {
+                container._chHeroEntry = null;
+                removeHero(container);
+            }
+            return;
+        }
+        const signature = heroDataSignature(hero) + '#' + hero.IntervalSeconds;
+        const known = container._chHeroEntry;
+        if (known && known.signature === signature) {
+            // The web client may have wiped the container: render again.
+            const missing = !known.loading && known.count > 0 && !container.querySelector(':scope > .ch-hero');
+            if (!missing) {
+                return;
+            }
+        }
+        removeHero(container);
+        const entry = { loading: true, count: 0, signature: signature };
+        container._chHeroEntry = entry;
+        const cacheKey = 'hero#' + heroDataSignature(hero);
+        const cached = state.integratedCache[cacheKey];
+        const dataPromise = cached && Date.now() - cached.ts < INTEGRATED_CACHE_MS
+            ? Promise.resolve(cached.data)
+            : fetchHeroItems(hero).then(function (items) {
+                state.integratedCache[cacheKey] = { ts: Date.now(), data: items };
+                return items;
+            });
+        dataPromise.then(function (items) {
+            entry.loading = false;
+            entry.count = items.length;
+            if (!container.isConnected || container._chHeroEntry !== entry || !items.length) {
+                return;
+            }
+            renderHero(container, hero, items);
+        }).catch(function (error) {
+            entry.loading = false;
+            console.warn('[CustomizedHome] hero failed', error);
+        });
+    }
+
+    /* ------------------------------------------------------------------ */
     /* Section discovery                                                   */
     /* ------------------------------------------------------------------ */
 
@@ -1288,7 +1748,7 @@
         const children = container.children;
         for (let i = 0; i < children.length; i++) {
             const child = children[i];
-            if (child.nodeType !== 1 || child.classList.contains('ch-folder') || child.classList.contains('ch-customize-bar')) {
+            if (child.nodeType !== 1 || child.classList.contains('ch-folder') || child.classList.contains('ch-customize-bar') || child.classList.contains('ch-hero')) {
                 continue;
             }
             nodes.push(child);
@@ -1321,6 +1781,7 @@
 
         const layout = state.layout || { Items: [], HideUnlisted: false };
         syncIntegratedSections(container, wantedIntegrated(layout));
+        syncHero(container, wantedHero(layout));
 
         const sections = collectSections(container, ctx);
         state.discovered = sections;
@@ -1682,6 +2143,7 @@
     function buildEditor(mode, catalog, userViews, layout, options) {
         const info = buildKnown(catalog, userViews, mode);
         const model = cloneLayout(layout);
+        model.Hero = normalizeHero(model.Hero);
         model.Items = (model.Items || []).filter(function (item) {
             return item && (item.Type === 'folder' ? !!item.Id : !!item.Key);
         });
@@ -1751,7 +2213,7 @@
             + '<span class="ch-legend-item"><span class="ch-origin-jellyfin">' + JELLYFIN_LOGO + '</span><span class="ch-legend-jellyfin"></span></span>'
             + '</div>'
             + '<div class="ch-columns">'
-            + '<div class="ch-col ch-col-layout"><h3 class="ch-col-title"></h3><div class="ch-list"></div></div>'
+            + '<div class="ch-col ch-col-layout"><h3 class="ch-col-title"></h3><div class="ch-hero-slot"></div><div class="ch-list"></div></div>'
             + '<div class="ch-col ch-col-unlisted"><h3 class="ch-col-title"></h3><div class="ch-unlisted"></div></div>'
             + '</div>'
             + '</div>'
@@ -1770,6 +2232,7 @@
         editor.overlay = overlay;
         editor.list = dialog.querySelector('.ch-list');
         editor.unlisted = dialog.querySelector('.ch-unlisted');
+        editor.heroSlot = dialog.querySelector('.ch-hero-slot');
         editor.columns = dialog.querySelector('.ch-columns');
         dialog.querySelector('.ch-legend-customized').textContent = t('legendCustomized');
         dialog.querySelector('.ch-legend-jellyfin').textContent = t('legendJellyfin');
@@ -2108,6 +2571,162 @@
         showPopup(anchor, menu);
     }
 
+    /* ---- hero row (pinned above the layout) ---- */
+
+    function heroBadge(hero) {
+        if (!hero.Sources.length) {
+            return t('heroNoSource');
+        }
+        return [
+            hero.Sources.map(function (source) {
+                return t(HERO_SOURCES[source].labelKey);
+            }).join(', '),
+            t('heroCountBadge', hero.Count),
+            hero.IntervalSeconds > 0 ? t('heroSeconds', hero.IntervalSeconds) : t('heroIntervalOff')
+        ].join(' · ');
+    }
+
+    function renderHeroRow() {
+        const slot = editor.heroSlot;
+        slot.innerHTML = '';
+        // The hero is rendered by the plugin: nothing to configure when the administrator disabled that.
+        if (!state.response || !state.response.EnableIntegratedSections) {
+            return;
+        }
+        const hero = editor.model.Hero;
+        const row = el('div', 'ch-hero-row' + (hero.Enabled ? '' : ' ch-hero-row-off'));
+        const toggleLabel = hero.Enabled ? t('heroDisable') : t('heroEnable');
+        row.innerHTML = '<span class="material-icons ch-row-icon" aria-hidden="true">view_carousel</span>'
+            + '<div class="ch-row-text"><div class="ch-row-title"></div><div class="ch-row-sub"></div></div>'
+            + '<div class="ch-row-actions">'
+            + '<button type="button" class="ch-icon-btn ch-hero-toggle" role="switch" aria-checked="' + (hero.Enabled ? 'true' : 'false') + '" data-ch-tip="' + escapeHtml(toggleLabel) + '" aria-label="' + escapeHtml(toggleLabel) + '">'
+            + '<span class="material-icons" aria-hidden="true">' + (hero.Enabled ? 'toggle_on' : 'toggle_off') + '</span></button>'
+            + actionButton('ch-hero-settings', t('heroSettings'), 'tune')
+            + '</div>';
+        row.querySelector('.ch-row-title').textContent = t('heroTitle');
+        row.querySelector('.ch-row-sub').textContent = hero.Enabled ? heroBadge(hero) : t('heroHint');
+        row.querySelector('.ch-hero-toggle').addEventListener('click', function () {
+            hero.Enabled = !hero.Enabled;
+            const needsSources = hero.Enabled && !hero.Sources.length;
+            if (needsSources) {
+                hero.Sources = HERO_DEFAULT_SOURCES.slice();
+            }
+            renderHeroRow();
+            if (needsSources) {
+                openHeroMenu(editor.heroSlot.querySelector('.ch-hero-settings'));
+            }
+        });
+        row.querySelector('.ch-hero-settings').addEventListener('click', function (e) {
+            openHeroMenu(e.currentTarget);
+        });
+        slot.appendChild(row);
+    }
+
+    // Same behavior as the format menu: it stays open while options are toggled.
+    function openHeroMenu(anchor) {
+        const hero = editor.model.Hero;
+        const menu = el('div', 'ch-format-menu ch-hero-menu');
+
+        function apply(change) {
+            change();
+            // A hero without source shows nothing: it is switched off rather than left empty.
+            if (!hero.Sources.length) {
+                hero.Enabled = false;
+            }
+            renderHeroRow();
+            fill();
+        }
+
+        function group(label) {
+            const node = el('div', 'ch-popup-label');
+            node.textContent = label;
+            menu.appendChild(node);
+        }
+
+        function option(kind, className, label, selected, change) {
+            const symbol = kind === 'radio'
+                ? (selected ? 'radio_button_checked' : 'radio_button_unchecked')
+                : (selected ? 'check_box' : 'check_box_outline_blank');
+            const button = el('button', className + (selected ? ' ch-selected' : ''), '<span class="material-icons" aria-hidden="true">' + symbol + '</span><span></span>');
+            button.type = 'button';
+            button.setAttribute('role', kind === 'radio' ? 'menuitemradio' : 'menuitemcheckbox');
+            button.setAttribute('aria-checked', selected ? 'true' : 'false');
+            button.querySelector('span:last-child').textContent = label;
+            button.addEventListener('click', function () {
+                apply(change);
+            });
+            menu.appendChild(button);
+            return button;
+        }
+
+        function fill() {
+            const active = menu.contains(document.activeElement) ? document.activeElement : null;
+            const focused = active ? Array.prototype.indexOf.call(menu.children, active) : -1;
+            const stepperFocus = active && active.parentNode.classList.contains('ch-hero-stepper') ? active.className : null;
+            menu.innerHTML = '';
+            group(t('heroSources'));
+            Object.keys(HERO_SOURCES).forEach(function (source) {
+                option('check', 'ch-hero-source', t(HERO_SOURCES[source].labelKey), hero.Sources.indexOf(source) >= 0, function () {
+                    const index = hero.Sources.indexOf(source);
+                    if (index < 0) {
+                        hero.Sources.push(source);
+                        hero.Enabled = true;
+                    } else {
+                        hero.Sources.splice(index, 1);
+                    }
+                    hero.Sources = normalizeHero(hero).Sources;
+                }).dataset.chSource = source;
+            });
+            menu.appendChild(el('div', 'ch-popup-sep'));
+            group(t('heroCount'));
+            const stepper = el('div', 'ch-hero-stepper');
+            stepper.innerHTML = actionButton('ch-hero-less', t('heroLess'), 'remove') + '<output class="ch-hero-count"></output>' + actionButton('ch-hero-more-count', t('heroMoreCount'), 'add');
+            stepper.querySelector('.ch-hero-count').textContent = String(hero.Count);
+            stepper.querySelector('.ch-hero-less').disabled = hero.Count <= HERO_MIN_COUNT;
+            stepper.querySelector('.ch-hero-more-count').disabled = hero.Count >= HERO_MAX_COUNT;
+            stepper.querySelector('.ch-hero-less').addEventListener('click', function () {
+                apply(function () {
+                    hero.Count = Math.max(HERO_MIN_COUNT, hero.Count - 1);
+                });
+            });
+            stepper.querySelector('.ch-hero-more-count').addEventListener('click', function () {
+                apply(function () {
+                    hero.Count = Math.min(HERO_MAX_COUNT, hero.Count + 1);
+                });
+            });
+            menu.appendChild(stepper);
+            menu.appendChild(el('div', 'ch-popup-sep'));
+            group(t('heroInterval'));
+            // A value saved by another client stays selectable.
+            HERO_INTERVALS.concat(HERO_INTERVALS.indexOf(hero.IntervalSeconds) < 0 ? [hero.IntervalSeconds] : []).forEach(function (seconds) {
+                option('radio', 'ch-hero-interval', seconds > 0 ? t('heroSeconds', seconds) : t('heroIntervalOff'), hero.IntervalSeconds === seconds, function () {
+                    hero.IntervalSeconds = seconds;
+                });
+            });
+            menu.appendChild(el('div', 'ch-popup-sep'));
+            group(t('heroFilters'));
+            option('check', 'ch-hero-exclude-played', t('heroExcludePlayed'), hero.ExcludePlayed, function () {
+                hero.ExcludePlayed = !hero.ExcludePlayed;
+            });
+            option('check', 'ch-hero-require-backdrop', t('heroRequireBackdrop'), hero.RequireBackdrop, function () {
+                hero.RequireBackdrop = !hero.RequireBackdrop;
+            });
+            if (stepperFocus) {
+                const target = Array.prototype.filter.call(stepper.querySelectorAll('button'), function (button) {
+                    return button.className === stepperFocus && !button.disabled;
+                })[0];
+                if (target) {
+                    target.focus();
+                }
+            } else if (focused >= 0 && menu.children[focused] && menu.children[focused].focus) {
+                menu.children[focused].focus();
+            }
+        }
+
+        fill();
+        showPopup(anchor, menu);
+    }
+
     function renderFolderRow(item, index, siblings) {
         const row = el('div', 'ch-row ch-row-folder' + (item.Visible === false ? ' ch-row-hidden' : ''));
         row._item = item;
@@ -2143,6 +2762,7 @@
         side.innerHTML = '';
         const model = editor.model;
         setClass(editor.columns, 'ch-filtered', !!editor.query);
+        renderHeroRow();
 
         model.Items.forEach(function (item, index) {
             if (item.Type === 'folder') {
@@ -2357,6 +2977,8 @@
 
     function showPopup(anchor, node) {
         closePopup();
+        // The tooltip of the button that opens the menu would sit on top of it.
+        hideTooltip();
         popup = node;
         popup.classList.add('ch-popup');
         document.body.appendChild(popup);
@@ -2647,10 +3269,13 @@
                 GenreStyle: item.Key === 'ch:allGenres' ? genreStyleOf(item) : 'posters'
             };
         }
+        const hero = normalizeHero(model.Hero);
+        hero.Enabled = hero.Enabled && hero.Sources.length > 0;
         return {
             Version: 1,
             // A layout with at least one section replaces the default home page.
             HideUnlisted: model.Items.length > 0,
+            Hero: hero,
             Items: model.Items.map(function (item) {
                 if (item.Type === 'folder') {
                     return {
