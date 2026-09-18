@@ -9,6 +9,22 @@
     "imageUrl": "https://raw.githubusercontent.com/leguian/jellyfin-plugins/main/customized-home/logo.png",
     "versions": [
       {
+        "version": "1.1.0.0",
+        "changelog": "Sections rendered by the plugin (combined continue watching / next up, latest by release date, collections, watch again, because you watched, genre), per-section display format (shape, size, titles), search in the editor, administration page with Options / Layouts tabs, plugin logo.",
+        "targetAbi": "12.0.0.0",
+        "sourceUrl": "https://github.com/leguian/jellyfin-plugins/releases/download/customized-home-v1.1.0.0/customized-home_1.1.0.0_jellyfin-12.zip",
+        "checksum": "435a257978f34b0d25e960017c680c74",
+        "timestamp": "2026-09-18T11:28:58Z"
+      },
+      {
+        "version": "1.1.0.0",
+        "changelog": "Sections rendered by the plugin (combined continue watching / next up, latest by release date, collections, watch again, because you watched, genre), per-section display format (shape, size, titles), search in the editor, administration page with Options / Layouts tabs, plugin logo.",
+        "targetAbi": "10.11.0.0",
+        "sourceUrl": "https://github.com/leguian/jellyfin-plugins/releases/download/customized-home-v1.1.0.0/customized-home_1.1.0.0_jellyfin-10.11.zip",
+        "checksum": "6c11780397a7820138036326ee2fcb2f",
+        "timestamp": "2026-09-18T11:28:58Z"
+      },
+      {
         "version": "1.0.0.0",
         "changelog": "Initial release.",
         "targetAbi": "12.0.0.0",
