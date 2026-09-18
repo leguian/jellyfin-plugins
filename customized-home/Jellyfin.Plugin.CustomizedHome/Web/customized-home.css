@@ -585,6 +585,11 @@
     color: inherit;
 }
 
+/* Positioning context for the absolute children below: do not depend on the web client stylesheet for it. */
+.ch-card .cardScalable {
+    position: relative;
+}
+
 .ch-card .cardDefaultText {
     position: absolute;
     inset: 0;
@@ -882,4 +887,23 @@
 
 .ch-act-remove:hover {
     color: #ff7b7b;
+}
+
+/* Genre picker (genre section) */
+.ch-genre-picker {
+    min-width: 16em;
+    max-height: 50vh;
+}
+
+.ch-genre-option {
+    display: flex;
+    align-items: center;
+    gap: 0.6em;
+    padding: 0.45em 0.8em;
+    border-radius: 0.4em;
+    cursor: pointer;
+}
+
+.ch-genre-option:hover {
+    background: color-mix(in srgb, currentColor 10%, transparent);
 }

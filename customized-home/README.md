@@ -75,12 +75,13 @@ La disposition par défaut s'édite dans l'onglet **Layouts** avec le même édi
 
 ## Sections reconnues
 
-Clés stables utilisées dans les dispositions (`GET /CustomizedHome/Catalog`) :
+Clés stables utilisées dans les dispositions (`GET /CustomizedHome/Catalog`). Les sections Home Screen Sections ne sont listées que si ce plugin est installé sur le serveur :
 
 | Origine | Clés | Libellé FR |
 | --- | --- | --- |
 | Customized Home | `ch:combined`, `ch:latestMovies`, `ch:latestShows`, `ch:collections`, `ch:watchAgain` | Continuer à regarder / À suivre, Derniers films (date de sortie), Dernières séries (date de sortie), Collections, Regarder à nouveau |
-| Customized Home | `ch:becauseYouWatched`, `ch:genre` (familles) | Parce que vous avez regardé {0} (3 derniers visionnages, items similaires), Genre : {0} (2 genres pondérés par l'historique) |
+| Customized Home | `ch:becauseYouWatched`, `ch:genre` (familles) | Parce que vous avez regardé {0} (3 derniers visionnages, items similaires), Genre : {0} (une ligne par genre choisi via bouton format → Choisir les genres ; sans choix, 2 genres pondérés par l'historique) |
+| Customized Home | `ch:allGenres` | Tous les genres : une carte par genre, clic = liste des médias du genre |
 | jellyfin-web | `jf:smalllibrarytiles`, `jf:librarybuttons` | Mes médias, Mes médias (petit) |
 | jellyfin-web | `jf:resume`, `jf:resumeaudio`, `jf:resumebook`, `jf:nextup` | Continuer de regarder, Reprendre l'écoute, Reprendre la lecture, À suivre |
 | jellyfin-web | `jf:latestmedia:<idMédiathèque>` | « <Médiathèque>, ajouts récents » (une clé par médiathèque) |

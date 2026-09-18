@@ -64,6 +64,11 @@ public sealed class SectionDefinition
 public static class SectionCatalog
 {
     /// <summary>
+    /// Origin value of the sections rendered by the Home Screen Sections plugin.
+    /// </summary>
+    public const string HomeScreenSectionsOrigin = "hss";
+
+    /// <summary>
     /// Gets every known section.
     /// </summary>
     public static IReadOnlyList<SectionDefinition> All { get; } = new List<SectionDefinition>
@@ -76,6 +81,7 @@ public static class SectionCatalog
         new("ch:watchAgain", "customized", "general", "Watch Again", "Regarder à nouveau"),
         new("ch:becauseYouWatched", "customized", "general", "Because You Watched {0}", "Parce que vous avez regardé {0}", isFamily: true),
         new("ch:genre", "customized", "general", "Genre: {0}", "Genre : {0}", isFamily: true),
+        new("ch:allGenres", "customized", "general", "All genres", "Tous les genres"),
 
         // Built-in jellyfin-web sections (keys mirror the "homesectionN" user setting values).
         new("jf:smalllibrarytiles", "jellyfin", "general", "My Media", "Mes médias"),

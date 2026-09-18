@@ -5,6 +5,7 @@ using System.Diagnostics.CodeAnalysis;
 using System.IO;
 using System.Linq;
 using System.Reflection;
+using System.Runtime.Loader;
 using System.Security.Cryptography;
 using Jellyfin.Plugin.CustomizedHome.Configuration;
 using Jellyfin.Plugin.CustomizedHome.Helpers;
@@ -28,6 +29,7 @@ public class CustomizedHomeController : ControllerBase
 {
     private const string UserIdClaim = "Jellyfin-UserId";
     private const string AdministratorRole = "Administrator";
+    private const string HomeScreenSectionsAssemblyName = "Jellyfin.Plugin.HomeScreenSections";
 
     private static readonly ConcurrentDictionary<string, CachedAsset> AssetCache = new(StringComparer.Ordinal);
 
@@ -234,9 +236,18 @@ public class CustomizedHomeController : ControllerBase
     [HttpGet("Catalog")]
     [Authorize]
     [ProducesResponseType(StatusCodes.Status200OK)]
+    [SuppressMessage("Performance", "CA1822:Mark members as static", Justification = "MVC action method.")]
     public ActionResult<IReadOnlyList<SectionDefinition>> GetCatalog()
     {
-        return Ok(SectionCatalog.All);
+        if (IsHomeScreenSectionsInstalled())
+        {
+            return Ok(SectionCatalog.All);
+        }
+
+        // Without the Home Screen Sections plugin its sections can never be rendered: keep them out of the editor.
+        return Ok(SectionCatalog.All
+            .Where(definition => !string.Equals(definition.Origin, SectionCatalog.HomeScreenSectionsOrigin, StringComparison.Ordinal))
+            .ToList());
     }
 
     /// <summary>
@@ -280,6 +291,13 @@ public class CustomizedHomeController : ControllerBase
         }
 
         return Ok(layouts.OrderBy(info => info.UserName, StringComparer.OrdinalIgnoreCase).ToList());
+    }
+
+    private static bool IsHomeScreenSectionsInstalled()
+    {
+        return AssemblyLoadContext.All
+            .SelectMany(context => context.Assemblies)
+            .Any(assembly => string.Equals(assembly.GetName().Name, HomeScreenSectionsAssemblyName, StringComparison.Ordinal));
     }
 
     private static CachedAsset LoadAsset(string suffix)

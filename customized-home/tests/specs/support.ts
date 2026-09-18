@@ -21,6 +21,7 @@ export interface LayoutSection {
     Shape?: string;
     Size?: string;
     ShowTitle?: boolean;
+    Genres?: string[];
 }
 
 export interface Layout {
@@ -63,6 +64,7 @@ function entry(key: string, origin: CatalogEntry['Origin'], label: string, isFam
 export const CATALOG: CatalogEntry[] = [
     entry('ch:combined', 'customized', 'Continue Watching / Next Up'),
     entry('ch:genre', 'customized', 'Genre: {0}', true),
+    entry('ch:allGenres', 'customized', 'All genres'),
     entry('jf:smalllibrarytiles', 'jellyfin', 'My Media'),
     entry('jf:resume', 'jellyfin', 'Continue Watching'),
     entry('jf:resumeaudio', 'jellyfin', 'Continue Listening'),
@@ -74,9 +76,16 @@ export const CATALOG: CatalogEntry[] = [
 
 export const EMPTY_LAYOUT: Layout = { Version: 1, HideUnlisted: false, Items: [] };
 
+export const GENRES = [
+    { Id: 'genre-action', Name: 'Action', Type: 'Genre' },
+    { Id: 'genre-comedy', Name: 'Comedy', Type: 'Genre' },
+    { Id: 'genre-drama', Name: 'Drama', Type: 'Genre' }
+];
+
 function mockState(options: MockOptions): Record<string, unknown> {
     return {
         catalog: CATALOG,
+        genres: GENRES,
         defaultLayout: options.defaultLayout ?? EMPTY_LAYOUT,
         // The administration page reads the default layout summary from the plugin configuration.
         pluginConfiguration: { DefaultLayout: options.defaultLayout ?? EMPTY_LAYOUT },
