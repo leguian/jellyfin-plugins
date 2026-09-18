@@ -9,6 +9,22 @@
     "imageUrl": "https://raw.githubusercontent.com/leguian/jellyfin-plugins/main/customized-home/logo.png",
     "versions": [
       {
+        "version": "1.6.0.0",
+        "changelog": "\"All genres\" section: choose the look of the cards from the format menu - posters of the genre, custom images uploaded by the administrator, or genre names on colored backgrounds.",
+        "targetAbi": "12.0.0.0",
+        "sourceUrl": "https://github.com/leguian/jellyfin-plugins/releases/download/customized-home-v1.6.0.0/customized-home_1.6.0.0_jellyfin-12.zip",
+        "checksum": "95879387df7c2d5f9ee2433ac2c196a1",
+        "timestamp": "2026-09-18T17:22:00Z"
+      },
+      {
+        "version": "1.6.0.0",
+        "changelog": "\"All genres\" section: choose the look of the cards from the format menu - posters of the genre, custom images uploaded by the administrator, or genre names on colored backgrounds.",
+        "targetAbi": "10.11.0.0",
+        "sourceUrl": "https://github.com/leguian/jellyfin-plugins/releases/download/customized-home-v1.6.0.0/customized-home_1.6.0.0_jellyfin-10.11.zip",
+        "checksum": "f0bcdc798883bb5e37a7efe2ba45c079",
+        "timestamp": "2026-09-18T17:22:00Z"
+      },
+      {
         "version": "1.5.0.0",
         "changelog": "Editor: tooltips on every icon, legend and new pictograms (house = Customized Home section, Jellyfin logo = default section), section title can be hidden, format menu stays open while picking several options, sections rendered by the plugin are always listed. Genre cards now show a poster shaped collage of four distinct posters; administrators can upload a thumbnail per genre (new Genres tab).",
         "targetAbi": "12.0.0.0",
