@@ -13,7 +13,7 @@
         return;
     }
 
-    const VERSION = '1.3.0';
+    const VERSION = '1.4.0';
     const API = 'CustomizedHome';
     const ORDER_STEP = 1000;
     const ORDER_UNLISTED_BASE = 1000000000;
@@ -80,6 +80,13 @@
             int_latestShows: 'Latest Shows',
             int_collections: 'Collections',
             int_watchAgain: 'Watch Again',
+            int_allGenres: 'All genres',
+            genres: 'Genres',
+            chooseGenres: 'Choose genres',
+            genresAuto: 'Automatic (from your watch history)',
+            genresCount: '{0} genre(s)',
+            genresLoading: 'Loading genres…',
+            genresNone: 'No genre found in your libraries.',
             becauseYouWatched: 'Because you watched {0}',
             genreTitle: 'Genre: {0}',
             format: 'Display format',
@@ -149,6 +156,13 @@
             int_latestShows: 'Dernières séries',
             int_collections: 'Collections',
             int_watchAgain: 'Regarder à nouveau',
+            int_allGenres: 'Tous les genres',
+            genres: 'Genres',
+            chooseGenres: 'Choisir les genres',
+            genresAuto: 'Automatique (selon votre historique)',
+            genresCount: '{0} genre(s)',
+            genresLoading: 'Chargement des genres…',
+            genresNone: 'Aucun genre trouvé dans vos médiathèques.',
             becauseYouWatched: 'Parce que vous avez regardé {0}',
             genreTitle: 'Genre : {0}',
             format: "Format d'affichage",
@@ -491,7 +505,23 @@
             });
     }
 
-    function fetchGenre() {
+    const AUTO_GENRE_ROWS = 2;
+    const GENRE_ROW_ITEMS = 16;
+
+    function fetchGenreList() {
+        const client = apiClient();
+        return client.getJSON(client.getUrl('Genres', {
+            userId: currentUserId(),
+            sortBy: 'SortName',
+            includeItemTypes: 'Movie,Series',
+            recursive: true,
+            enableTotalRecordCount: false
+        })).then(function (result) {
+            return (result && result.Items) || [];
+        });
+    }
+
+    function autoGenres() {
         return itemsQuery({ includeItemTypes: 'Movie,Series', recursive: true, isPlayed: true, sortBy: 'DatePlayed', sortOrder: 'Descending', limit: 100, fields: 'Genres' })
             .then(function (played) {
                 const counts = {};
@@ -506,25 +536,32 @@
                 if (weighted.length) {
                     return weighted;
                 }
-                const client = apiClient();
-                return client.getJSON(client.getUrl('Genres', { userId: currentUserId(), limit: 30, sortBy: 'SortName' }))
-                    .then(function (result) {
-                        return ((result && result.Items) || []).map(function (genre) {
-                            return genre.Name;
-                        });
-                    })
-                    .catch(function () {
-                        return [];
+                return fetchGenreList().then(function (genres) {
+                    return genres.map(function (genre) {
+                        return genre.Name;
                     });
+                }).catch(function () {
+                    return [];
+                });
             })
             .then(function (pool) {
                 const remaining = pool.slice();
                 const chosen = [];
-                while (chosen.length < 2 && remaining.length) {
+                while (chosen.length < AUTO_GENRE_ROWS && remaining.length) {
                     chosen.push(remaining.splice(Math.floor(Math.random() * remaining.length), 1)[0]);
                 }
-                return Promise.all(chosen.map(function (genre) {
-                    return itemsQuery({ genres: genre, includeItemTypes: 'Movie,Series', recursive: true, sortBy: 'Random', limit: 16 })
+                return chosen;
+            });
+    }
+
+    // One row per genre: the genres chosen in the editor, or an automatic pick from the watch history.
+    function fetchGenre(item) {
+        const selected = (item && item.Genres) || [];
+        const source = selected.length ? Promise.resolve(selected) : autoGenres();
+        return source
+            .then(function (genres) {
+                return Promise.all(genres.map(function (genre) {
+                    return itemsQuery({ genres: genre, includeItemTypes: 'Movie,Series', recursive: true, sortBy: 'Random', limit: GENRE_ROW_ITEMS })
                         .then(function (items) {
                             return { title: t('genreTitle', genre), items: items };
                         })
@@ -538,6 +575,11 @@
                     return instance.items.length > 0;
                 });
             });
+    }
+
+    // Settings of a layout entry that change what an integrated section fetches.
+    function dataSignature(item) {
+        return ((item && item.Genres) || []).join('|');
     }
 
     const INTEGRATED = {
@@ -555,7 +597,8 @@
             return itemsQuery({ includeItemTypes: 'Movie,Series', recursive: true, isPlayed: true, sortBy: 'DatePlayed', sortOrder: 'Descending', limit: 16 });
         } },
         'ch:becauseYouWatched': { titleKey: 'becauseYouWatched', shape: 'portrait', family: true, fetchInstances: fetchBecauseYouWatched },
-        'ch:genre': { titleKey: 'genreTitle', shape: 'portrait', family: true, fetchInstances: fetchGenre }
+        'ch:genre': { titleKey: 'genreTitle', shape: 'portrait', family: true, fetchInstances: fetchGenre },
+        'ch:allGenres': { titleKey: 'int_allGenres', shape: 'landscape', fetch: fetchGenreList }
     };
 
     function imageUrlFor(item, shape) {
@@ -630,7 +673,9 @@
         const shapeClass = shape === 'landscape' ? 'overflowBackdropCard' : (shape === 'square' ? 'overflowSquareCard' : 'overflowPortraitCard');
         const padder = shape === 'landscape' ? 'cardPadder-overflowBackdrop' : (shape === 'square' ? 'cardPadder-overflowSquare' : 'cardPadder-overflowPortrait');
         const image = imageUrlFor(item, shape);
-        const href = '#/details?id=' + encodeURIComponent(item.Id) + '&serverId=' + encodeURIComponent(serverId);
+        const href = item.Type === 'Genre'
+            ? '#/list?genreId=' + encodeURIComponent(item.Id) + '&serverId=' + encodeURIComponent(serverId)
+            : '#/details?id=' + encodeURIComponent(item.Id) + '&serverId=' + encodeURIComponent(serverId);
         const isEpisode = item.Type === 'Episode';
         const title = isEpisode ? (item.SeriesName || item.Name || '') : (item.Name || '');
         let secondary = '';
@@ -732,29 +777,37 @@
         });
         Object.keys(wanted).forEach(function (key) {
             const known = registry[key];
+            const signature = dataSignature(wanted[key]);
             if (known) {
                 // The web client may have wiped the container (settings change, navigation): render again.
                 const missing = !known.loading && known.count > 0 && !container.querySelector('[data-ch-key="' + key + '"]');
-                if (!missing) {
+                const changed = known.signature !== signature;
+                if (!missing && !changed) {
                     return;
+                }
+                if (changed) {
+                    Array.prototype.forEach.call(container.querySelectorAll(':scope > [data-ch-key="' + key + '"]'), function (node) {
+                        node.remove();
+                    });
                 }
                 delete registry[key];
             }
             const definition = INTEGRATED[key];
-            const entry = { loading: true, count: 0 };
+            const entry = { loading: true, count: 0, signature: signature };
             registry[key] = entry;
-            const cached = state.integratedCache[key];
+            const cacheKey = key + '#' + signature;
+            const cached = state.integratedCache[cacheKey];
             let dataPromise;
             if (cached && Date.now() - cached.ts < INTEGRATED_CACHE_MS) {
                 dataPromise = Promise.resolve(cached.data);
             } else {
                 const load = definition.family
-                    ? definition.fetchInstances()
+                    ? definition.fetchInstances(wanted[key])
                     : definition.fetch().then(function (items) {
                         return [{ title: t(definition.titleKey), items: items }];
                     });
                 dataPromise = load.then(function (data) {
-                    state.integratedCache[key] = { ts: Date.now(), data: data };
+                    state.integratedCache[cacheKey] = { ts: Date.now(), data: data };
                     return data;
                 });
             }
@@ -1715,6 +1768,9 @@
         if (item.ShowTitle === false) {
             parts.push(t('noTitles'));
         }
+        if (item.Key === 'ch:genre' && item.Genres && item.Genres.length) {
+            parts.push(t('genresCount', item.Genres.length));
+        }
         return parts.join(' · ');
     }
 
@@ -1756,7 +1812,66 @@
         option(item.ShowTitle === false ? 'check_box_outline_blank' : 'check_box', t('showTitles'), false, function () {
             item.ShowTitle = item.ShowTitle === false;
         });
+        if (item.Key === 'ch:genre') {
+            menu.appendChild(el('div', 'ch-popup-sep'));
+            group(t('genres') + ' · ' + (item.Genres && item.Genres.length ? t('genresCount', item.Genres.length) : t('genresAuto')));
+            const choose = el('button', 'ch-act-genres', '<span class="material-icons" aria-hidden="true">category</span><span></span>');
+            choose.type = 'button';
+            choose.querySelector('span:last-child').textContent = t('chooseGenres');
+            choose.addEventListener('click', function () {
+                closePopup();
+                openGenrePicker(anchor, item);
+            });
+            menu.appendChild(choose);
+        }
         showPopup(anchor, menu);
+    }
+
+    function openGenrePicker(anchor, item) {
+        const picker = el('div', 'ch-genre-picker');
+        const status = el('div', 'ch-popup-label');
+        status.textContent = t('genresLoading');
+        picker.appendChild(status);
+        showPopup(anchor, picker);
+        const opened = popup;
+
+        fetchGenreList().then(function (genres) {
+            if (popup !== opened) {
+                return;
+            }
+            if (!genres.length) {
+                status.textContent = t('genresNone');
+                return;
+            }
+            item.Genres = item.Genres || [];
+            function refreshStatus() {
+                status.textContent = item.Genres.length ? t('genresCount', item.Genres.length) : t('genresAuto');
+            }
+            refreshStatus();
+            genres.forEach(function (genre) {
+                const label = el('label', 'ch-genre-option');
+                const input = el('input');
+                input.type = 'checkbox';
+                input.checked = item.Genres.indexOf(genre.Name) >= 0;
+                const text = el('span');
+                text.textContent = genre.Name;
+                label.appendChild(input);
+                label.appendChild(text);
+                input.addEventListener('change', function () {
+                    const index = item.Genres.indexOf(genre.Name);
+                    if (input.checked && index < 0) {
+                        item.Genres.push(genre.Name);
+                    } else if (!input.checked && index >= 0) {
+                        item.Genres.splice(index, 1);
+                    }
+                    refreshStatus();
+                    renderEditor();
+                });
+                picker.appendChild(label);
+            });
+        }).catch(function () {
+            status.textContent = t('genresNone');
+        });
     }
 
     function renderFolderRow(item, index, siblings) {
@@ -2231,7 +2346,8 @@
                 Visible: item.Visible !== false,
                 Shape: item.Shape || 'auto',
                 Size: item.Size || 'normal',
-                ShowTitle: item.ShowTitle !== false
+                ShowTitle: item.ShowTitle !== false,
+                Genres: item.Key === 'ch:genre' ? (item.Genres || []) : []
             };
         }
         return {

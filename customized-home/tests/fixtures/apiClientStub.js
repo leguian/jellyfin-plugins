@@ -10,6 +10,7 @@
         defaultLayout: { Version: 1, HideUnlisted: false, Items: [] },
         catalog: [],
         userLayouts: [],
+        genres: [],
         pluginConfiguration: {},
         status: {
             PluginVersion: '0.0.0.0',
@@ -50,6 +51,23 @@
         }
         if (path === 'CustomizedHome/UserLayouts') {
             return mock.userLayouts;
+        }
+        if (path === 'Genres') {
+            return { Items: mock.genres };
+        }
+        if (path === 'Items') {
+            // Items of one genre: two movies named after it. Any other item query (history...) is empty.
+            const match = /[?&]genres=([^&]+)/.exec(url);
+            if (!match) {
+                return { Items: [] };
+            }
+            const genre = decodeURIComponent(match[1]);
+            return {
+                Items: [
+                    { Id: 'item-' + genre + '-1', Name: genre + ' One', Type: 'Movie', ProductionYear: 2020 },
+                    { Id: 'item-' + genre + '-2', Name: genre + ' Two', Type: 'Movie', ProductionYear: 2021 }
+                ]
+            };
         }
         return { Items: [] };
     }

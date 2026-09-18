@@ -64,6 +64,13 @@ public class LayoutItem
     public bool ShowTitle { get; set; } = true;
 
     /// <summary>
+    /// Gets or sets the genres displayed by the genre section, one row per genre (section <c>ch:genre</c> only).
+    /// Empty means automatic: genres picked from the watch history of the user.
+    /// </summary>
+    [XmlArrayItem("Genre")]
+    public List<string> Genres { get; set; } = new List<string>();
+
+    /// <summary>
     /// Gets or sets the folder members (folders only).
     /// </summary>
     [XmlArrayItem("Item")]

@@ -16,6 +16,8 @@ public static partial class LayoutValidator
     private const int MaxNameLength = 100;
     private const int MaxLabelLength = 200;
     private const int MaxIconLength = 64;
+    private const int MaxGenres = 20;
+    private const int MaxGenreLength = 100;
 
     /// <summary>
     /// Validates a layout and returns a normalized copy.
@@ -142,8 +144,36 @@ public static partial class LayoutValidator
             Visible = item.Visible,
             Shape = NormalizeChoice(item.Shape, LayoutFormats.Shapes, LayoutFormats.ShapeAuto),
             Size = NormalizeChoice(item.Size, LayoutFormats.Sizes, LayoutFormats.SizeNormal),
-            ShowTitle = item.ShowTitle
+            ShowTitle = item.ShowTitle,
+            Genres = NormalizeGenres(item.Genres)
         };
+    }
+
+    private static List<string> NormalizeGenres(List<string>? genres)
+    {
+        List<string> result = new();
+        if (genres is null)
+        {
+            return result;
+        }
+
+        HashSet<string> seen = new(StringComparer.OrdinalIgnoreCase);
+        foreach (string genre in genres)
+        {
+            string? name = Truncate(genre?.Trim(), MaxGenreLength);
+            if (string.IsNullOrEmpty(name) || !seen.Add(name))
+            {
+                continue;
+            }
+
+            result.Add(name);
+            if (result.Count >= MaxGenres)
+            {
+                break;
+            }
+        }
+
+        return result;
     }
 
     private static string NormalizeChoice(string? value, string[] allowed, string fallback)
