@@ -5,6 +5,7 @@ using System.Linq;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
+using Jellyfin.Plugin.CustomizedHome.Models;
 using MediaBrowser.Common.Configuration;
 using Microsoft.Extensions.Logging;
 
@@ -12,6 +13,7 @@ namespace Jellyfin.Plugin.CustomizedHome.Services;
 
 /// <summary>
 /// Stores the thumbnails uploaded by administrators for the genre cards, in the plugin configuration folder.
+/// A genre can have one thumbnail per card shape (portrait, landscape, square).
 /// Files are named after a hash of the genre name, never after user input.
 /// </summary>
 public sealed partial class GenreImageStore
@@ -44,25 +46,45 @@ public sealed partial class GenreImageStore
     }
 
     /// <summary>
-    /// Lists the genres that have a custom thumbnail.
+    /// Gets the card shapes a thumbnail can be uploaded for.
     /// </summary>
-    /// <returns>The entries, ordered by genre name.</returns>
+    public static IReadOnlyList<string> Shapes { get; } = [LayoutFormats.ShapePortrait, LayoutFormats.ShapeLandscape, LayoutFormats.ShapeSquare];
+
+    /// <summary>
+    /// Normalizes a card shape; anything unknown is the portrait shape.
+    /// </summary>
+    /// <param name="shape">The requested shape.</param>
+    /// <returns>One of <see cref="Shapes"/>.</returns>
+    public static string NormalizeShape(string? shape)
+    {
+        string? candidate = shape?.Trim();
+        return Shapes.FirstOrDefault(known => string.Equals(known, candidate, StringComparison.OrdinalIgnoreCase)) ?? LayoutFormats.ShapePortrait;
+    }
+
+    /// <summary>
+    /// Lists the custom thumbnails.
+    /// </summary>
+    /// <returns>The entries, ordered by genre name then shape.</returns>
     public IReadOnlyList<GenreImageEntry> List()
     {
         lock (_lock)
         {
-            return LoadIndex().Values.OrderBy(entry => entry.Name, StringComparer.OrdinalIgnoreCase).ToList();
+            return LoadIndex().Values
+                .OrderBy(entry => entry.Name, StringComparer.OrdinalIgnoreCase)
+                .ThenBy(entry => entry.Shape, StringComparer.Ordinal)
+                .ToList();
         }
     }
 
     /// <summary>
-    /// Saves the thumbnail of a genre, replacing any previous one.
+    /// Saves the thumbnail of a genre for a card shape, replacing any previous one.
     /// </summary>
     /// <param name="genreName">The genre name.</param>
+    /// <param name="shape">The card shape.</param>
     /// <param name="data">The image bytes.</param>
     /// <param name="error">The reason when the image is rejected.</param>
     /// <returns>The stored entry, or <c>null</c> when rejected.</returns>
-    public GenreImageEntry? Save(string? genreName, byte[] data, out string? error)
+    public GenreImageEntry? Save(string? genreName, string? shape, byte[] data, out string? error)
     {
         ArgumentNullException.ThrowIfNull(data);
         error = null;
@@ -87,24 +109,28 @@ public sealed partial class GenreImageStore
             return null;
         }
 
+        string normalizedShape = NormalizeShape(shape);
         lock (_lock)
         {
             Dictionary<string, GenreImageEntry> index = LoadIndex();
-            string key = KeyOf(name);
+            string key = KeyOf(name, normalizedShape);
             Directory.CreateDirectory(_directory);
-            DeleteFiles(key);
 
-            string fileName = key + format.Extension;
+            index.TryGetValue(key, out GenreImageEntry? previous);
+            DeleteFile(previous);
+
+            // Both parts come from this class: a hash and a known shape name.
+            string fileName = HashOf(name) + "-" + normalizedShape + format.Extension;
             File.WriteAllBytes(Path.Combine(_directory, fileName), data);
 
             // Strictly increasing: the version is part of the image URL, which clients cache for good.
-            long previousVersion = index.TryGetValue(key, out GenreImageEntry? previous) ? previous.Version : 0;
             GenreImageEntry entry = new()
             {
                 Name = name,
+                Shape = normalizedShape,
                 FileName = fileName,
                 ContentType = format.ContentType,
-                Version = Math.Max(DateTime.UtcNow.Ticks, previousVersion + 1)
+                Version = Math.Max(DateTime.UtcNow.Ticks, (previous?.Version ?? 0) + 1)
             };
             index[key] = entry;
             SaveIndex(index);
@@ -113,11 +139,12 @@ public sealed partial class GenreImageStore
     }
 
     /// <summary>
-    /// Deletes the thumbnail of a genre.
+    /// Deletes the thumbnail of a genre for a card shape.
     /// </summary>
     /// <param name="genreName">The genre name.</param>
+    /// <param name="shape">The card shape.</param>
     /// <returns><c>true</c> when a thumbnail existed.</returns>
-    public bool Delete(string? genreName)
+    public bool Delete(string? genreName, string? shape)
     {
         string? name = NormalizeName(genreName);
         if (name is null)
@@ -128,24 +155,25 @@ public sealed partial class GenreImageStore
         lock (_lock)
         {
             Dictionary<string, GenreImageEntry> index = LoadIndex();
-            string key = KeyOf(name);
-            if (!index.Remove(key))
+            string key = KeyOf(name, NormalizeShape(shape));
+            if (!index.Remove(key, out GenreImageEntry? entry))
             {
                 return false;
             }
 
-            DeleteFiles(key);
+            DeleteFile(entry);
             SaveIndex(index);
             return true;
         }
     }
 
     /// <summary>
-    /// Opens the thumbnail of a genre.
+    /// Opens the thumbnail of a genre for a card shape.
     /// </summary>
     /// <param name="genreName">The genre name.</param>
-    /// <returns>The bytes and content type, or <c>null</c> when the genre has no thumbnail.</returns>
-    public (byte[] Data, string ContentType)? Read(string? genreName)
+    /// <param name="shape">The card shape.</param>
+    /// <returns>The bytes and content type, or <c>null</c> when there is no thumbnail for that shape.</returns>
+    public (byte[] Data, string ContentType)? Read(string? genreName, string? shape)
     {
         string? name = NormalizeName(genreName);
         if (name is null)
@@ -155,13 +183,12 @@ public sealed partial class GenreImageStore
 
         lock (_lock)
         {
-            if (!LoadIndex().TryGetValue(KeyOf(name), out GenreImageEntry? entry))
+            if (!LoadIndex().TryGetValue(KeyOf(name, NormalizeShape(shape)), out GenreImageEntry? entry))
             {
                 return null;
             }
 
-            // The file name comes from the index written by this class, never from the request.
-            string path = Path.Combine(_directory, Path.GetFileName(entry.FileName));
+            string path = PathOf(entry);
             return File.Exists(path) ? (File.ReadAllBytes(path), entry.ContentType) : null;
         }
     }
@@ -172,22 +199,34 @@ public sealed partial class GenreImageStore
         return string.IsNullOrEmpty(name) || name.Length > MaxGenreNameLength ? null : name;
     }
 
-    private static string KeyOf(string name)
+    private static string HashOf(string name)
     {
         byte[] hash = SHA256.HashData(Encoding.UTF8.GetBytes(name.ToUpperInvariant()));
         return Convert.ToHexString(hash)[..32];
     }
 
-    private void DeleteFiles(string key)
+    private static string KeyOf(string name, string shape)
     {
-        if (!Directory.Exists(_directory))
+        return HashOf(name) + ":" + shape;
+    }
+
+    // The file name comes from the index written by this class, never from a request; GetFileName is a second guard.
+    private string PathOf(GenreImageEntry entry)
+    {
+        return Path.Combine(_directory, Path.GetFileName(entry.FileName));
+    }
+
+    private void DeleteFile(GenreImageEntry? entry)
+    {
+        if (entry is null || string.IsNullOrEmpty(entry.FileName))
         {
             return;
         }
 
-        foreach (string file in Directory.EnumerateFiles(_directory, key + ".*"))
+        string path = PathOf(entry);
+        if (File.Exists(path))
         {
-            File.Delete(file);
+            File.Delete(path);
         }
     }
 
@@ -206,9 +245,17 @@ public sealed partial class GenreImageStore
             {
                 using FileStream stream = File.OpenRead(path);
                 Dictionary<string, GenreImageEntry>? stored = JsonSerializer.Deserialize<Dictionary<string, GenreImageEntry>>(stream, JsonOptions);
-                if (stored is not null)
+                foreach (GenreImageEntry entry in stored?.Values ?? Enumerable.Empty<GenreImageEntry>())
                 {
-                    _index = new Dictionary<string, GenreImageEntry>(stored, StringComparer.Ordinal);
+                    string? name = NormalizeName(entry.Name);
+                    if (name is null)
+                    {
+                        continue;
+                    }
+
+                    // Entries written before shapes existed carry no shape: they were poster thumbnails.
+                    entry.Shape = NormalizeShape(entry.Shape);
+                    _index[KeyOf(name, entry.Shape)] = entry;
                 }
             }
             catch (JsonException ex)
@@ -280,6 +327,11 @@ public class GenreImageEntry
     /// Gets or sets the genre name.
     /// </summary>
     public string Name { get; set; } = string.Empty;
+
+    /// <summary>
+    /// Gets or sets the card shape the thumbnail is meant for: portrait, landscape or square.
+    /// </summary>
+    public string Shape { get; set; } = string.Empty;
 
     /// <summary>
     /// Gets or sets the stored file name (internal, hash based).

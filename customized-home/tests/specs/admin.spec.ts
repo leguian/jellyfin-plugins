@@ -96,37 +96,55 @@ test('layouts tab has no "not displayed" toggle: there is no home page under the
     expect((await rowTitles(page, `${EDITOR} .ch-unlisted`)).length).toBeGreaterThan(0);
 });
 
-test('genres tab uploads, replaces and removes a genre thumbnail', async ({ page }) => {
-    await openAdminPage(page);
+test('genres tab shows the optimal sizes and handles one thumbnail per card shape', async ({ page }) => {
+    await openAdminPage(page, { genreImages: [{ Name: 'Comedy', Shape: 'portrait', Version: 4 }] });
     await page.click('#chTabGenres');
     await expect(page.locator('#chTabGenres')).toHaveAttribute('aria-selected', 'true');
     await expect(page.locator('#chTabLayouts')).toHaveAttribute('aria-selected', 'false');
     await expect(page.locator('#chPanelLayouts')).toBeHidden();
+    await expect(page.locator('#chGenreSpecs .cha-spec')).toHaveText([
+        /Poster · 2:3.*Optimal size: 600 × 900 px/, /Landscape · 16:9.*Optimal size: 960 × 540 px/, /Square · 1:1.*Optimal size: 600 × 600 px/
+    ]);
+
     await expect(page.locator('#chGenres .cha-genre')).toHaveCount(3);
     const comedy = page.locator('#chGenres .cha-genre', { hasText: 'Comedy' });
-    await expect(comedy.locator('.cha-genre-thumb')).toHaveText('Poster collage');
+    await expect(comedy.locator('.cha-slot')).toHaveCount(3);
+    const poster = comedy.locator('.cha-slot[data-shape="portrait"] .cha-genre-thumb');
+    await expect(poster).toHaveClass(/cha-has-image/);
+    // Surfaces derive from currentColor: the slot must keep a visible background even if the image fails to load.
+    expect(await poster.evaluate((node) => getComputedStyle(node).backgroundColor)).not.toMatch(/\/ 0\)$|rgba\(0, 0, 0, 0\)/);
+    const landscape = comedy.locator('.cha-slot[data-shape="landscape"]');
+    await expect(landscape.locator('.cha-genre-thumb')).toHaveText('16:9');
+    // Each slot previews its own ratio.
+    const ratio = await landscape.locator('.cha-genre-thumb').evaluate((node) => {
+        const box = node.getBoundingClientRect();
+        return box.width / box.height;
+    });
+    expect(ratio).toBeCloseTo(16 / 9, 1);
 
     // Smallest valid PNG (1 x 1).
     const png = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==', 'base64');
     const chooser = page.waitForEvent('filechooser');
-    await comedy.locator('.chGenreUpload').click();
+    await landscape.locator('.chGenreUpload').click();
     await (await chooser).setFiles({ name: 'comedy.png', mimeType: 'image/png', buffer: png });
 
-    await expect(comedy.locator('.cha-genre-thumb')).toHaveClass(/cha-has-image/);
+    await expect(landscape.locator('.cha-genre-thumb')).toHaveClass(/cha-has-image/);
     const upload = (await recordedRequests(page)).find((request) => request.method === 'POST' && request.path === 'CustomizedHome/GenreImages');
-    expect(upload?.body).toMatchObject({ Name: 'Comedy', Data: png.toString('base64') });
+    expect(upload?.body).toMatchObject({ Name: 'Comedy', Shape: 'landscape', Data: png.toString('base64') });
 
+    // Removing one shape leaves the others alone.
     page.once('dialog', (dialog) => void dialog.accept());
-    await comedy.locator('.chGenreRemove').click();
-    await expect(comedy.locator('.cha-genre-thumb')).toHaveText('Poster collage');
-    await expect(comedy.locator('.chGenreRemove')).toHaveCount(0);
+    await landscape.locator('.chGenreRemove').click();
+    await expect(landscape.locator('.cha-genre-thumb')).toHaveText('16:9');
+    await expect(landscape.locator('.chGenreRemove')).toHaveCount(0);
+    await expect(comedy.locator('.cha-slot[data-shape="portrait"] .cha-genre-thumb')).toHaveClass(/cha-has-image/);
 });
 
 test('genres tab rejects files that are not PNG, JPEG or WebP before sending anything', async ({ page }) => {
     await openAdminPage(page);
     await page.click('#chTabGenres');
     const chooser = page.waitForEvent('filechooser');
-    await page.locator('#chGenres .cha-genre').first().locator('.chGenreUpload').click();
+    await page.locator('#chGenres .cha-genre').first().locator('.chGenreUpload').first().click();
     await (await chooser).setFiles({ name: 'evil.svg', mimeType: 'image/svg+xml', buffer: Buffer.from('<svg xmlns="http://www.w3.org/2000/svg"/>') });
     await expect.poll(async () => (await recordedRequests(page)).some((request) => request.method === 'ALERT')).toBe(true);
     expect((await recordedRequests(page)).some((request) => request.method === 'POST' && request.path === 'CustomizedHome/GenreImages')).toBe(false);

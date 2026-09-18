@@ -13,7 +13,7 @@
         return;
     }
 
-    const VERSION = '1.6.0';
+    const VERSION = '1.7.0';
     const API = 'CustomizedHome';
     const ORDER_STEP = 1000;
     const ORDER_UNLISTED_BASE = 1000000000;
@@ -559,11 +559,13 @@
         });
     }
 
+    // Uploaded thumbnails, by genre (upper case) then by card shape.
     function fetchGenreImages() {
         return apiGet('GenreImages').then(function (list) {
             const byName = {};
             (list || []).forEach(function (entry) {
-                byName[entry.Name.toUpperCase()] = entry;
+                const key = entry.Name.toUpperCase();
+                (byName[key] = byName[key] || {})[entry.Shape || 'portrait'] = entry;
             });
             return byName;
         }).catch(function () {
@@ -572,7 +574,27 @@
     }
 
     function genreImageUrl(entry) {
-        return apiUrl('GenreImages/Image', { name: entry.Name, v: entry.Version });
+        return apiUrl('GenreImages/Image', { name: entry.Name, shape: entry.Shape || 'portrait', v: entry.Version });
+    }
+
+    // The thumbnail made for the card shape; otherwise another uploaded one (cropped by the card) rather than nothing.
+    const GENRE_SHAPE_FALLBACK = {
+        portrait: ['portrait', 'square', 'landscape'],
+        landscape: ['landscape', 'square', 'portrait'],
+        square: ['square', 'portrait', 'landscape']
+    };
+
+    function pickGenreImage(uploaded, shape) {
+        if (!uploaded) {
+            return null;
+        }
+        const order = GENRE_SHAPE_FALLBACK[shape] || GENRE_SHAPE_FALLBACK.portrait;
+        for (let i = 0; i < order.length; i++) {
+            if (uploaded[order[i]]) {
+                return uploaded[order[i]];
+            }
+        }
+        return null;
     }
 
     // Backgrounds of the "colors" genre cards: picked from the genre name, so a genre keeps its color.
@@ -622,10 +644,11 @@
             });
         }
         const images = style === 'custom' ? fetchGenreImages() : Promise.resolve({});
+        const shape = formatFor(item, INTEGRATED['ch:allGenres']).shape;
         return Promise.all([fetchGenreList(), images]).then(function (results) {
             const custom = results[1];
             return mapLimit(results[0], GENRE_FETCH_CONCURRENCY, function (genre) {
-                const uploaded = custom[String(genre.Name).toUpperCase()];
+                const uploaded = pickGenreImage(custom[String(genre.Name).toUpperCase()], shape);
                 if (uploaded) {
                     genre._chImage = genreImageUrl(uploaded);
                     return Promise.resolve(genre);
@@ -706,7 +729,9 @@
 
     // Settings of a layout entry that change what an integrated section fetches.
     function dataSignature(item) {
-        return ((item && item.Genres) || []).join('|') + '#' + genreStyleOf(item);
+        const style = genreStyleOf(item);
+        const shape = style === 'custom' ? ((item && item.Shape) || 'auto') : '';
+        return ((item && item.Genres) || []).join('|') + '#' + style + '#' + shape;
     }
 
     const INTEGRATED = {

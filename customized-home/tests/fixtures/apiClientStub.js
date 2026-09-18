@@ -55,18 +55,20 @@
         }
         if (path === 'CustomizedHome/GenreImages') {
             const nameMatch = /[?&]name=([^&]+)/.exec(url);
+            const shapeMatch = /[?&]shape=([^&]+)/.exec(url);
+            const isOther = function (name, shape) {
+                return function (candidate) {
+                    return candidate.Name !== name || (candidate.Shape || 'portrait') !== shape;
+                };
+            };
             if (method === 'POST') {
-                const entry = { Name: body.Name, Version: mock.genreImages.length + 1 };
-                mock.genreImages = mock.genreImages.filter(function (candidate) {
-                    return candidate.Name !== body.Name;
-                }).concat([entry]);
+                const entry = { Name: body.Name, Shape: body.Shape || 'portrait', Version: mock.genreImages.length + 1 };
+                mock.genreImages = mock.genreImages.filter(isOther(entry.Name, entry.Shape)).concat([entry]);
                 return entry;
             }
             if (method === 'DELETE' && nameMatch) {
-                const removed = decodeURIComponent(nameMatch[1]);
-                mock.genreImages = mock.genreImages.filter(function (candidate) {
-                    return candidate.Name !== removed;
-                });
+                const shape = shapeMatch ? decodeURIComponent(shapeMatch[1]) : 'portrait';
+                mock.genreImages = mock.genreImages.filter(isOther(decodeURIComponent(nameMatch[1]), shape));
                 return null;
             }
             return mock.genreImages;
