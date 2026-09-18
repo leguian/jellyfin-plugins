@@ -70,6 +70,19 @@ public class LayoutValidatorTests
         Assert.Null(normalized.Icon);
     }
 
+    [Theory]
+    [InlineData("custom", "custom")]
+    [InlineData(" COLORS ", "colors")]
+    [InlineData("rainbow", "posters")]
+    [InlineData(null, "posters")]
+    public void Genre_style_is_limited_to_known_values(string? input, string expected)
+    {
+        LayoutItem item = Section("ch:allGenres");
+        item.GenreStyle = input!;
+
+        Assert.Equal(expected, LayoutValidator.Normalize(new HomeLayout { Items = [item] }, out _)!.Items.Single().GenreStyle);
+    }
+
     [Fact]
     public void Too_many_items_are_rejected()
     {

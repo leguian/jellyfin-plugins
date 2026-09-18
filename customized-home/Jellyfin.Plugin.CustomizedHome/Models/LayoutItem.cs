@@ -76,6 +76,13 @@ public class LayoutItem
     public List<string> Genres { get; set; } = new List<string>();
 
     /// <summary>
+    /// Gets or sets how the cards of the "All genres" section look (section <c>ch:allGenres</c> only):
+    /// <c>posters</c> (collage of posters), <c>custom</c> (thumbnails uploaded by the administrator) or
+    /// <c>colors</c> (genre name on a colored background).
+    /// </summary>
+    public string GenreStyle { get; set; } = LayoutFormats.GenreStylePosters;
+
+    /// <summary>
     /// Gets or sets the folder members (folders only).
     /// </summary>
     [XmlArrayItem("Item")]
@@ -123,6 +130,18 @@ public static class LayoutFormats
 
     /// <summary>Large cards.</summary>
     public const string SizeLarge = "large";
+
+    /// <summary>Genre cards show a collage of posters of the genre.</summary>
+    public const string GenreStylePosters = "posters";
+
+    /// <summary>Genre cards show the thumbnail uploaded by the administrator (poster collage when there is none).</summary>
+    public const string GenreStyleCustom = "custom";
+
+    /// <summary>Genre cards show the genre name on a colored background.</summary>
+    public const string GenreStyleColors = "colors";
+
+    /// <summary>Every accepted genre card style.</summary>
+    public static readonly string[] GenreStyles = [GenreStylePosters, GenreStyleCustom, GenreStyleColors];
 
     /// <summary>Every accepted shape.</summary>
     public static readonly string[] Shapes = [ShapeAuto, ShapePortrait, ShapeLandscape, ShapeSquare];
