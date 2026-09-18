@@ -13,7 +13,7 @@
         return;
     }
 
-    const VERSION = '1.2.0';
+    const VERSION = '1.3.0';
     const API = 'CustomizedHome';
     const ORDER_STEP = 1000;
     const ORDER_UNLISTED_BASE = 1000000000;
@@ -41,7 +41,10 @@
             loadError: 'Could not load the layout',
             hideUnlisted: 'Hide sections that are not listed here',
             showAll: 'Show every known section',
-            hint: 'Drag the handles to reorder. Hidden sections stay in the list so you can show them again. Use the search box to find a section, including the ones not displayed yet.',
+            hint: 'The left column is your home page: as soon as it holds one section, it replaces the default home page. Add sections from the right column, drag the handles to reorder.',
+            addToLayout: 'Add to the customized home page',
+            removeAction: 'Remove from the customized home page',
+            layoutEmpty: 'Empty: the default home page is displayed. Add sections from the right column to build your own.',
             search: 'Search a section',
             colLayout: 'Customized home page',
             colUnlisted: 'Sections not in the layout',
@@ -107,7 +110,10 @@
             loadError: 'Impossible de charger la disposition',
             hideUnlisted: 'Masquer les sections absentes de cette liste',
             showAll: 'Afficher toutes les sections connues',
-            hint: 'Glissez les poignées pour réordonner. Les sections masquées restent listées pour pouvoir les réafficher. La recherche retrouve aussi les sections pas encore affichées.',
+            hint: "La colonne de gauche est votre page d'accueil : dès qu'elle contient une section, elle remplace la page d'accueil par défaut. Ajoutez des sections depuis la colonne de droite, glissez les poignées pour réordonner.",
+            addToLayout: "Ajouter à la page d'accueil modifiée",
+            removeAction: "Supprimer de la page d'accueil modifiée",
+            layoutEmpty: "Vide : la page d'accueil par défaut est affichée. Ajoutez des sections depuis la colonne de droite pour composer la vôtre.",
             search: 'Rechercher une section',
             colLayout: "Page d'accueil modifiée",
             colUnlisted: 'Sections hors disposition',
@@ -1187,7 +1193,7 @@
             }
             setOrder(section.el, ORDER_UNLISTED_BASE + section.origOrder);
             applyFormat(section.el, null);
-            setClass(section.el, 'ch-hidden', !!layout.HideUnlisted);
+            setClass(section.el, 'ch-hidden', items.length > 0);
             setClass(section.el, 'ch-in-folder', false);
             if (section.el.dataset.chFolder !== undefined) {
                 delete section.el.dataset.chFolder;
@@ -1488,20 +1494,6 @@
         }
         registerLayoutKeys(model.Items);
 
-        // Every section currently on the home page becomes part of the working layout (in its current
-        // order) so the list mirrors the page. Only catalog entries that are absent stay "unlisted".
-        if (mode === 'user') {
-            const present = usedKeys(model);
-            (state.discovered || []).forEach(function (section) {
-                if (present[section.key]) {
-                    return;
-                }
-                present[section.key] = true;
-                const entry = info.known[section.key];
-                model.Items.push({ Type: 'section', Key: section.key, Label: entry ? entry.label : section.label, Visible: !model.HideUnlisted });
-            });
-        }
-
         const embedded = !!(options.container && options.container.isConnected);
         editor = {
             mode: mode,
@@ -1530,7 +1522,6 @@
             + '<p class="ch-hint"></p>'
             + '<div class="ch-toolbar">'
             + '<div class="ch-search-box"><span class="material-icons" aria-hidden="true">search</span><input type="search" class="ch-search" autocomplete="off" /></div>'
-            + '<label><input type="checkbox" class="ch-hide-unlisted" /> <span></span></label>'
             + '<label><input type="checkbox" class="ch-show-all" /> <span></span></label>'
             + '<button type="button" class="ch-btn ch-btn-primary ch-save ch-save-top"></button>'
             + '</div>'
@@ -1565,8 +1556,6 @@
         dialog.querySelector('.ch-dialog-title').textContent = mode === 'default' ? t('defaultTitle') : t('editorTitle');
         dialog.querySelector('.ch-hint').textContent = t('hint');
         dialog.querySelector('.ch-search').placeholder = t('search');
-        dialog.querySelector('.ch-hide-unlisted').checked = !!model.HideUnlisted;
-        dialog.querySelector('.ch-hide-unlisted').nextElementSibling.textContent = t('hideUnlisted');
         dialog.querySelector('.ch-show-all').checked = editor.showAll;
         dialog.querySelector('.ch-show-all').nextElementSibling.textContent = t('showAll');
         dialog.querySelector('.ch-cancel').textContent = t('cancel');
@@ -1594,9 +1583,6 @@
         dialog.querySelector('.ch-search').addEventListener('input', function (e) {
             editor.query = e.target.value.trim().toLowerCase();
             renderEditor();
-        });
-        dialog.querySelector('.ch-hide-unlisted').addEventListener('change', function (e) {
-            editor.model.HideUnlisted = e.target.checked;
         });
         dialog.querySelector('.ch-show-all').addEventListener('change', function (e) {
             editor.showAll = e.target.checked;
@@ -1685,7 +1671,8 @@
         if (entry.family) {
             subtitle.push(t('family'));
         }
-        if (!entry.present && entry.origin !== 'customized') {
+        // The administration editor has no home page under it: "not displayed right now" would be noise there.
+        if (!entry.present && entry.origin !== 'customized' && editor.mode !== 'default') {
             subtitle.push(t('absent'));
         }
         const badge = formatBadge(item);
@@ -1693,17 +1680,28 @@
             + '<span class="material-icons ch-row-icon" aria-hidden="true">' + (entry.origin === 'hss' ? 'view_carousel' : (entry.origin === 'customized' ? 'auto_awesome' : 'view_stream')) + '</span>'
             + '<div class="ch-row-text"><div class="ch-row-title"></div><div class="ch-row-sub"></div></div>'
             + (badge ? '<span class="ch-row-format"></span>' : '')
-            + '<div class="ch-row-actions">'
-            + (editor.query ? '<button type="button" class="ch-icon-btn ch-act-top" title="' + escapeHtml(t('moveToTop')) + '"><span class="material-icons" aria-hidden="true">vertical_align_top</span></button>' : '')
-            + '<button type="button" class="ch-icon-btn ch-act-visibility" title="' + escapeHtml(item.Visible === false ? t('show') : t('hide')) + '"><span class="material-icons" aria-hidden="true">' + (item.Visible === false ? 'visibility_off' : 'visibility') + '</span></button>'
-            + '<button type="button" class="ch-icon-btn ch-act-menu" title="' + escapeHtml(t('more')) + '"><span class="material-icons" aria-hidden="true">more_vert</span></button>'
-            + '</div>';
+            + '<div class="ch-row-actions">' + rowActionsHtml(item) + '</div>';
         row.querySelector('.ch-row-title').textContent = entry.label || item.Key;
         row.querySelector('.ch-row-sub').textContent = subtitle.join(' · ');
         if (badge) {
             row.querySelector('.ch-row-format').textContent = badge;
         }
         return row;
+    }
+
+    function actionButton(className, title, icon) {
+        return '<button type="button" class="ch-icon-btn ' + className + '" title="' + escapeHtml(title) + '"><span class="material-icons" aria-hidden="true">' + icon + '</span></button>';
+    }
+
+    function rowActionsHtml(item) {
+        if (item._unlisted) {
+            // Right column: the only action is to add the section (it lands at the very top).
+            return actionButton('ch-act-add', t('addToLayout'), 'add_circle_outline');
+        }
+        return (editor.query ? actionButton('ch-act-top', t('moveToTop'), 'vertical_align_top') : '')
+            + actionButton('ch-act-visibility', item.Visible === false ? t('show') : t('hide'), item.Visible === false ? 'visibility_off' : 'visibility')
+            + actionButton('ch-act-menu', t('format'), 'aspect_ratio')
+            + actionButton('ch-act-remove', t('removeAction'), 'close');
     }
 
     function formatBadge(item) {
@@ -1816,14 +1814,14 @@
             return matchesQuery({ Key: entry.key, Label: entry.label });
         });
         unlisted.forEach(function (entry) {
-            const item = { Type: 'section', Key: entry.key, Label: entry.label, Visible: INTEGRATED[entry.key] ? false : !model.HideUnlisted, _unlisted: true };
+            const item = { Type: 'section', Key: entry.key, Label: entry.label, Visible: true, _unlisted: true };
             const row = renderSectionRow(item, null, -1, []);
             row.classList.add('ch-row-unlisted');
             side.appendChild(row);
         });
 
         if (!list.children.length) {
-            list.appendChild(el('div', 'ch-empty', escapeHtml(editor.query ? t('searchNoResult') : t('empty'))));
+            list.appendChild(el('div', 'ch-empty', escapeHtml(editor.query ? t('searchNoResult') : t('layoutEmpty'))));
         }
         if (!side.children.length) {
             side.appendChild(el('div', 'ch-empty', escapeHtml(editor.query ? t('searchNoResult') : t('dropToRemove'))));
@@ -1911,8 +1909,20 @@
             item.Visible = true;
             editor.model.Items.unshift(item);
             renderEditor();
+        } else if (button.classList.contains('ch-act-add')) {
+            delete item._unlisted;
+            item.Visible = true;
+            editor.model.Items.unshift(item);
+            renderEditor();
+        } else if (button.classList.contains('ch-act-remove')) {
+            removeItem(item);
+            renderEditor();
         } else if (button.classList.contains('ch-act-menu')) {
-            openRowMenu(button, item, parent);
+            if (item.Type === 'folder') {
+                openRowMenu(button, item, parent);
+            } else {
+                openFormatMenu(button, item);
+            }
         } else if (button.classList.contains('ch-act-icon')) {
             openIconPicker(button, item);
         }
@@ -1992,34 +2002,6 @@
                     renderEditor();
                 }
             });
-        } else {
-            addAction('aspect_ratio', t('format'), function () {
-                openFormatMenu(anchor, item);
-            });
-            if (parent) {
-                addAction('drive_file_move', t('removeFromFolder'), function () {
-                    moveItem(item, { folder: null, before: null });
-                });
-            }
-            if (folders.length) {
-                const label = el('div', 'ch-popup-label');
-                label.textContent = t('moveToFolder');
-                menu.appendChild(label);
-                folders.forEach(function (folder) {
-                    if (folder === parent) {
-                        return;
-                    }
-                    addAction(folder.Icon || 'folder', folder.Name || t('folder'), function () {
-                        moveItem(item, { folder: folder, before: null });
-                    });
-                });
-            }
-            if (!item._unlisted) {
-                addAction('playlist_remove', t('removeFromLayout'), function () {
-                    removeItem(item);
-                    renderEditor();
-                });
-            }
         }
         if (!menu.children.length) {
             return;
@@ -2254,7 +2236,8 @@
         }
         return {
             Version: 1,
-            HideUnlisted: !!model.HideUnlisted,
+            // A layout with at least one section replaces the default home page.
+            HideUnlisted: model.Items.length > 0,
             Items: model.Items.map(function (item) {
                 if (item.Type === 'folder') {
                     return {

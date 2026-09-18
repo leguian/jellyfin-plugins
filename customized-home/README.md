@@ -44,12 +44,13 @@ Installation manuelle : dézipper `customized-home_<version>_jellyfin-<abi>.zip`
 ### Éditeur (utilisateur)
 
 - Ouvrir via le bouton en bas de l'accueil ou le menu utilisateur → **Personnaliser l'accueil**.
-- Deux colonnes : **Page d'accueil modifiée** (disposition) et **Sections hors disposition**. Glisser la poignée `⋮⋮` pour réordonner, glisser d'une colonne à l'autre pour ajouter ou retirer une section (désactivé pendant une recherche).
-- Pendant une recherche, un bouton au survol **Remonter cette section tout en haut** place la section en première position.
+- Deux colonnes : **Page d'accueil modifiée** (la disposition) et **Sections hors disposition** (tout le reste).
+- **Règle** : dès que la colonne de gauche contient au moins une section, elle remplace la page d'accueil par défaut (les sections hors disposition ne sont plus affichées). Colonne vide = page d'accueil Jellyfin inchangée.
+- Colonne de droite : bouton `+` **Ajouter à la page d'accueil modifiée**, la section arrive tout en haut. Pas d'autre action.
+- Colonne de gauche : `👁` afficher / masquer, bouton format (ouvre directement forme, taille, titres), `✕` supprimer de la page d'accueil modifiée. Pendant une recherche, bouton au survol **Remonter cette section tout en haut**.
+- Glisser la poignée `⋮⋮` pour réordonner, glisser d'une colonne à l'autre pour ajouter ou retirer (désactivé pendant une recherche).
 - Champ **Rechercher une section** : filtre la liste et retrouve aussi les sections connues mais pas encore affichées.
-- `👁` masque / affiche. `⋮` : format d'affichage.
 - Sous-titre d'une ligne : origine de la section (Jellyfin, Home Screen Sections, Customized Home) et « non affichée actuellement » quand la section est connue mais pas rendue sur l'accueil en ce moment (désactivée dans les réglages d'accueil Jellyfin, vide, plugin absent).
-- **Masquer les sections absentes de cette liste** : sinon, toute nouvelle section (plugin installé plus tard, nouvelle médiathèque) est ajoutée en fin de page.
 - **Afficher toutes les sections connues** : liste aussi les sections du catalogue non présentes actuellement (utile pour préparer une disposition).
 - Menu `⋮` → **Format d'affichage** : forme, taille et titres de la section. Sur les sections natives ou HSS le changement de forme est appliqué en CSS (recadrage de l'image existante) ; sur les sections intégrées l'image adaptée est chargée (affiche pour portrait, vignette / fond pour paysage).
 - Les sections intégrées (badge « Intégrée à Customized Home ») apparaissent dans la liste, masquées : `👁` pour les activer. Données chargées côté client via l'API Jellyfin, cache 5 minutes.
@@ -63,7 +64,7 @@ Deux onglets : **Options** (statut File Transformation + réglages) et **Layouts
 | Option | Effet |
 | --- | --- |
 | Allow users to customize their own home page | Désactivé : tous les utilisateurs reçoivent la disposition par défaut (les admins gardent la leur) |
-| Force the default layout for everybody | Ignore les dispositions enregistrées (conservées, réactivées en décochant) |
+| Force the default layout for everybody | Première option. Ignore les dispositions enregistrées (conservées, réactivées en décochant). Coché : désactive et met à faux « Allow users… », le bouton d'accueil et l'entrée du menu utilisateur |
 | Show a "Customize home" button at the bottom of the home page | Bouton en bas de l'accueil |
 | Add a "Customize home" entry to the user menu | Entrée dans le menu utilisateur (menu MUI et tiroir classique) |
 | Folders can be collapsed and expanded by clicking their header | Sinon les dossiers sont toujours dépliés |
@@ -164,7 +165,7 @@ npm run screenshots   # captures dans test-results/screenshots pour revue visuel
 | `fixtures/apiClientStub.js` | `ApiClient` / `Dashboard` factices, requêtes enregistrées dans `window.__mock.requests` |
 | `specs/home.spec.ts` | application de la disposition sur l'accueil |
 | `specs/editor.spec.ts` | éditeur utilisateur (colonnes, menu, recherche, enregistrement, glisser-déposer) |
-| `specs/admin.spec.ts` | page d'administration (onglets, éditeur intégré, 960px, bouton haut) |
+| `specs/admin.spec.ts` | page d'administration (onglets, éditeur intégré, 1100px, bouton haut, verrouillage des options) |
 
 Limite : ces tests valident le script contre un DOM simulé. Ils ne détectent pas un changement de structure de jellyfin-web ; après une mise à jour majeure de Jellyfin, vérifier sur un serveur réel.
 

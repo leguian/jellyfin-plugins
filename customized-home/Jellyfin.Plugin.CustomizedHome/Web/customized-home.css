@@ -749,7 +749,7 @@
 }
 
 .ch-embedded {
-    max-width: 960px;
+    max-width: none;
 }
 
 /* ---------- Editor polish ---------- */
@@ -874,4 +874,12 @@
 .ch-embedded .ch-popup,
 .ch-embedded ~ .ch-popup {
     color: #eee;
+}
+
+.ch-act-add {
+    color: #00a4dc;
+}
+
+.ch-act-remove:hover {
+    color: #ff7b7b;
 }

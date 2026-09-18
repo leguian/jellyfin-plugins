@@ -19,7 +19,7 @@ test('shows the options tab with the injection status', async ({ page }) => {
     await expect(page.locator('#chPanelLayouts')).toBeHidden();
 });
 
-test('layouts tab embeds the default layout editor, limited to 960px, with a save button on top', async ({ page }) => {
+test('layouts tab embeds the default layout editor, limited to 1100px, with a save button on top', async ({ page }) => {
     await openAdminPage(page, { defaultLayout: DEFAULT_LAYOUT });
     await page.click('#chTabLayouts');
     await expect(page.locator('#chPanelOptions')).toBeHidden();
@@ -30,7 +30,8 @@ test('layouts tab embeds the default layout editor, limited to 960px, with a sav
     await expect(page.locator(`${EDITOR} .ch-save-top`)).toBeVisible();
 
     const width = await page.locator('.cha-shell').evaluate((node) => node.getBoundingClientRect().width);
-    expect(width).toBeLessThanOrEqual(960);
+    expect(width).toBeLessThanOrEqual(1100);
+    expect(width).toBeGreaterThan(960);
 });
 
 test('top save button stores the default layout and keeps the editor open', async ({ page }) => {
@@ -46,4 +47,33 @@ test('top save button stores the default layout and keeps the editor open', asyn
     expect(saved.Items.find((item) => item.Key === 'jf:nextup')?.Visible).toBe(false);
     await expect(page.locator(`${EDITOR} .ch-list .ch-row`)).toHaveCount(2);
     await expect(page.locator('#chDefaultSummary')).toContainText('2 section(s), 1 hidden');
+});
+
+test('forcing the default layout comes first, turns off and locks the customization options', async ({ page }) => {
+    await openAdminPage(page);
+    const usersCard = page.locator('#CustomizedHomeConfigForm .cha-card').first();
+    const switches = await usersCard.locator('.cha-switch').evaluateAll((nodes) => nodes.map((node) => node.id));
+    expect(switches).toEqual(['chForceDefaultLayout', 'chAllowUserCustomization']);
+
+    const locked = ['#chAllowUserCustomization', '#chShowCustomizeButtonOnHome', '#chShowUserMenuEntry'];
+    for (const selector of locked) {
+        await page.check(selector);
+    }
+    await page.check('#chForceDefaultLayout');
+    for (const selector of locked) {
+        await expect(page.locator(selector)).not.toBeChecked();
+        await expect(page.locator(selector)).toBeDisabled();
+    }
+    await page.click('#CustomizedHomeConfigForm button[type="submit"]');
+    await expect.poll(async () => (await recordedRequests(page)).find((request) => request.path === 'PluginConfiguration')?.body).toMatchObject({
+        ForceDefaultLayout: true,
+        AllowUserCustomization: false,
+        ShowCustomizeButtonOnHome: false,
+        ShowUserMenuEntry: false
+    });
+
+    await page.uncheck('#chForceDefaultLayout');
+    for (const selector of locked) {
+        await expect(page.locator(selector)).toBeEnabled();
+    }
 });

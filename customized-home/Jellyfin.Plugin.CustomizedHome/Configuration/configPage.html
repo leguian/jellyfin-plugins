@@ -213,6 +213,19 @@
                 cursor: pointer;
             }
 
+            #CustomizedHomeConfigPage .cha-option.cha-disabled {
+                opacity: 0.45;
+                cursor: not-allowed;
+            }
+
+            #CustomizedHomeConfigPage .cha-option.cha-disabled .cha-switch {
+                cursor: not-allowed;
+            }
+
+            #CustomizedHomeConfigPage .cha-shell.cha-wide {
+                max-width: 1100px;
+            }
+
             #CustomizedHomeConfigPage .cha-option:first-of-type {
                 border-top: 0;
                 padding-top: 0.2em;
@@ -423,17 +436,17 @@
                             <div class="cha-card-head"><h2 class="cha-card-title">Users</h2></div>
                             <label class="cha-option">
                                 <span class="cha-option-text">
+                                    <span class="cha-option-label">Force the default layout for everybody</span>
+                                    <span class="cha-option-help">Everybody gets the default layout and nobody can customize: the two options below and the user entry points are turned off. Saved user layouts are kept and used again when this option is turned off.</span>
+                                </span>
+                                <input id="chForceDefaultLayout" class="cha-switch" type="checkbox" role="switch" />
+                            </label>
+                            <label class="cha-option">
+                                <span class="cha-option-text">
                                     <span class="cha-option-label">Allow users to customize their own home page</span>
                                     <span class="cha-option-help">When disabled, every user gets the default layout. Administrators can always customize their own page.</span>
                                 </span>
                                 <input id="chAllowUserCustomization" class="cha-switch" type="checkbox" role="switch" />
-                            </label>
-                            <label class="cha-option">
-                                <span class="cha-option-text">
-                                    <span class="cha-option-label">Force the default layout for everybody</span>
-                                    <span class="cha-option-help">Ignores the layouts saved by users. They are kept and used again when this option is turned off.</span>
-                                </span>
-                                <input id="chForceDefaultLayout" class="cha-switch" type="checkbox" role="switch" />
                             </label>
                         </div>
 
@@ -442,6 +455,7 @@
                             <label class="cha-option">
                                 <span class="cha-option-text">
                                     <span class="cha-option-label">"Customize home" button at the bottom of the home page</span>
+                                    <span class="cha-option-help">Adds a round "Customize home" button below the last section of the home page (scroll to the very bottom). It opens the same editor as the user menu entry.</span>
                                 </span>
                                 <input id="chShowCustomizeButtonOnHome" class="cha-switch" type="checkbox" role="switch" />
                             </label>
@@ -536,7 +550,7 @@
                             }
                         });
                     });
-                    return countSections(layout) + ' section(s), ' + hidden + ' hidden' + (layout.HideUnlisted ? ', unlisted sections hidden' : '') + '. Applied to users without a layout of their own.';
+                    return countSections(layout) + ' section(s), ' + hidden + ' hidden. Replaces the default home page for users without a layout of their own.';
                 }
 
                 function updateDefaultSummary(layout) {
@@ -617,6 +631,7 @@
                         fields.forEach(function (name) {
                             page.querySelector('#ch' + name).checked = !!config[name];
                         });
+                        syncForcedOptions();
                         updateDefaultSummary(config.DefaultLayout);
                         Dashboard.hideLoadingMsg();
                     });
@@ -636,7 +651,23 @@
                     });
                 }
 
+                // Forcing the default layout makes every customization entry point meaningless: turn them off and lock them.
+                var lockedByForce = ['AllowUserCustomization', 'ShowCustomizeButtonOnHome', 'ShowUserMenuEntry'];
+
+                function syncForcedOptions() {
+                    var forced = page.querySelector('#chForceDefaultLayout').checked;
+                    lockedByForce.forEach(function (name) {
+                        var input = page.querySelector('#ch' + name);
+                        if (forced) {
+                            input.checked = false;
+                        }
+                        input.disabled = forced;
+                        input.closest('.cha-option').classList.toggle('cha-disabled', forced);
+                    });
+                }
+
                 function showTab(index) {
+                    page.querySelector('.cha-shell').classList.toggle('cha-wide', index === 1);
                     page.querySelectorAll('.chTab').forEach(function (tab) {
                         tab.classList.toggle('hide', tab.getAttribute('data-tab') !== String(index));
                     });
@@ -670,6 +701,8 @@
                     buttons[next].focus();
                     showTab(next);
                 });
+
+                page.querySelector('#chForceDefaultLayout').addEventListener('change', syncForcedOptions);
 
                 page.addEventListener('pageshow', function () {
                     editorOpened = false;

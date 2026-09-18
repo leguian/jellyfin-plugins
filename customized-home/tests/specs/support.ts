@@ -78,6 +78,8 @@ function mockState(options: MockOptions): Record<string, unknown> {
     return {
         catalog: CATALOG,
         defaultLayout: options.defaultLayout ?? EMPTY_LAYOUT,
+        // The administration page reads the default layout summary from the plugin configuration.
+        pluginConfiguration: { DefaultLayout: options.defaultLayout ?? EMPTY_LAYOUT },
         layoutResponse: {
             Source: options.layout ? 'user' : 'none',
             Layout: options.layout ?? EMPTY_LAYOUT,

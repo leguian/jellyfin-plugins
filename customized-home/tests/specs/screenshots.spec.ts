@@ -17,13 +17,13 @@ const DEFAULT_LAYOUT: Layout = {
 };
 
 test('user editor', async ({ page }) => {
-    await openHome(page, { enableIntegratedSections: true });
+    await openHome(page, { enableIntegratedSections: true, layout: DEFAULT_LAYOUT });
     await page.addStyleTag({ url: MATERIAL_ICONS });
     await openEditor(page);
     await page.waitForTimeout(500);
     await page.screenshot({ path: `${OUTPUT_DIR}/editor.png` });
     await page.fill('.ch-overlay .ch-search', 'continue');
-    await page.locator('.ch-overlay .ch-unlisted .ch-row').first().hover();
+    await page.locator('.ch-overlay .ch-list .ch-row').first().hover();
     await page.screenshot({ path: `${OUTPUT_DIR}/editor-search.png` });
 });
 
