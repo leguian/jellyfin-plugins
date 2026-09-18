@@ -11,6 +11,7 @@
         catalog: [],
         userLayouts: [],
         genres: [],
+        genreImages: [],
         pluginConfiguration: {},
         status: {
             PluginVersion: '0.0.0.0',
@@ -52,11 +53,39 @@
         if (path === 'CustomizedHome/UserLayouts') {
             return mock.userLayouts;
         }
+        if (path === 'CustomizedHome/GenreImages') {
+            const nameMatch = /[?&]name=([^&]+)/.exec(url);
+            if (method === 'POST') {
+                const entry = { Name: body.Name, Version: mock.genreImages.length + 1 };
+                mock.genreImages = mock.genreImages.filter(function (candidate) {
+                    return candidate.Name !== body.Name;
+                }).concat([entry]);
+                return entry;
+            }
+            if (method === 'DELETE' && nameMatch) {
+                const removed = decodeURIComponent(nameMatch[1]);
+                mock.genreImages = mock.genreImages.filter(function (candidate) {
+                    return candidate.Name !== removed;
+                });
+                return null;
+            }
+            return mock.genreImages;
+        }
         if (path === 'Genres') {
             return { Items: mock.genres };
         }
         if (path === 'Items') {
             // Items of one genre: two movies named after it. Any other item query (history...) is empty.
+            const byId = /[?&]genreIds=([^&]+)/.exec(url);
+            if (byId) {
+                // Poster collage of a genre card: four distinct items with a primary image.
+                const genreId = decodeURIComponent(byId[1]);
+                return {
+                    Items: [1, 2, 3, 4].map(function (index) {
+                        return { Id: genreId + '-poster-' + index, Name: 'Poster ' + index, Type: 'Movie', ImageTags: { Primary: 'tag' + index } };
+                    })
+                };
+            }
             const match = /[?&]genres=([^&]+)/.exec(url);
             if (!match) {
                 return { Items: [] };

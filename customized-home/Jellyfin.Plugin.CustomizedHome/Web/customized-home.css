@@ -907,3 +907,137 @@
 .ch-genre-option:hover {
     background: color-mix(in srgb, currentColor 10%, transparent);
 }
+
+/* ---------- Origin pictograms and legend ---------- */
+.ch-origin-svg {
+    width: 1.15em;
+    height: 1.15em;
+    display: block;
+}
+
+.ch-row-icon.ch-origin-jellyfin,
+.ch-legend .ch-origin-jellyfin {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    color: #aa5cc3;
+    opacity: 1;
+}
+
+.ch-origin-customized {
+    color: #00a4dc;
+}
+
+.ch-origin-other {
+    color: inherit;
+    opacity: 0.6;
+}
+
+.ch-legend {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.4em 1.4em;
+    margin: -0.3em 0 0.9em;
+    font-size: 0.82em;
+    opacity: 0.85;
+}
+
+.ch-legend-item {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4em;
+}
+
+.ch-legend .material-icons {
+    font-size: 1.3em;
+}
+
+/* ---------- Tooltips ---------- */
+.ch-tooltip {
+    position: fixed;
+    z-index: 100004;
+    max-width: 18em;
+    padding: 0.4em 0.7em;
+    border-radius: 0.4em;
+    background: #000;
+    color: #fff;
+    font-size: 0.8em;
+    line-height: 1.35;
+    text-align: center;
+    pointer-events: none;
+    box-shadow: 0 0.2em 0.8em rgba(0, 0, 0, 0.5);
+}
+
+/* ---------- Format menu ---------- */
+.ch-format-menu button.ch-selected .material-icons {
+    color: #00a4dc;
+}
+
+.ch-format-menu .ch-genre-picker {
+    max-height: 14em;
+    overflow-y: auto;
+    min-width: 0;
+}
+
+/* ---------- Section title hidden ---------- */
+.ch-nosectiontitle .sectionTitleContainer,
+.ch-nosectiontitle > .sectionTitle {
+    display: none !important;
+}
+
+/* ---------- Genre cards: poster collage ---------- */
+.ch-collage {
+    position: absolute;
+    inset: 0;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    grid-template-rows: 1fr 1fr;
+    gap: 2px;
+    background: #000;
+}
+
+.ch-collage-1 {
+    grid-template-columns: 1fr;
+    grid-template-rows: 1fr;
+}
+
+.ch-collage-2 {
+    grid-template-rows: 1fr;
+}
+
+.ch-collage-cell {
+    background-size: cover;
+    background-position: center;
+    background-repeat: no-repeat;
+}
+
+/* Landscape cards: the four posters side by side instead of a 2 x 2 grid. */
+.overflowBackdropCard .ch-collage-3,
+.overflowBackdropCard .ch-collage-4 {
+    grid-template-rows: 1fr;
+    grid-auto-flow: column;
+    grid-auto-columns: 1fr;
+    grid-template-columns: none;
+}
+
+/* Rows never grow wider than their column: the format badge gives way first (full text in its tooltip). */
+.ch-col,
+.ch-row {
+    min-width: 0;
+}
+
+.ch-row-text {
+    flex: 1 1 8em;
+}
+
+.ch-row-format {
+    flex: 0 1 auto;
+    min-width: 0;
+    max-width: 45%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.ch-row-actions {
+    flex-shrink: 0;
+}

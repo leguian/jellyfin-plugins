@@ -32,6 +32,9 @@ Plugins Jellyfin, un sous-dossier par plugin. Actuellement : `customized-home/`.
 # Build (le SDK .NET 9 local ne compile que la cible 10.11 ; la cible 12.x est validée par la CI)
 dotnet build customized-home/Jellyfin.Plugin.CustomizedHome/Jellyfin.Plugin.CustomizedHome.csproj -c Release -p:JellyfinVersion=10.11.11
 
+# Tests unitaires C# (validation des dispositions, stockage des miniatures)
+dotnet test customized-home/Jellyfin.Plugin.CustomizedHome.Tests -p:JellyfinVersion=10.11.11
+
 # Syntaxe du script client
 node --check customized-home/Jellyfin.Plugin.CustomizedHome/Web/customized-home.js
 
@@ -42,7 +45,7 @@ npm run typecheck
 npm run screenshots   # captures dans test-results/screenshots, à regarder après tout changement d'UI
 ```
 
-Avant tout push : build + `node --check` + `npm test` + `npm run typecheck`. Après un changement d'UI : `npm run screenshots` et contrôle visuel des captures.
+Avant tout push : build + `dotnet test` + `node --check` + `npm test` + `npm run typecheck`. Après un changement d'UI : `npm run screenshots` et contrôle visuel des captures.
 
 ## Tests
 

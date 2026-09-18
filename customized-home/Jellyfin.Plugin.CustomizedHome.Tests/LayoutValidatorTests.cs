@@ -1,0 +1,81 @@
+using System.Collections.Generic;
+using System.Linq;
+using Jellyfin.Plugin.CustomizedHome.Helpers;
+using Jellyfin.Plugin.CustomizedHome.Models;
+using Xunit;
+
+namespace Jellyfin.Plugin.CustomizedHome.Tests;
+
+public class LayoutValidatorTests
+{
+    private static LayoutItem Section(string key) => new() { Type = LayoutItemTypes.Section, Key = key };
+
+    [Fact]
+    public void Null_layout_is_rejected()
+    {
+        Assert.Null(LayoutValidator.Normalize(null, out string? error));
+        Assert.NotNull(error);
+    }
+
+    [Fact]
+    public void Duplicates_and_blank_keys_are_dropped_and_order_is_kept()
+    {
+        HomeLayout layout = new() { Items = [Section("jf:nextup"), Section(" "), Section("jf:resume"), Section("jf:nextup")] };
+
+        HomeLayout normalized = LayoutValidator.Normalize(layout, out _)!;
+
+        Assert.Equal(["jf:nextup", "jf:resume"], normalized.Items.Select(item => item.Key));
+    }
+
+    [Fact]
+    public void Unknown_format_values_fall_back_to_defaults_and_known_ones_are_kept()
+    {
+        LayoutItem item = Section("jf:resume");
+        item.Shape = "HEXAGON";
+        item.Size = " Large ";
+        item.ShowTitle = false;
+        item.ShowSectionTitle = false;
+
+        LayoutItem normalized = LayoutValidator.Normalize(new HomeLayout { Items = [item] }, out _)!.Items.Single();
+
+        Assert.Equal(LayoutFormats.ShapeAuto, normalized.Shape);
+        Assert.Equal(LayoutFormats.SizeLarge, normalized.Size);
+        Assert.False(normalized.ShowTitle);
+        Assert.False(normalized.ShowSectionTitle);
+    }
+
+    [Fact]
+    public void Genres_are_trimmed_deduplicated_and_capped()
+    {
+        LayoutItem item = Section("ch:genre");
+        item.Genres = [" Action ", "action", "", "Drama"];
+        item.Genres.AddRange(Enumerable.Range(0, 40).Select(index => "Genre " + index));
+
+        List<string> genres = LayoutValidator.Normalize(new HomeLayout { Items = [item] }, out _)!.Items.Single().Genres;
+
+        Assert.Equal(20, genres.Count);
+        Assert.Equal(["Action", "Drama", "Genre 0"], genres.Take(3));
+    }
+
+    [Fact]
+    public void Nested_folders_are_flattened_away_and_folder_members_are_kept()
+    {
+        LayoutItem folder = new() { Type = LayoutItemTypes.Folder, Id = "f1", Name = "Series", Icon = "../evil" };
+        folder.Items.Add(Section("jf:nextup"));
+        folder.Items.Add(new LayoutItem { Type = LayoutItemTypes.Folder, Id = "nested" });
+
+        LayoutItem normalized = LayoutValidator.Normalize(new HomeLayout { Items = [folder] }, out _)!.Items.Single();
+
+        Assert.Equal(["jf:nextup"], normalized.Items.Select(member => member.Key));
+        Assert.Null(normalized.Icon);
+    }
+
+    [Fact]
+    public void Too_many_items_are_rejected()
+    {
+        HomeLayout layout = new() { Items = Enumerable.Range(0, 501).Select(index => Section("key:" + index)).ToList() };
+
+        Assert.Null(LayoutValidator.Normalize(layout, out string? error));
+        Assert.NotNull(error);
+    }
+}

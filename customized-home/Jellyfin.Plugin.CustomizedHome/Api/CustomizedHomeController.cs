@@ -31,9 +31,13 @@ public class CustomizedHomeController : ControllerBase
     private const string AdministratorRole = "Administrator";
     private const string HomeScreenSectionsAssemblyName = "Jellyfin.Plugin.HomeScreenSections";
 
+    // 5 MB image, base64 encoded, plus the JSON envelope.
+    private const long GenreImageRequestLimit = 8 * 1024 * 1024;
+
     private static readonly ConcurrentDictionary<string, CachedAsset> AssetCache = new(StringComparer.Ordinal);
 
     private readonly LayoutStore _store;
+    private readonly GenreImageStore _genreImages;
     private readonly WebInjectionService _injection;
     private readonly IUserManager _userManager;
 
@@ -41,13 +45,15 @@ public class CustomizedHomeController : ControllerBase
     /// Initializes a new instance of the <see cref="CustomizedHomeController"/> class.
     /// </summary>
     /// <param name="store">The layout store.</param>
+    /// <param name="genreImages">The genre thumbnail store.</param>
     /// <param name="injection">The web injection service.</param>
     /// <param name="userManager">The user manager.</param>
-    public CustomizedHomeController(LayoutStore store, WebInjectionService injection, IUserManager userManager)
+    public CustomizedHomeController(LayoutStore store, GenreImageStore genreImages, WebInjectionService injection, IUserManager userManager)
     {
         _store = store;
         _injection = injection;
         _userManager = userManager;
+        _genreImages = genreImages;
     }
 
     private static PluginConfiguration Configuration => Plugin.Instance?.Configuration ?? new PluginConfiguration();
@@ -291,6 +297,97 @@ public class CustomizedHomeController : ControllerBase
         }
 
         return Ok(layouts.OrderBy(info => info.UserName, StringComparer.OrdinalIgnoreCase).ToList());
+    }
+
+    /// <summary>
+    /// Lists the genres that have a custom thumbnail.
+    /// </summary>
+    /// <returns>The genres and the version of their thumbnail.</returns>
+    [HttpGet("GenreImages")]
+    [Authorize]
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    public ActionResult<IReadOnlyList<GenreImageInfo>> GetGenreImages()
+    {
+        return Ok(_genreImages.List().Select(entry => new GenreImageInfo { Name = entry.Name, Version = entry.Version }).ToList());
+    }
+
+    /// <summary>
+    /// Serves the custom thumbnail of a genre. Anonymous like every Jellyfin image: it is loaded by plain image requests.
+    /// </summary>
+    /// <param name="name">The genre name.</param>
+    /// <returns>The image.</returns>
+    [HttpGet("GenreImages/Image")]
+    [AllowAnonymous]
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public ActionResult GetGenreImage([FromQuery] string? name)
+    {
+        (byte[] Data, string ContentType)? image = _genreImages.Read(name);
+        if (image is null)
+        {
+            return NotFound();
+        }
+
+        // The URL carries a version parameter, so the response can be cached for good.
+        Response.Headers[HeaderNames.CacheControl] = "public, max-age=31536000, immutable";
+        Response.Headers[HeaderNames.XContentTypeOptions] = "nosniff";
+        return File(image.Value.Data, image.Value.ContentType);
+    }
+
+    /// <summary>
+    /// Uploads the thumbnail of a genre (administrators).
+    /// </summary>
+    /// <param name="upload">The genre name and the base64 encoded image.</param>
+    /// <returns>The stored thumbnail information.</returns>
+    [HttpPost("GenreImages")]
+    [Authorize(Policy = Policies.RequiresElevation)]
+    [RequestSizeLimit(GenreImageRequestLimit)]
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    public ActionResult<GenreImageInfo> UploadGenreImage([FromBody] GenreImageUpload upload)
+    {
+        if (upload is null || string.IsNullOrEmpty(upload.Data))
+        {
+            return BadRequest("Image data is required.");
+        }
+
+        // Base64 inflates by 4/3: reject oversized payloads before decoding them.
+        if (upload.Data.Length > (GenreImageStore.MaxImageBytes * 4 / 3) + 4)
+        {
+            return BadRequest("Image is larger than 5 MB.");
+        }
+
+        byte[] data;
+        try
+        {
+            data = Convert.FromBase64String(upload.Data);
+        }
+        catch (FormatException)
+        {
+            return BadRequest("Image data is not valid base64.");
+        }
+
+        GenreImageEntry? entry = _genreImages.Save(upload.Name, data, out string? error);
+        if (entry is null)
+        {
+            return BadRequest(error);
+        }
+
+        return new GenreImageInfo { Name = entry.Name, Version = entry.Version };
+    }
+
+    /// <summary>
+    /// Deletes the thumbnail of a genre (administrators).
+    /// </summary>
+    /// <param name="name">The genre name.</param>
+    /// <returns>No content.</returns>
+    [HttpDelete("GenreImages")]
+    [Authorize(Policy = Policies.RequiresElevation)]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    public ActionResult DeleteGenreImage([FromQuery] string? name)
+    {
+        _genreImages.Delete(name);
+        return NoContent();
     }
 
     private static bool IsHomeScreenSectionsInstalled()

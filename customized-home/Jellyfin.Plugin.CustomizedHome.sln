@@ -4,6 +4,8 @@ VisualStudioVersion = 17.0.31903.59
 MinimumVisualStudioVersion = 10.0.40219.1
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Jellyfin.Plugin.CustomizedHome", "Jellyfin.Plugin.CustomizedHome\Jellyfin.Plugin.CustomizedHome.csproj", "{2F0F1E7A-9C2B-4B9D-8B1C-7D3F2A6E5C41}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Jellyfin.Plugin.CustomizedHome.Tests", "Jellyfin.Plugin.CustomizedHome.Tests\Jellyfin.Plugin.CustomizedHome.Tests.csproj", "{8C1B6D52-3E0A-4F57-9A2E-5B7D4C9E1F03}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -14,6 +16,10 @@ Global
 		{2F0F1E7A-9C2B-4B9D-8B1C-7D3F2A6E5C41}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{2F0F1E7A-9C2B-4B9D-8B1C-7D3F2A6E5C41}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{2F0F1E7A-9C2B-4B9D-8B1C-7D3F2A6E5C41}.Release|Any CPU.Build.0 = Release|Any CPU
+		{8C1B6D52-3E0A-4F57-9A2E-5B7D4C9E1F03}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{8C1B6D52-3E0A-4F57-9A2E-5B7D4C9E1F03}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{8C1B6D52-3E0A-4F57-9A2E-5B7D4C9E1F03}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{8C1B6D52-3E0A-4F57-9A2E-5B7D4C9E1F03}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

@@ -87,3 +87,47 @@ test('options form is as wide as the cards despite the dashboard form width cap'
     expect(widths.statusCard).toBeGreaterThan(0);
     expect(widths.form).toBe(widths.statusCard);
 });
+
+test('layouts tab has no "not displayed" toggle: there is no home page under the administration editor', async ({ page }) => {
+    await openAdminPage(page, { defaultLayout: DEFAULT_LAYOUT });
+    await page.click('#chTabLayouts');
+    await page.waitForSelector(`${EDITOR} .ch-list .ch-row`);
+    await expect(page.locator(`${EDITOR} .ch-show-all`)).toBeHidden();
+    expect((await rowTitles(page, `${EDITOR} .ch-unlisted`)).length).toBeGreaterThan(0);
+});
+
+test('genres tab uploads, replaces and removes a genre thumbnail', async ({ page }) => {
+    await openAdminPage(page);
+    await page.click('#chTabGenres');
+    await expect(page.locator('#chTabGenres')).toHaveAttribute('aria-selected', 'true');
+    await expect(page.locator('#chTabLayouts')).toHaveAttribute('aria-selected', 'false');
+    await expect(page.locator('#chPanelLayouts')).toBeHidden();
+    await expect(page.locator('#chGenres .cha-genre')).toHaveCount(3);
+    const comedy = page.locator('#chGenres .cha-genre', { hasText: 'Comedy' });
+    await expect(comedy.locator('.cha-genre-thumb')).toHaveText('Poster collage');
+
+    // Smallest valid PNG (1 x 1).
+    const png = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==', 'base64');
+    const chooser = page.waitForEvent('filechooser');
+    await comedy.locator('.chGenreUpload').click();
+    await (await chooser).setFiles({ name: 'comedy.png', mimeType: 'image/png', buffer: png });
+
+    await expect(comedy.locator('.cha-genre-thumb')).toHaveClass(/cha-has-image/);
+    const upload = (await recordedRequests(page)).find((request) => request.method === 'POST' && request.path === 'CustomizedHome/GenreImages');
+    expect(upload?.body).toMatchObject({ Name: 'Comedy', Data: png.toString('base64') });
+
+    page.once('dialog', (dialog) => void dialog.accept());
+    await comedy.locator('.chGenreRemove').click();
+    await expect(comedy.locator('.cha-genre-thumb')).toHaveText('Poster collage');
+    await expect(comedy.locator('.chGenreRemove')).toHaveCount(0);
+});
+
+test('genres tab rejects files that are not PNG, JPEG or WebP before sending anything', async ({ page }) => {
+    await openAdminPage(page);
+    await page.click('#chTabGenres');
+    const chooser = page.waitForEvent('filechooser');
+    await page.locator('#chGenres .cha-genre').first().locator('.chGenreUpload').click();
+    await (await chooser).setFiles({ name: 'evil.svg', mimeType: 'image/svg+xml', buffer: Buffer.from('<svg xmlns="http://www.w3.org/2000/svg"/>') });
+    await expect.poll(async () => (await recordedRequests(page)).some((request) => request.method === 'ALERT')).toBe(true);
+    expect((await recordedRequests(page)).some((request) => request.method === 'POST' && request.path === 'CustomizedHome/GenreImages')).toBe(false);
+});

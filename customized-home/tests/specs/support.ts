@@ -21,6 +21,7 @@ export interface LayoutSection {
     Shape?: string;
     Size?: string;
     ShowTitle?: boolean;
+    ShowSectionTitle?: boolean;
     Genres?: string[];
 }
 
@@ -50,6 +51,7 @@ export interface MockOptions {
     hasUserLayout?: boolean;
     canCustomize?: boolean;
     enableIntegratedSections?: boolean;
+    genreImages?: { Name: string; Version: number }[];
 }
 
 interface MockWindow {
@@ -86,6 +88,7 @@ function mockState(options: MockOptions): Record<string, unknown> {
     return {
         catalog: CATALOG,
         genres: GENRES,
+        genreImages: options.genreImages ?? [],
         defaultLayout: options.defaultLayout ?? EMPTY_LAYOUT,
         // The administration page reads the default layout summary from the plugin configuration.
         pluginConfiguration: { DefaultLayout: options.defaultLayout ?? EMPTY_LAYOUT },

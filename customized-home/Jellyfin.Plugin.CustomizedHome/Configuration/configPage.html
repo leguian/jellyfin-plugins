@@ -392,6 +392,79 @@
                 font-size: 0.88em;
             }
 
+            #CustomizedHomeConfigPage .cha-input {
+                background: var(--cha-surface);
+                border: 1px solid var(--cha-border);
+                border-radius: 0.45em;
+                color: inherit;
+                font: inherit;
+                font-size: 0.92em;
+                padding: 0.45em 0.7em;
+                min-width: 12em;
+            }
+
+            #CustomizedHomeConfigPage .cha-input:focus {
+                outline: none;
+                border-color: var(--cha-accent);
+            }
+
+            #CustomizedHomeConfigPage .cha-genres {
+                display: grid;
+                grid-template-columns: repeat(auto-fill, minmax(9.5em, 1fr));
+                gap: 1em;
+            }
+
+            #CustomizedHomeConfigPage .cha-genre {
+                display: flex;
+                flex-direction: column;
+                gap: 0.5em;
+                background: var(--cha-surface);
+                border: 1px solid var(--cha-border);
+                border-radius: 0.6em;
+                padding: 0.6em;
+            }
+
+            #CustomizedHomeConfigPage .cha-genre-thumb {
+                aspect-ratio: 2 / 3;
+                border-radius: 0.4em;
+                background: var(--cha-surface-strong) center / cover no-repeat;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                color: var(--cha-muted);
+                font-size: 0.8em;
+                text-align: center;
+                padding: 0.4em;
+            }
+
+            #CustomizedHomeConfigPage .cha-genre-thumb.cha-has-image {
+                color: transparent;
+            }
+
+            #CustomizedHomeConfigPage .cha-genre-name {
+                font-weight: 500;
+                font-size: 0.92em;
+                white-space: nowrap;
+                overflow: hidden;
+                text-overflow: ellipsis;
+            }
+
+            #CustomizedHomeConfigPage .cha-genre-actions {
+                display: flex;
+                gap: 0.4em;
+            }
+
+            #CustomizedHomeConfigPage .cha-genre-actions .cha-btn {
+                flex: 1;
+                justify-content: center;
+                padding: 0.4em 0.5em;
+                font-size: 0.85em;
+            }
+
+            #CustomizedHomeConfigPage .cha-genre-actions .cha-btn-icon {
+                flex: 0 0 auto;
+            }
+
             #CustomizedHomeConfigPage .hide {
                 display: none !important;
             }
@@ -414,6 +487,9 @@
                     </button>
                     <button type="button" class="cha-tab" role="tab" id="chTabLayouts" aria-controls="chPanelLayouts" aria-selected="false" data-index="1" tabindex="-1">
                         <span class="material-icons" aria-hidden="true">dashboard_customize</span>Layouts
+                    </button>
+                    <button type="button" class="cha-tab" role="tab" id="chTabGenres" aria-controls="chPanelGenres" aria-selected="false" data-index="2" tabindex="-1">
+                        <span class="material-icons" aria-hidden="true">category</span>Genres
                     </button>
                 </div>
 
@@ -516,6 +592,23 @@
                         <div class="cha-card-head"><h2 class="cha-card-title">User layouts</h2></div>
                         <p class="cha-card-desc">Users that saved their own layout. Resetting a user sends them back to the default layout.</p>
                         <div id="chUserLayouts"></div>
+                    </div>
+                </section>
+
+                <!-- Tab 2: genre thumbnails -->
+                <section class="chTab hide" data-tab="2" id="chPanelGenres" role="tabpanel" aria-labelledby="chTabGenres">
+                    <div class="cha-card">
+                        <div class="cha-card-head">
+                            <h2 class="cha-card-title">Genre thumbnails</h2>
+                            <span class="cha-spacer"></span>
+                            <input type="search" id="chGenreFilter" class="cha-input" placeholder="Filter genres" aria-label="Filter genres" />
+                        </div>
+                        <p class="cha-card-desc">
+                            Thumbnail of each card of the "All genres" section. Without an upload, the card shows a collage of four posters of the genre.
+                            PNG, JPEG or WebP, 5 MB maximum. Poster ratio (2:3) recommended, for example 600 × 900.
+                        </p>
+                        <input type="file" id="chGenreFile" accept="image/png,image/jpeg,image/webp" class="hide" />
+                        <div id="chGenres" class="cha-genres"></div>
                     </div>
                 </section>
             </div>
@@ -671,8 +764,139 @@
                     });
                 }
 
+                /* ---- genre thumbnails ---- */
+                var MAX_IMAGE_BYTES = 5 * 1024 * 1024;
+                var ALLOWED_IMAGE_TYPES = ['image/png', 'image/jpeg', 'image/webp'];
+                var genreState = { genres: [], images: {}, target: null };
+
+                function genreImageUrl(entry) {
+                    return ApiClient.getUrl('CustomizedHome/GenreImages/Image', { name: entry.Name, v: entry.Version });
+                }
+
+                function renderGenres() {
+                    var container = page.querySelector('#chGenres');
+                    var filter = page.querySelector('#chGenreFilter').value.trim().toLowerCase();
+                    var genres = genreState.genres.filter(function (name) {
+                        return !filter || name.toLowerCase().indexOf(filter) >= 0;
+                    });
+                    if (!genres.length) {
+                        container.innerHTML = '<div class="cha-empty">' + (genreState.genres.length ? 'No genre matches.' : 'No genre found in the libraries.') + '</div>';
+                        return;
+                    }
+                    container.innerHTML = genres.map(function (name) {
+                        var image = genreState.images[name.toUpperCase()];
+                        var style = image ? ' style="background-image:url(&quot;' + escapeHtml(genreImageUrl(image)) + '&quot;)"' : '';
+                        return '<div class="cha-genre" data-genre="' + escapeHtml(name) + '">' +
+                            '<div class="cha-genre-thumb' + (image ? ' cha-has-image' : '') + '"' + style + '>' + (image ? '' : 'Poster collage') + '</div>' +
+                            '<div class="cha-genre-name" title="' + escapeHtml(name) + '">' + escapeHtml(name) + '</div>' +
+                            '<div class="cha-genre-actions">' +
+                            '<button type="button" class="cha-btn chGenreUpload"><span class="material-icons" aria-hidden="true">upload</span>' + (image ? 'Replace' : 'Upload') + '</button>' +
+                            (image ? '<button type="button" class="cha-btn cha-btn-danger cha-btn-icon chGenreRemove" aria-label="Remove the thumbnail of ' + escapeHtml(name) + '" title="Remove the thumbnail"><span class="material-icons" aria-hidden="true">delete</span></button>' : '') +
+                            '</div></div>';
+                    }).join('');
+                }
+
+                function loadGenres() {
+                    var genresRequest = ApiClient.getJSON(ApiClient.getUrl('Genres', {
+                        userId: ApiClient.getCurrentUserId(),
+                        sortBy: 'SortName',
+                        includeItemTypes: 'Movie,Series',
+                        recursive: true,
+                        enableTotalRecordCount: false
+                    }));
+                    var imagesRequest = ApiClient.getJSON(ApiClient.getUrl('CustomizedHome/GenreImages'));
+                    return Promise.all([genresRequest, imagesRequest]).then(function (results) {
+                        genreState.genres = ((results[0] && results[0].Items) || []).map(function (genre) {
+                            return genre.Name;
+                        });
+                        genreState.images = {};
+                        (results[1] || []).forEach(function (entry) {
+                            genreState.images[entry.Name.toUpperCase()] = entry;
+                        });
+                        renderGenres();
+                    }).catch(function () {
+                        page.querySelector('#chGenres').innerHTML = '<div class="cha-empty">Could not load the genres.</div>';
+                    });
+                }
+
+                function readAsBase64(file) {
+                    return new Promise(function (resolve, reject) {
+                        var reader = new FileReader();
+                        reader.onload = function () {
+                            var result = String(reader.result);
+                            resolve(result.substring(result.indexOf(',') + 1));
+                        };
+                        reader.onerror = function () {
+                            reject(reader.error);
+                        };
+                        reader.readAsDataURL(file);
+                    });
+                }
+
+                function uploadGenreImage(name, file) {
+                    if (ALLOWED_IMAGE_TYPES.indexOf(file.type) < 0) {
+                        Dashboard.alert('Unsupported image: use PNG, JPEG or WebP.');
+                        return Promise.resolve();
+                    }
+                    if (file.size > MAX_IMAGE_BYTES) {
+                        Dashboard.alert('Image is larger than 5 MB.');
+                        return Promise.resolve();
+                    }
+                    Dashboard.showLoadingMsg();
+                    return readAsBase64(file).then(function (data) {
+                        return ApiClient.ajax({
+                            type: 'POST',
+                            url: ApiClient.getUrl('CustomizedHome/GenreImages'),
+                            data: JSON.stringify({ Name: name, Data: data }),
+                            contentType: 'application/json',
+                            dataType: 'json'
+                        });
+                    }).then(function (entry) {
+                        genreState.images[name.toUpperCase()] = entry;
+                        renderGenres();
+                    }).catch(function () {
+                        Dashboard.alert('The thumbnail could not be uploaded.');
+                    }).then(function () {
+                        Dashboard.hideLoadingMsg();
+                    });
+                }
+
+                page.querySelector('#chGenres').addEventListener('click', function (e) {
+                    var card = e.target.closest('.cha-genre');
+                    if (!card) {
+                        return;
+                    }
+                    var name = card.getAttribute('data-genre');
+                    if (e.target.closest('.chGenreUpload')) {
+                        genreState.target = name;
+                        var input = page.querySelector('#chGenreFile');
+                        input.value = '';
+                        input.click();
+                    } else if (e.target.closest('.chGenreRemove')) {
+                        if (!window.confirm('Remove the thumbnail of "' + name + '"?')) {
+                            return;
+                        }
+                        ApiClient.ajax({ type: 'DELETE', url: ApiClient.getUrl('CustomizedHome/GenreImages', { name: name }) }).then(function () {
+                            delete genreState.images[name.toUpperCase()];
+                            renderGenres();
+                        });
+                    }
+                });
+
+                page.querySelector('#chGenreFile').addEventListener('change', function (e) {
+                    var file = e.target.files && e.target.files[0];
+                    if (file && genreState.target) {
+                        uploadGenreImage(genreState.target, file);
+                    }
+                });
+
+                page.querySelector('#chGenreFilter').addEventListener('input', renderGenres);
+
                 function showTab(index) {
-                    page.querySelector('.cha-shell').classList.toggle('cha-wide', index === 1);
+                    page.querySelector('.cha-shell').classList.toggle('cha-wide', index >= 1);
+                    if (index === 2) {
+                        loadGenres();
+                    }
                     page.querySelectorAll('.chTab').forEach(function (tab) {
                         tab.classList.toggle('hide', tab.getAttribute('data-tab') !== String(index));
                     });

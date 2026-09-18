@@ -14,6 +14,7 @@ public class PluginServiceRegistrator : IPluginServiceRegistrator
     public void RegisterServices(IServiceCollection serviceCollection, IServerApplicationHost applicationHost)
     {
         serviceCollection.AddSingleton<LayoutStore>();
+        serviceCollection.AddSingleton<GenreImageStore>();
         serviceCollection.AddSingleton<WebInjectionService>();
         serviceCollection.AddHostedService(provider => provider.GetRequiredService<WebInjectionService>());
     }

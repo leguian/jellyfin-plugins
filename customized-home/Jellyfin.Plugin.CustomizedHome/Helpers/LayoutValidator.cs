@@ -145,6 +145,7 @@ public static partial class LayoutValidator
             Shape = NormalizeChoice(item.Shape, LayoutFormats.Shapes, LayoutFormats.ShapeAuto),
             Size = NormalizeChoice(item.Size, LayoutFormats.Sizes, LayoutFormats.SizeNormal),
             ShowTitle = item.ShowTitle,
+            ShowSectionTitle = item.ShowSectionTitle,
             Genres = NormalizeGenres(item.Genres)
         };
     }

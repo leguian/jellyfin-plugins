@@ -12,9 +12,20 @@ const DEFAULT_LAYOUT: Layout = {
     Items: [
         { Type: 'section', Key: 'jf:smalllibrarytiles', Visible: true, Size: 'small' },
         { Type: 'section', Key: 'ch:combined', Visible: true, Shape: 'landscape' },
-        { Type: 'section', Key: 'jf:nextup', Visible: false }
+        { Type: 'section', Key: 'jf:nextup', Visible: false },
+        { Type: 'section', Key: 'ch:genre', Visible: true, Genres: ['Action'] },
+        { Type: 'section', Key: 'ch:allGenres', Visible: true }
     ]
 };
+
+test('home with genre cards', async ({ page }) => {
+    await openHome(page, { enableIntegratedSections: true, layout: DEFAULT_LAYOUT });
+    await page.addStyleTag({ url: MATERIAL_ICONS });
+    // The fixture has no jellyfin-web card stylesheet: give cards a size so the collage is visible.
+    await page.addStyleTag({ content: '.ch-items{display:flex;gap:12px}.ch-card{width:150px}.cardPadder-overflowPortrait{padding-bottom:150%}.cardImageContainer{position:absolute;inset:0;background-size:cover}' });
+    await page.locator('[data-ch-key="ch:allGenres"] .ch-collage').first().waitFor();
+    await page.locator('[data-ch-key="ch:allGenres"]').screenshot({ path: `${OUTPUT_DIR}/home-all-genres.png` });
+});
 
 test('user editor', async ({ page }) => {
     await openHome(page, { enableIntegratedSections: true, layout: DEFAULT_LAYOUT });
@@ -22,6 +33,12 @@ test('user editor', async ({ page }) => {
     await openEditor(page);
     await page.waitForTimeout(500);
     await page.screenshot({ path: `${OUTPUT_DIR}/editor.png` });
+    await page.locator('.ch-overlay .ch-list .ch-row', { hasText: 'Genre' }).first().locator('.ch-act-menu').click();
+    await page.locator('.ch-popup .ch-genre-option').first().waitFor();
+    await page.screenshot({ path: `${OUTPUT_DIR}/editor-format-menu.png` });
+    await page.keyboard.press('Escape');
+    await page.locator('.ch-overlay .ch-list .ch-row').first().locator('.ch-act-remove').hover();
+    await page.screenshot({ path: `${OUTPUT_DIR}/editor-tooltip.png` });
     await page.fill('.ch-overlay .ch-search', 'continue');
     await page.locator('.ch-overlay .ch-list .ch-row').first().hover();
     await page.screenshot({ path: `${OUTPUT_DIR}/editor-search.png` });
@@ -35,4 +52,7 @@ test('administration page', async ({ page }) => {
     await page.click('#chTabLayouts');
     await page.waitForSelector('#chDefaultEditor .ch-row');
     await page.screenshot({ path: `${OUTPUT_DIR}/admin-layouts.png`, fullPage: true });
+    await page.click('#chTabGenres');
+    await page.locator('#chGenres .cha-genre').first().waitFor();
+    await page.screenshot({ path: `${OUTPUT_DIR}/admin-genres.png`, fullPage: true });
 });
