@@ -1058,3 +1058,372 @@
     text-shadow: 0 1px 3px rgba(0, 0, 0, 0.45);
     overflow-wrap: anywhere;
 }
+
+/* ---------- Hero (carousel of featured media) ---------- */
+.ch-hero {
+    /* Always first: layout sections start at 1000. */
+    order: -1;
+    position: relative;
+    overflow: hidden;
+    /* Same side gutters as the section titles of the web client. */
+    margin: 0 max(env(safe-area-inset-right), 3.3%) 1.6em max(env(safe-area-inset-left), 3.3%);
+    min-height: clamp(20em, 56vh, 40em);
+    border-radius: 0.8em;
+    background: #101010;
+    color: #fff;
+    /* Horizontal swipes change the slide, vertical ones scroll the page. */
+    touch-action: pan-y;
+}
+
+.ch-hero-slides {
+    position: absolute;
+    inset: 0;
+}
+
+.ch-hero-slide {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: flex-end;
+    opacity: 0;
+    visibility: hidden;
+    transition: opacity 0.6s ease, visibility 0s linear 0.6s;
+}
+
+.ch-hero-slide.ch-active {
+    opacity: 1;
+    visibility: visible;
+    z-index: 1;
+    transition: opacity 0.6s ease;
+}
+
+.ch-hero-backdrop {
+    position: absolute;
+    inset: 0;
+    background-position: center 20%;
+    background-size: cover;
+    background-repeat: no-repeat;
+}
+
+/* No backdrop available: the poster is used as a soft background. */
+.ch-hero-backdrop.ch-hero-backdrop-poster {
+    inset: -2em;
+    filter: blur(1.5em) brightness(0.7);
+}
+
+.ch-hero-shade {
+    position: absolute;
+    inset: 0;
+    background:
+        linear-gradient(to right, rgba(0, 0, 0, 0.82) 0%, rgba(0, 0, 0, 0.5) 38%, rgba(0, 0, 0, 0) 70%),
+        linear-gradient(to top, rgba(0, 0, 0, 0.75) 0%, rgba(0, 0, 0, 0) 45%);
+}
+
+.ch-hero-content {
+    position: relative;
+    box-sizing: border-box;
+    width: min(100%, 44em);
+    padding: 2em 2.4em 3.2em;
+    display: flex;
+    flex-direction: column;
+    gap: 0.8em;
+}
+
+.ch-hero-logo {
+    display: block;
+    max-width: min(70%, 24em);
+    max-height: 9em;
+    object-fit: contain;
+    object-position: left bottom;
+    align-self: flex-start;
+}
+
+.ch-hero-title {
+    margin: 0;
+    font-size: 2.2em;
+    font-weight: 600;
+    line-height: 1.15;
+}
+
+.ch-hero-meta {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.4em 0.9em;
+    font-size: 0.95em;
+    color: rgba(255, 255, 255, 0.85);
+}
+
+.ch-hero-meta .material-icons {
+    font-size: 1.1em;
+    margin-right: 0.2em;
+    vertical-align: -0.15em;
+}
+
+.ch-hero-rating .material-icons {
+    color: #f2b01e;
+}
+
+.ch-hero-official {
+    padding: 0.05em 0.45em;
+    border: 1px solid rgba(255, 255, 255, 0.5);
+    border-radius: 0.25em;
+    font-size: 0.9em;
+}
+
+.ch-hero-overview {
+    margin: 0;
+    line-height: 1.5;
+    color: rgba(255, 255, 255, 0.9);
+    display: -webkit-box;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 3;
+    line-clamp: 3;
+    overflow: hidden;
+}
+
+.ch-hero-actions {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.6em;
+    margin-top: 0.3em;
+}
+
+.ch-hero-btn,
+.ch-hero-round {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.4em;
+    box-sizing: border-box;
+    margin: 0;
+    border: 0;
+    font: inherit;
+    font-weight: 500;
+    color: #fff;
+    background: rgba(255, 255, 255, 0.18);
+    backdrop-filter: blur(6px);
+    -webkit-backdrop-filter: blur(6px);
+    cursor: pointer;
+    text-decoration: none;
+    transition: background 0.15s ease, transform 0.15s ease;
+}
+
+.ch-hero-btn {
+    min-height: 2.6em;
+    padding: 0.5em 1.2em 0.5em 0.9em;
+    border-radius: 0.5em;
+}
+
+.ch-hero-round {
+    width: 2.6em;
+    height: 2.6em;
+    padding: 0;
+    border-radius: 50%;
+}
+
+.ch-hero-btn:hover,
+.ch-hero-round:hover,
+.ch-hero-btn:focus-visible,
+.ch-hero-round:focus-visible {
+    background: rgba(255, 255, 255, 0.32);
+}
+
+.ch-hero-btn:focus-visible,
+.ch-hero-round:focus-visible,
+.ch-hero-nav:focus-visible,
+.ch-hero-dot:focus-visible {
+    outline: 2px solid #00a4dc;
+    outline-offset: 2px;
+}
+
+.ch-hero-btn.ch-hero-play {
+    background: #fff;
+    color: #101010;
+}
+
+.ch-hero-btn.ch-hero-play:hover,
+.ch-hero-btn.ch-hero-play:focus-visible {
+    background: rgba(255, 255, 255, 0.85);
+}
+
+.ch-hero-favorite .ratingbutton-icon-withrating {
+    color: #e0245e;
+}
+
+.ch-hero-played .playstatebutton-icon-played {
+    color: #52b54b;
+}
+
+.ch-hero-nav {
+    position: absolute;
+    top: 50%;
+    z-index: 2;
+    width: 2.6em;
+    height: 2.6em;
+    margin: -1.3em 0 0;
+    padding: 0;
+    border: 0;
+    border-radius: 50%;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    color: #fff;
+    background: rgba(0, 0, 0, 0.45);
+    cursor: pointer;
+    opacity: 0;
+    transition: opacity 0.15s ease, background 0.15s ease;
+}
+
+.ch-hero-prev {
+    left: 0.8em;
+}
+
+.ch-hero-next {
+    right: 0.8em;
+}
+
+.ch-hero:hover .ch-hero-nav,
+.ch-hero-nav:focus-visible {
+    opacity: 1;
+}
+
+.ch-hero-nav:hover {
+    background: rgba(0, 0, 0, 0.7);
+}
+
+.ch-hero-dots {
+    position: absolute;
+    right: 1.6em;
+    bottom: 1.2em;
+    z-index: 2;
+    display: flex;
+    gap: 0.45em;
+}
+
+.ch-hero-dot {
+    width: 0.6em;
+    height: 0.6em;
+    padding: 0;
+    border: 0;
+    border-radius: 50%;
+    background: rgba(255, 255, 255, 0.4);
+    cursor: pointer;
+    transition: background 0.15s ease, width 0.2s ease;
+}
+
+.ch-hero-dot.ch-active {
+    width: 1.6em;
+    border-radius: 0.3em;
+    background: #fff;
+}
+
+@media (max-width: 50em) {
+    .ch-hero {
+        min-height: clamp(18em, 62vh, 30em);
+    }
+
+    .ch-hero-content {
+        padding: 1.2em 1.2em 2.8em;
+    }
+
+    .ch-hero-title {
+        font-size: 1.6em;
+    }
+
+    .ch-hero-logo {
+        max-height: 6em;
+    }
+
+    .ch-hero-shade {
+        background: linear-gradient(to top, rgba(0, 0, 0, 0.9) 0%, rgba(0, 0, 0, 0.45) 55%, rgba(0, 0, 0, 0.1) 100%);
+    }
+
+    /* Only the main action keeps its label. */
+    .ch-hero-btn:not(.ch-hero-play) > span:not(.material-icons) {
+        display: none;
+    }
+
+    .ch-hero-btn:not(.ch-hero-play) {
+        width: 2.6em;
+        padding: 0;
+        border-radius: 50%;
+    }
+
+    /* Swipe and dots are enough on small screens. */
+    .ch-hero-nav {
+        display: none;
+    }
+
+    .ch-hero-dots {
+        right: auto;
+        left: 1.2em;
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .ch-hero-slide,
+    .ch-hero-slide.ch-active,
+    .ch-hero-dot {
+        transition: none;
+    }
+}
+
+/* ---------- Hero row of the editor ---------- */
+.ch-hero-slot:not(:empty) {
+    margin-bottom: 0.6em;
+}
+
+.ch-hero-row {
+    display: flex;
+    align-items: center;
+    gap: 0.5em;
+    min-height: 2.6em;
+    padding: 0.45em 0.6em;
+    border: 1px solid rgba(0, 164, 220, 0.45);
+    border-radius: 0.5em;
+    background: rgba(0, 164, 220, 0.12);
+}
+
+.ch-hero-row.ch-hero-row-off {
+    border-color: color-mix(in srgb, currentColor 14%, transparent);
+    background: color-mix(in srgb, currentColor 4%, transparent);
+}
+
+.ch-hero-row .ch-row-sub {
+    white-space: normal;
+}
+
+.ch-hero-toggle .material-icons {
+    font-size: 1.9em;
+    line-height: 0.8;
+}
+
+.ch-hero-toggle[aria-checked="true"] .material-icons {
+    color: #00a4dc;
+}
+
+.ch-hero-stepper {
+    display: flex;
+    align-items: center;
+    gap: 0.6em;
+    padding: 0.1em 0.6em 0.3em;
+}
+
+.ch-popup .ch-hero-stepper .ch-icon-btn {
+    width: auto;
+    padding: 0.35em;
+    border-radius: 50%;
+}
+
+.ch-popup .ch-hero-stepper .ch-icon-btn:disabled {
+    opacity: 0.3;
+    cursor: default;
+}
+
+.ch-hero-count {
+    min-width: 1.6em;
+    text-align: center;
+    font-variant-numeric: tabular-nums;
+}

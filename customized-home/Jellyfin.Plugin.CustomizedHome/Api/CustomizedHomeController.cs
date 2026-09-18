@@ -108,8 +108,9 @@ public class CustomizedHomeController : ControllerBase
             layout = effectiveUserLayout;
             source = "user";
         }
-        else if (config.DefaultLayout.Items.Count > 0)
+        else if (config.DefaultLayout.Items.Count > 0 || config.DefaultLayout.Hero.Enabled)
         {
+            // A default layout may consist of the hero alone, above the regular home page.
             layout = config.DefaultLayout;
             source = "default";
         }
