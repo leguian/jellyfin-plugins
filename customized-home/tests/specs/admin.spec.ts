@@ -1,6 +1,6 @@
 import { expect, test } from '@playwright/test';
-import type { Page } from '@playwright/test';
-import { LIGHT_DASHBOARD_STYLE, openAdminPage, recordedRequests, rowTitles, textContrast, type Layout } from './support';
+import type { Locator, Page } from '@playwright/test';
+import { LIGHT_DASHBOARD_STYLE, openAdminPage, recordedRequests, rowTitles, surfaceContrast, textContrast, type Layout } from './support';
 
 const EDITOR = '#chDefaultEditor';
 
@@ -324,6 +324,172 @@ for (const theme of ['light', 'dark'] as const) {
         for (const selector of ['.cha-ask-title', '.cha-ask-text', '.cha-ask-no', '.cha-ask-yes']) {
             const ratio = await textContrast(question.locator(selector));
             expect(ratio, `${selector} on a ${theme} dashboard`).toBeGreaterThanOrEqual(MIN_CONTRAST);
+        }
+    });
+}
+
+/* ---- WCAG AA on the administration page itself, on both dashboard themes ---- */
+
+// WCAG AA for a UI component: its boundary against what surrounds it.
+const MIN_UI_CONTRAST = 3;
+
+/** Every text of the page painted with --cha-muted, one per surface it sits on (the nesting changes the ratio). */
+const MUTED_TEXTS: { selector: string; tab?: string }[] = [
+    { selector: '.cha-subtitle' },
+    { selector: '.cha-version' },
+    // An inactive tab: on the tab track, which is a stronger surface than a card.
+    { selector: '#chTabLayouts' },
+    { selector: '.cha-status-text' },
+    { selector: '.cha-stat-label' },
+    { selector: '.cha-option-help' },
+    { selector: '.cha-card-desc', tab: '#chTabLayouts' },
+    { selector: '#chUserLayouts .cha-user-meta', tab: '#chTabLayouts' },
+    { selector: '.cha-spec-size', tab: '#chTabGenres' },
+    // Deepest nesting of the page: a card inside a card, over a stronger surface.
+    { selector: '#chGenres .cha-slot-label', tab: '#chTabGenres' },
+    { selector: '#chGenres .cha-genre-thumb', tab: '#chTabGenres' }
+];
+
+const USERS_WITH_LAYOUTS = [{ UserId: 'user-2', UserName: 'Alice', SectionCount: 3, ModifiedUtc: '2026-01-05T10:00:00Z' }];
+
+for (const theme of ['light', 'dark'] as const) {
+    test(`muted text of the administration page passes AA on a ${theme} dashboard`, async ({ page }) => {
+        await openAdminPage(page, { defaultLayout: DEFAULT_LAYOUT, userLayouts: USERS_WITH_LAYOUTS, genreImages: [{ Name: 'Comedy', Shape: 'portrait', Version: 1 }] });
+        if (theme === 'light') {
+            await page.addStyleTag({ content: LIGHT_DASHBOARD_STYLE });
+        }
+        // The empty-state text of a tab with nothing in it uses the same token.
+        for (const { selector, tab } of MUTED_TEXTS) {
+            if (tab) {
+                await page.click(tab);
+            }
+            const target = page.locator(`#CustomizedHomeConfigPage ${selector}`).first();
+            await target.waitFor();
+            const ratio = await textContrast(target);
+            expect(ratio, `${selector} on a ${theme} dashboard`).toBeGreaterThanOrEqual(MIN_CONTRAST);
+        }
+    });
+
+    test(`the muted token stays visibly secondary on a ${theme} dashboard`, async ({ page }) => {
+        await openAdminPage(page);
+        if (theme === 'light') {
+            await page.addStyleTag({ content: LIGHT_DASHBOARD_STYLE });
+        }
+        // Secondary, not "the same as the main text": the point of the token is a visible hierarchy.
+        const muted = await textContrast(page.locator('#CustomizedHomeConfigPage .cha-subtitle'));
+        const main = await textContrast(page.locator('#CustomizedHomeConfigPage .cha-title'));
+        expect(muted).toBeLessThan(main * 0.9);
+    });
+
+    test(`status badges pass AA as text on a ${theme} dashboard`, async ({ page }) => {
+        await openAdminPage(page);
+        if (theme === 'light') {
+            await page.addStyleTag({ content: LIGHT_DASHBOARD_STYLE });
+        }
+        const badge = page.locator('#chStatusBadge');
+        for (const state of ['cha-badge-ok', 'cha-badge-warn', 'cha-badge-error']) {
+            await badge.evaluate((node, className) => {
+                node.setAttribute('class', `cha-badge ${className}`);
+            }, state);
+            const ratio = await textContrast(badge);
+            expect(ratio, `${state} on a ${theme} dashboard`).toBeGreaterThanOrEqual(MIN_CONTRAST);
+            // The dot and the ring around the badge are currentColor: same colour, a UI boundary.
+            expect(await surfaceContrast(badge, 'borderTopColor'), `${state} border on a ${theme} dashboard`).toBeGreaterThanOrEqual(MIN_UI_CONTRAST);
+        }
+    });
+}
+
+for (const theme of ['light', 'dark'] as const) {
+    test(`the focus ring of every button passes AA on a ${theme} dashboard`, async ({ page }) => {
+        await openAdminPage(page, { defaultLayout: DEFAULT_LAYOUT });
+        if (theme === 'light') {
+            await page.addStyleTag({ content: LIGHT_DASHBOARD_STYLE });
+        }
+        // A plain button and a filled one: the filled one overrides `color`, so it cannot derive its ring from
+        // currentColor. (An inactive tab is not reachable with Tab: the tablist uses a roving tabindex.)
+        for (const selector of ['#chRetryRegistration', '#CustomizedHomeConfigForm button[type="submit"]']) {
+            const button = page.locator(selector);
+            await focusWithKeyboard(page, button);
+            const ratio = await surfaceContrast(button, 'outlineColor');
+            expect(ratio, `${selector} focus ring on a ${theme} dashboard`).toBeGreaterThanOrEqual(MIN_UI_CONTRAST);
+        }
+    });
+}
+
+/** Moves the focus onto a control with the keyboard: :focus-visible ignores a programmatic .focus(). */
+async function focusWithKeyboard(page: Page, target: Locator): Promise<void> {
+    await target.evaluate((node) => {
+        const before = document.createElement('button');
+        node.parentElement?.insertBefore(before, node);
+        before.focus();
+    });
+    await page.keyboard.press('Tab');
+    await expect(target).toBeFocused();
+}
+
+/** Every destructive button of the page: the Clear button, a per-user Reset, a delete-thumbnail icon button. */
+const DANGER_BUTTONS: { selector: string; open: (page: Page) => Promise<void> }[] = [
+    {
+        selector: '#chClearDefault',
+        open: async (page) => {
+            await page.click('#chTabLayouts');
+        }
+    },
+    {
+        selector: '#chUserLayouts .chResetUser',
+        open: async (page) => {
+            await page.click('#chTabLayouts');
+            await page.waitForSelector('#chUserLayouts .cha-user');
+        }
+    },
+    {
+        selector: '#chGenres .chGenreRemove',
+        open: async (page) => {
+            await page.click('#chTabGenres');
+            await page.waitForSelector('#chGenres .chGenreRemove');
+        }
+    }
+];
+
+for (const theme of ['light', 'dark'] as const) {
+    test(`destructive buttons read as destructive and pass AA on a ${theme} dashboard`, async ({ page }) => {
+        await openAdminPage(page, { defaultLayout: DEFAULT_LAYOUT, userLayouts: USERS_WITH_LAYOUTS, genreImages: [{ Name: 'Comedy', Shape: 'portrait', Version: 1 }] });
+        if (theme === 'light') {
+            await page.addStyleTag({ content: LIGHT_DASHBOARD_STYLE });
+        }
+        const accent = await page.locator('#CustomizedHomeConfigPage .cha-btn-primary').evaluate((node) => getComputedStyle(node).backgroundColor);
+
+        for (const { selector, open } of DANGER_BUTTONS) {
+            await open(page);
+            const button = page.locator(selector).first();
+            await button.waitFor();
+            const where = `${selector} on a ${theme} dashboard`;
+
+            // Label on the fill: normal size text.
+            expect(await textContrast(button), `${where}: label`).toBeGreaterThanOrEqual(MIN_CONTRAST);
+            // The fill and its border are the boundary of the button against the card behind it.
+            expect(await surfaceContrast(button, 'backgroundColor'), `${where}: fill`).toBeGreaterThanOrEqual(MIN_UI_CONTRAST);
+            expect(await surfaceContrast(button, 'borderTopColor'), `${where}: border`).toBeGreaterThanOrEqual(MIN_UI_CONTRAST);
+
+            const paint = await button.evaluate((node) => {
+                const style = getComputedStyle(node);
+                return { background: style.backgroundColor, outline: style.outlineColor };
+            });
+            // Still red, and not the accent: distinguishable from the primary button.
+            const channels = /(\d+(?:\.\d+)?)[,\s]+(\d+(?:\.\d+)?)[,\s]+(\d+(?:\.\d+)?)/.exec(paint.background);
+            const [red = 0, green = 0, blue = 0] = (channels ?? []).slice(1).map(Number);
+            expect(red, `${where}: red channel dominates`).toBeGreaterThan(green + 40);
+            expect(red, `${where}: red channel dominates`).toBeGreaterThan(blue + 40);
+            expect(paint.background, `${where}: not the accent`).not.toBe(accent);
+
+            // The focus ring is a UI component too, and it must not be drawn in the accent.
+            await focusWithKeyboard(page, button);
+            expect(await surfaceContrast(button, 'outlineColor'), `${where}: focus ring`).toBeGreaterThanOrEqual(MIN_UI_CONTRAST);
+
+            // Hovering must not drop the fill under the threshold: a darker red fails on a dark dashboard.
+            await button.hover();
+            expect(await textContrast(button), `${where}: hovered label`).toBeGreaterThanOrEqual(MIN_CONTRAST);
+            expect(await surfaceContrast(button, 'backgroundColor'), `${where}: hovered fill`).toBeGreaterThanOrEqual(MIN_UI_CONTRAST);
         }
     });
 }

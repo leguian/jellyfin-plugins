@@ -13,10 +13,26 @@
                 --cha-surface: color-mix(in srgb, currentColor 5%, transparent);
                 --cha-surface-strong: color-mix(in srgb, currentColor 10%, transparent);
                 --cha-border: color-mix(in srgb, currentColor 14%, transparent);
-                --cha-muted: color-mix(in srgb, currentColor 62%, transparent);
+                /* 68% of the text colour: secondary, and still over the 4.5:1 of WCAG AA on a light dashboard in
+                   the worst nesting of the page (a genre thumbnail, 4.90:1). 62% only reached 4.13:1 there. */
+                --cha-muted: color-mix(in srgb, currentColor 68%, transparent);
                 --cha-ok: #3fb950;
                 --cha-warn: #d29922;
                 --cha-error: #f85149;
+                /* Destructive actions are filled, never red-on-transparent: no single red passes as text on both
+                   dashboards (#f85149 is 2.47:1 on a light one, a dark red is 2.33:1 on a dark one). This one
+                   carries white at 5.08:1 and is its own boundary, at 3:1 or better against every surface of the
+                   page on both themes, so nothing here has to guess the theme. */
+                --cha-danger-fill: #d03027;
+                /* Hover shifts the hue, not the luminance: darkening it would drop the fill under 3:1 against a
+                   dark dashboard (#a8241d is 2.17:1 there), lightening it would do the same on a light one. */
+                --cha-danger-fill-hover: #cc3a30;
+                /* The focus ring is a UI component: 3:1 against what surrounds it. The accent only reaches 2.1:1
+                   on a light dashboard, so the ring is derived from the text colour (5.4:1 or better on both). */
+                --cha-focus: color-mix(in srgb, currentColor 70%, transparent);
+                /* For the filled buttons only, which override `color` and so cannot use --cha-focus: a fixed
+                   tint, dark enough for a light dashboard and light enough for a dark one (3.3:1 or better). */
+                --cha-focus-filled: #0b7fb0;
             }
 
             #CustomizedHomeConfigPage .cha-shell {
@@ -107,7 +123,7 @@
             }
 
             #CustomizedHomeConfigPage .cha-tab:focus-visible {
-                outline: 2px solid var(--cha-accent);
+                outline: 2px solid var(--cha-focus);
                 outline-offset: 1px;
             }
 
@@ -168,9 +184,13 @@
                 background: currentColor;
             }
 
-            #CustomizedHomeConfigPage .cha-badge-ok { color: var(--cha-ok); }
-            #CustomizedHomeConfigPage .cha-badge-warn { color: var(--cha-warn); }
-            #CustomizedHomeConfigPage .cha-badge-error { color: var(--cha-error); }
+            /* A badge is text: 4.5:1 on both dashboards. No fixed tint of these hues can do that (a light
+               dashboard needs a dark one, a dark dashboard a light one), so each is pulled 45% toward the text
+               colour: it darkens on a light dashboard and lightens on a dark one, from one declaration, following
+               the painted colour instead of guessing the theme. The hue stays recognisable. */
+            #CustomizedHomeConfigPage .cha-badge-ok { color: color-mix(in srgb, var(--cha-ok) 55%, currentColor); }
+            #CustomizedHomeConfigPage .cha-badge-warn { color: color-mix(in srgb, var(--cha-warn) 55%, currentColor); }
+            #CustomizedHomeConfigPage .cha-badge-error { color: color-mix(in srgb, var(--cha-error) 55%, currentColor); }
 
             #CustomizedHomeConfigPage .cha-status-text {
                 margin: 0;
@@ -297,7 +317,7 @@
             }
 
             #CustomizedHomeConfigPage .cha-switch:focus-visible {
-                outline: 2px solid var(--cha-accent);
+                outline: 2px solid var(--cha-focus);
                 outline-offset: 2px;
             }
 
@@ -322,7 +342,7 @@
             }
 
             #CustomizedHomeConfigPage .cha-btn:focus-visible {
-                outline: 2px solid var(--cha-accent);
+                outline: 2px solid var(--cha-focus);
                 outline-offset: 1px;
             }
 
@@ -340,8 +360,29 @@
                 background: #0288b8;
             }
 
+            /* A filled button sets its own colour, so --cha-focus (built on currentColor) would resolve to the
+               white of its label and vanish against a light dashboard. The ring is drawn in a fixed colour
+               instead, offset so it lands on the surface behind the button. The accent itself cannot be that
+               colour: it is only 2.1:1 against a light dashboard. This tint of it is 3.3:1 or better on both. */
+            #CustomizedHomeConfigPage .cha-btn-primary:focus-visible,
+            #CustomizedHomeConfigPage .cha-btn-danger:focus-visible {
+                outline-color: var(--cha-focus-filled);
+                outline-offset: 2px;
+            }
+
+            /* Filled, and distinguishable from .cha-btn-primary by its colour: the accent is blue, this is red.
+               The fill is its own boundary (3.06:1 against the deepest surface of the page on a dark dashboard,
+               3.75:1 on a light one), so the border only has to not weaken it: mixing currentColor into it would,
+               because on a light dashboard currentColor is near black and pulls the red toward the pale card. */
             #CustomizedHomeConfigPage .cha-btn-danger {
-                color: var(--cha-error);
+                background: var(--cha-danger-fill);
+                border-color: var(--cha-danger-fill);
+                color: #fff;
+            }
+
+            #CustomizedHomeConfigPage .cha-btn-danger:hover {
+                background: var(--cha-danger-fill-hover);
+                border-color: var(--cha-danger-fill-hover);
             }
 
             #CustomizedHomeConfigPage .cha-actions {
@@ -575,8 +616,8 @@
                 font-weight: 600;
             }
 
-            /* Full contrast, not --cha-muted: this text says what is about to be lost, and 62% of the text colour
-               falls just under the 4.5:1 of WCAG AA on a light dashboard. */
+            /* Deliberately stronger than --cha-muted: this text says what is about to be lost, so it is not
+               secondary information. */
             #CustomizedHomeConfigPage .cha-ask-text {
                 margin: 0 0 1.1em;
                 color: color-mix(in srgb, currentColor 85%, transparent);
@@ -591,18 +632,8 @@
                 gap: 0.6em;
             }
 
-            /* Filled, not the outlined .cha-btn-danger: as the destructive action of the question it has to stand
-               out, and the red of the page as a text colour only reaches 2.7:1 on a light dashboard. */
-            #CustomizedHomeConfigPage .cha-ask-yes {
-                background: #b3231c;
-                border-color: #b3231c;
-                color: #fff;
-            }
-
-            #CustomizedHomeConfigPage .cha-ask-yes:hover {
-                background: #8f1c16;
-                border-color: #8f1c16;
-            }
+            /* The destructive answer is a .cha-btn-danger: filled like every other destructive action of the page,
+               which is where the red-on-transparent treatment was dropped. Nothing to add here. */
         </style>
 
         <div data-role="content">

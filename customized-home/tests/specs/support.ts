@@ -344,6 +344,55 @@ export async function textContrast(target: Locator): Promise<number> {
     });
 }
 
+/** Painted colours of an element that WCAG treats as a UI component boundary. */
+export type SurfaceColour = 'backgroundColor' | 'borderTopColor' | 'outlineColor';
+
+/**
+ * WCAG contrast ratio between one painted colour of an element and what is painted *behind* the element
+ * (its ancestors only, so the element's own background does not become its own reference). Used for the
+ * boundaries of a UI component: the fill of a button, its border, its focus ring. The colour is read from
+ * the computed style, which resolves color-mix to a "color(srgb ...)" the canvas understands.
+ */
+export async function surfaceContrast(target: Locator, property: SurfaceColour): Promise<number> {
+    return target.first().evaluate((node, read) => {
+        const canvas = document.createElement('canvas');
+        canvas.width = 1;
+        canvas.height = 1;
+        const context = canvas.getContext('2d');
+        if (!context) {
+            throw new Error('no 2d context');
+        }
+        const chain: Element[] = [];
+        for (let element: Element | null = node.parentElement; element; element = element.parentElement) {
+            chain.unshift(element);
+        }
+        const pixel = (): number[] => Array.from(context.getImageData(0, 0, 1, 1).data.slice(0, 3));
+        const luminance = (rgb: number[]): number => {
+            const [r = 0, g = 0, b = 0] = rgb.map((value) => {
+                const channel = value / 255;
+                return channel <= 0.03928 ? channel / 12.92 : Math.pow((channel + 0.055) / 1.055, 2.4);
+            });
+            return 0.2126 * r + 0.7152 * g + 0.0722 * b;
+        };
+        context.fillStyle = '#ffffff';
+        context.fillRect(0, 0, 1, 1);
+        let opacity = 1;
+        for (const element of chain) {
+            const style = getComputedStyle(element);
+            opacity *= parseFloat(style.opacity);
+            context.globalAlpha = opacity;
+            context.fillStyle = style.backgroundColor;
+            context.fillRect(0, 0, 1, 1);
+        }
+        const behind = luminance(pixel());
+        context.globalAlpha = opacity;
+        context.fillStyle = getComputedStyle(node)[read];
+        context.fillRect(0, 0, 1, 1);
+        const front = luminance(pixel());
+        return (Math.max(front, behind) + 0.05) / (Math.min(front, behind) + 0.05);
+    }, property);
+}
+
 export async function recordedRequests(page: Page): Promise<MockRequest[]> {
     return page.evaluate(() => (window as unknown as MockWindow).__mock.requests);
 }

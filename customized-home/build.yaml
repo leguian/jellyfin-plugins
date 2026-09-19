@@ -1,7 +1,7 @@
 ---
 name: "Customized Home"
 guid: "7c99a4bf-cd3b-4bc8-b941-7ddccd816f3c"
-version: "1.8.4.1"
+version: "1.8.4.2"
 targetAbi: "12.0.0.0"
 framework: "net10.0"
 overview: "Easily edit and organize the sections on your homepage"
@@ -22,8 +22,5 @@ owner: "leguian"
 artifacts:
 - "Jellyfin.Plugin.CustomizedHome.dll"
 changelog: >
-  Housekeeping. The administration page asks its questions in the page instead of a browser prompt, like the
-  editor does. The dots of the hero are easier to hit on a touch screen. At server start the layouts left behind
-  by users deleted while the plugin was not running are removed. Saving the default layout or reading a genre
-  thumbnail answers a readable error instead of a generic failure when the disk refuses, and a default layout
-  that could not be written is no longer applied until the next restart.
+  Readability of the administration page on a light dashboard: secondary text and the buttons of the
+  destructive actions now meet the WCAG AA contrast minimum on both a light and a dark dashboard.
