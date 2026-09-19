@@ -18,7 +18,9 @@ Le fichier `manifest.json` est mis à jour par la CI à chaque release (`scripts
 
 ## Release
 
-Monter la version dans `<plugin>/build.yaml` (et le `<Version>` du csproj), fusionner dans `main` : le workflow `release.yml` crée le tag `<plugin>-v<version>`, construit les zips (Jellyfin 12.x et 10.11.x), publie la release GitHub et met à jour `manifest.json`. Un tag poussé à la main ou un « Run workflow » avec le nom du tag font la même chose.
+Monter la version dans `<plugin>/build.yaml` (et le `<Version>` du csproj), fusionner dans `main` : le workflow `release.yml` crée le tag `<plugin>-v<version>`, construit les zips (Jellyfin 12.x et 10.11.x), publie la release GitHub et met à jour `manifest.json`. Rien n'est publié tant que tous les jobs de `build.yml` (deux builds, tests unitaires sur les deux cibles, tests navigateur) ne sont pas verts. « Run workflow » sur `main` relance la release de la version courante si elle n'existe pas encore.
+
+Les zips sont compilés contre le plus ancien serveur de chaque ligne (10.11.0 et 12.0.0, `JELLYFIN_FLOORS` dans `scripts/package.py`) et déclarent ce même `targetAbi` : un serveur refuse un plugin dont les références Jellyfin sont plus récentes que ses propres assemblies.
 
 ## Build
 
@@ -27,12 +29,16 @@ Chaque plugin se compile avec le SDK .NET 10 :
 ```bash
 dotnet build customized-home/Jellyfin.Plugin.CustomizedHome/Jellyfin.Plugin.CustomizedHome.csproj -c Release
 # cible Jellyfin 10.11 :
-dotnet build customized-home/Jellyfin.Plugin.CustomizedHome/Jellyfin.Plugin.CustomizedHome.csproj -c Release -p:JellyfinVersion=10.11.11
+dotnet build customized-home/Jellyfin.Plugin.CustomizedHome/Jellyfin.Plugin.CustomizedHome.csproj -c Release -p:JellyfinVersion=10.11.0
 ```
 
 Packaging (zip + checksum, prêt pour une release) :
 
 ```bash
-python3 scripts/package.py customized-home --jellyfin 12.1.0 --output artifacts
-python3 scripts/package.py customized-home --jellyfin 10.11.11 --output artifacts
+python3 scripts/package.py customized-home --jellyfin 12 --output artifacts
+python3 scripts/package.py customized-home --jellyfin 10.11 --output artifacts
 ```
+
+## Licence
+
+[GPL-3.0](LICENSE), comme Jellyfin et ses plugins officiels.

@@ -30,13 +30,13 @@ Plugins Jellyfin, un sous-dossier par plugin. Actuellement : `customized-home/`.
 
 ```powershell
 # Build (le SDK .NET 9 local ne compile que la cible 10.11 ; la cible 12.x est validée par la CI)
-dotnet build customized-home/Jellyfin.Plugin.CustomizedHome/Jellyfin.Plugin.CustomizedHome.csproj -c Release -p:JellyfinVersion=10.11.11
+dotnet build customized-home/Jellyfin.Plugin.CustomizedHome/Jellyfin.Plugin.CustomizedHome.csproj -c Release -p:JellyfinVersion=10.11.0
 
 # Tests unitaires C# (validation des dispositions, stockage des miniatures)
-dotnet test customized-home/Jellyfin.Plugin.CustomizedHome.Tests -p:JellyfinVersion=10.11.11
+dotnet test customized-home/Jellyfin.Plugin.CustomizedHome.Tests -p:JellyfinVersion=10.11.0
 
 # Packaging, identique à ce que fait la release (zip dans artifacts/, ignoré par git)
-python scripts/package.py customized-home --jellyfin 10.11.11 --output artifacts
+python scripts/package.py customized-home --jellyfin 10.11 --output artifacts
 
 # Syntaxe du script client
 node --check customized-home/Jellyfin.Plugin.CustomizedHome/Web/customized-home.js
@@ -48,7 +48,7 @@ npm run typecheck
 npm run screenshots   # captures dans test-results/screenshots, à regarder après tout changement d'UI
 ```
 
-Avant tout push : build + `dotnet test` + `node --check` + `npm test` + `npm run typecheck` + **packaging** (`python scripts/package.py customized-home --jellyfin 10.11.11 --output artifacts`). Le packaging est ce que la release exécute : l'oublier a déjà cassé une release (ajout d'un second `.csproj`). Après un changement d'UI : `npm run screenshots` et contrôle visuel des captures.
+Avant tout push : build + `dotnet test` + `node --check` + `npm test` + `npm run typecheck` + **packaging** (`python scripts/package.py customized-home --jellyfin 10.11 --output artifacts`). Le packaging est ce que la release exécute : l'oublier a déjà cassé une release (ajout d'un second `.csproj`). Après un changement d'UI : `npm run screenshots` et contrôle visuel des captures.
 
 ## Tests
 
@@ -61,6 +61,8 @@ Avant tout push : build + `dotnet test` + `node --check` + `npm test` + `npm run
 - 1 évolution = 1 branche (`feat/…`, `fix/…`, `chore/…`), Conventional Commits en anglais.
 - **Après chaque merge dans `main` : supprimer la branche mergée, en local et sur GitHub, systématiquement** (`git branch -d` puis `git push origin --delete`). Vérifier d'abord qu'elle est bien mergée.
 - **Release = changement de `version` dans `customized-home/build.yaml` mergé dans `main`.** Le workflow `release.yml` crée le tag `customized-home-v<version>`, construit les deux zips, publie la release et met à jour `manifest.json`. Sans changement de version, rien n'est publié.
+- **Toujours compiler contre le plus ancien serveur de chaque ligne** (`JELLYFIN_FLOORS` dans `scripts/package.py` : 10.11.0 et 12.0.0) : un serveur refuse un plugin dont les références Jellyfin sont plus récentes que ses assemblies. Le `targetAbi` déclaré est exactement la version de compilation ; `PluginAssemblyTests` et `package.py` le contrôlent.
+- La release attend tous les jobs de `build.yml` (appelé par `release.yml`) : un test rouge bloque la publication.
 - À chaque bump, aligner : `build.yaml` (`version`, `changelog`), `<Version>` du csproj, `const VERSION` du JS.
 - Ne jamais merger dans `main` ni publier sans demande explicite : une release est irréversible.
 - Après un merge : attendre les workflows, puis vérifier tag + manifest **dans git** (`git show origin/main:manifest.json`). `raw.githubusercontent.com` a ~5 min de cache.
