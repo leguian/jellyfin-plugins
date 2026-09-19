@@ -35,7 +35,7 @@ One folder per plugin. Today: `customized-home/`.
 - **Never move the home sections in the DOM.** Order is set with the CSS `order` property on a flex container: moving an `emby-itemscontainer` resets its data.
 - **User-facing strings of the client** go through the `I18N` table of the script, in English and French. The administrator page is in English.
 - Identifiers, comments and log messages in English.
-- C#: warnings are errors and analyzers are on. Logs through `[LoggerMessage]`. Every endpoint carries `[Authorize]` except the client assets; administrator endpoints use `Policies.RequiresElevation`. Every input from a client is validated and normalized on the server (`LayoutValidator`).
+- C#: warnings are errors and analyzers are on. Logs through `[LoggerMessage]`. Every endpoint carries `[Authorize]` except the client assets and the genre thumbnail image (served like any Jellyfin image, see `SECURITY.md`); administrator endpoints use `Policies.RequiresElevation`. Every input from a client is validated and normalized on the server (`LayoutValidator`).
 - Stay on Jellyfin APIs that exist in both 10.11.0 and 12.0.0: the plugin is compiled against the oldest server of each line.
 - No unresolved `TODO`, no hardcoded magic values: use named constants.
 
@@ -53,7 +53,7 @@ Run all of it; the CI runs the same checks and a red job blocks a release.
 # 1. Build (warnings are errors). With the .NET 9 SDK only the 10.11 target builds locally; the CI builds 12.x.
 dotnet build customized-home/Jellyfin.Plugin.CustomizedHome/Jellyfin.Plugin.CustomizedHome.csproj -c Release -p:JellyfinVersion=10.11.0
 
-# 2. C# unit tests
+# 2. C# unit tests (the 10.11 run needs the .NET 9 runtime; with the .NET 10 SDK alone, drop the property to test the 12.x target)
 dotnet test customized-home/Jellyfin.Plugin.CustomizedHome.Tests -p:JellyfinVersion=10.11.0
 
 # 3. Client script syntax

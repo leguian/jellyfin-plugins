@@ -78,4 +78,5 @@ Avant tout push : build + `dotnet test` + `node --check` + `npm test` + `npm run
 ## Documentation
 
 - `customized-home/README.md` (français) : fonctionnement, sections, API, tests, points de vigilance. À mettre à jour dans le même commit que le code.
+- `customized-home/README.en.md` (guide utilisateur en anglais, lié depuis le README racine) : à mettre à jour dans le même commit dès qu'un libellé, une option, une valeur par défaut ou une limite qu'il cite change.
 - Signaler ce qui n'a pas été vérifié (serveur réel, cible 12.x en local, thème clair du dashboard).

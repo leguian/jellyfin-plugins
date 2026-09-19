@@ -46,7 +46,9 @@ dotnet build customized-home/Jellyfin.Plugin.CustomizedHome/Jellyfin.Plugin.Cust
 # Build: Jellyfin 10.11.x (.NET SDK 9 or 10)
 dotnet build customized-home/Jellyfin.Plugin.CustomizedHome/Jellyfin.Plugin.CustomizedHome.csproj -c Release -p:JellyfinVersion=10.11.0
 
-# C# unit tests
+# C# unit tests: Jellyfin 12.x target (.NET SDK 10)
+dotnet test customized-home/Jellyfin.Plugin.CustomizedHome.Tests
+# C# unit tests: Jellyfin 10.11.x target (needs the .NET 9 runtime)
 dotnet test customized-home/Jellyfin.Plugin.CustomizedHome.Tests -p:JellyfinVersion=10.11.0
 
 # Packaging, exactly what the release runs (zip and checksum in artifacts/, ignored by git)

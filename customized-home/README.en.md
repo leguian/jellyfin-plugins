@@ -224,7 +224,7 @@ Start with the status badge of the **Options** tab.
 
      `window.CustomizedHome` undefined means the script is not loaded. `sections()` lists the sections found on the home page during the last pass, with the key, label and origin of each and the order applied to it. An empty list on the home page means the sections of the web client were not recognized: report it with your Jellyfin version.
 4. No **Customize home** button: the administrator may have turned it off, disabled user customization or forced the default layout. The button is below the last section, at the very bottom of the page.
-5. A section is missing from the editor: tick **Also list the Jellyfin sections that are not displayed right now**, or use the search. Sections of Home Screen Sections are only listed when that plugin is installed on the server.
+5. A section is missing from the editor: tick **Also list the Jellyfin sections that are not displayed right now**, or use the search. Sections of Home Screen Sections are only listed when that plugin is installed **and** renders the home page of that user (its "Modular Home" enabled); when it does, the built-in Jellyfin sections are not offered instead. The administrator editor of the default layout lists everything.
 6. After a Jellyfin or plugin update, a hard refresh is needed once per browser.
 
 **Reporting a problem.** Open an [issue](https://github.com/leguian/jellyfin-plugins/issues/new/choose) with the Jellyfin version, the plugin version, the File Transformation version (all three are on the administrator page), the client and browser, and the output of `window.CustomizedHome.sections()`. For a security problem, follow [SECURITY.md](../SECURITY.md) instead.
@@ -236,7 +236,7 @@ What the plugin stores, all of it on the Jellyfin server, under `plugins/configu
 | Path | Content |
 | --- | --- |
 | `Jellyfin.Plugin.CustomizedHome.xml` | The administrator options and the default layout |
-| `Jellyfin.Plugin.CustomizedHome/users/<user id>.json` | One file per user who saved a layout: section keys, display labels (never the name of a library), order, visibility, formats, hero settings and chosen genres. No watch history, no media |
+| `Jellyfin.Plugin.CustomizedHome/users/<user id>.json` | One file per user who saved a layout: section keys, display labels (the label of a Jellyfin "recently added in a library" row is never stored; a row that could only be identified by its title keeps that title), order, visibility, formats, hero settings and chosen genres. No watch history, no media |
 | `Jellyfin.Plugin.CustomizedHome/genres/` | The genre thumbnails uploaded by the administrator and their index (`index.json`) |
 
 In the browser, the plugin keeps the collapsed or expanded state of layout folders in `localStorage`. Nothing is sent to any third party: the script only talks to your Jellyfin server. The one outgoing link is the **Trailer** button of the hero when a media has only a remote trailer: it opens that `http(s)` address, taken from the metadata of the media, in a new tab.

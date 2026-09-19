@@ -72,8 +72,11 @@ body:
     id: sections
     attributes:
       label: Output of window.CustomizedHome.sections() (when the request is about existing sections)
-      description: On the home page, browser developer tools (F12), Console tab. It tells which sections exist on your home page and where they come from. Library names can appear in the labels, edit them out if you prefer.
-      placeholder: "JSON.stringify(window.CustomizedHome.sections(), null, 2)"
+      description: |
+        On the home page, browser developer tools (F12), Console tab, run this line and paste the result:
+        `JSON.stringify(window.CustomizedHome.sections(), null, 2)`
+        It tells which sections exist on your home page and where they come from. Library names can appear in the labels, edit them out if you prefer.
+      placeholder: '[ { "key": "jf:resume", "label": "Continue Watching", "origin": "jellyfin" } ]'
       render: json
     validations:
       required: false

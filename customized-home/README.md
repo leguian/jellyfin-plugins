@@ -131,7 +131,7 @@ La disposition par défaut s'édite dans l'onglet **Layouts** avec le même édi
 
 ## Sections reconnues
 
-Clés stables utilisées dans les dispositions (`GET /CustomizedHome/Catalog`). Les sections Home Screen Sections ne sont listées que si ce plugin est installé sur le serveur :
+Clés stables utilisées dans les dispositions (`GET /CustomizedHome/Catalog`). Les sections Home Screen Sections ne sont servies par le catalogue que si ce plugin est installé sur le serveur ; l'éditeur utilisateur ne les propose que si HSS rend effectivement l'accueil de cet utilisateur, et ne propose alors plus les sections natives (l'éditeur administrateur liste tout) :
 
 | Origine | Clés | Libellé FR |
 | --- | --- | --- |
@@ -262,7 +262,7 @@ Rien ne change alors que le badge est **Active** :
    - onglet Réseau : `CustomizedHome/customized-home.js` et `.css` doivent répondre 200 ou 304. Un 404 derrière un reverse proxy vient en général du préfixe : le script est demandé sous l'**URL de base** configurée dans Jellyfin (Tableau de bord → Réseau), rappelée par le texte de statut (« Base URL prefix »). Le proxy doit relayer `/CustomizedHome/` comme le reste de Jellyfin ;
    - console : `window.CustomizedHome.version` et `window.CustomizedHome.sections()`. `window.CustomizedHome` indéfini = script non chargé. `sections()` liste les sections trouvées sur l'accueil au dernier passage (clé, libellé, origine, ordre appliqué) ; une liste vide sur l'accueil signifie que les sections du client web n'ont pas été reconnues : à signaler avec la version de Jellyfin.
 4. Pas de bouton **Personnaliser l'accueil** : l'administrateur a pu le désactiver, interdire la personnalisation ou forcer la disposition par défaut. Le bouton est sous la dernière section, tout en bas de la page.
-5. Section absente de l'éditeur : cocher **Lister aussi les sections Jellyfin non affichées actuellement** ou utiliser la recherche. Les sections Home Screen Sections ne sont listées que si ce plugin est installé sur le serveur.
+5. Section absente de l'éditeur : cocher **Lister aussi les sections Jellyfin non affichées actuellement** ou utiliser la recherche. Les sections Home Screen Sections ne sont listées que si ce plugin est installé **et** rend l'accueil de cet utilisateur (« Modular Home » activé) ; dans ce cas les sections natives de Jellyfin ne sont plus proposées. L'éditeur administrateur de la disposition par défaut liste tout.
 
 Signalement : [ouvrir une issue](https://github.com/leguian/jellyfin-plugins/issues/new/choose) avec les versions de Jellyfin, du plugin et de File Transformation (toutes sur la page de configuration), le client, et la sortie de `window.CustomizedHome.sections()`. Faille de sécurité : suivre [SECURITY.md](../SECURITY.md).
 

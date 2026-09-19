@@ -81,10 +81,12 @@ body:
     attributes:
       label: Output of window.CustomizedHome.sections()
       description: |
-        On the home page, open the browser developer tools (F12), Console tab, run the line below and paste the result.
+        On the home page, open the browser developer tools (F12), Console tab, run this line and paste the result:
+        `JSON.stringify(window.CustomizedHome.sections(), null, 2)`
+        No console on this client (mobile app, Jellyfin Media Player): write "not available".
         If the answer is "window.CustomizedHome is undefined", say so: the script is not loaded.
         Library names can appear in the labels: edit them out if you prefer.
-      placeholder: "JSON.stringify(window.CustomizedHome.sections(), null, 2)"
+      placeholder: '[ { "key": "jf:resume", "label": "Continue Watching", "origin": "jellyfin" } ]'
       render: json
     validations:
       required: true
