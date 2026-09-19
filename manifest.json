@@ -11,7 +11,7 @@
       {
         "version": "1.8.2.0",
         "changelog": "Hero banner: the automatic rotation delay is now chosen among 3 s, 5 s, 10 s and manual.",
-        "targetAbi": "12.0.0.0",
+        "targetAbi": "12.1.0.0",
         "sourceUrl": "https://github.com/leguian/jellyfin-plugins/releases/download/customized-home-v1.8.2.0/customized-home_1.8.2.0_jellyfin-12.zip",
         "checksum": "49876d4b5dce342491b07589ef1bd042",
         "timestamp": "2026-09-19T06:02:05Z"
@@ -19,7 +19,7 @@
       {
         "version": "1.8.2.0",
         "changelog": "Hero banner: the automatic rotation delay is now chosen among 3 s, 5 s, 10 s and manual.",
-        "targetAbi": "10.11.0.0",
+        "targetAbi": "10.11.11.0",
         "sourceUrl": "https://github.com/leguian/jellyfin-plugins/releases/download/customized-home-v1.8.2.0/customized-home_1.8.2.0_jellyfin-10.11.zip",
         "checksum": "7fe369c780e22ecaeb083f065df28c12",
         "timestamp": "2026-09-19T06:02:05Z"
@@ -27,7 +27,7 @@
       {
         "version": "1.8.1.0",
         "changelog": "The hero banner now spans the whole width of the page, starts under the top menu (which becomes see-through while it lies over the hero) and dissolves into the page below instead of ending on an edge.",
-        "targetAbi": "12.0.0.0",
+        "targetAbi": "12.1.0.0",
         "sourceUrl": "https://github.com/leguian/jellyfin-plugins/releases/download/customized-home-v1.8.1.0/customized-home_1.8.1.0_jellyfin-12.zip",
         "checksum": "a2e8781b797cd37eb578b21f1cfcaafb",
         "timestamp": "2026-09-18T19:33:27Z"
@@ -35,7 +35,7 @@
       {
         "version": "1.8.1.0",
         "changelog": "The hero banner now spans the whole width of the page, starts under the top menu (which becomes see-through while it lies over the hero) and dissolves into the page below instead of ending on an edge.",
-        "targetAbi": "10.11.0.0",
+        "targetAbi": "10.11.11.0",
         "sourceUrl": "https://github.com/leguian/jellyfin-plugins/releases/download/customized-home-v1.8.1.0/customized-home_1.8.1.0_jellyfin-10.11.zip",
         "checksum": "59e67daac023b89dc085dd2971cf50ef",
         "timestamp": "2026-09-18T19:33:27Z"
@@ -43,7 +43,7 @@
       {
         "version": "1.8.0.0",
         "changelog": "New hero banner at the top of the home page: a carousel of featured media with backdrop, logo, synopsis, runtime, year and ratings, and actions to play or resume, watch the trailer, mark as favorite or watched. Sources can be combined (random, recently added movies / shows, latest movies / shows), with an adjustable number of media and rotation delay. Configured from the layout editor, per user and in the default layout.",
-        "targetAbi": "12.0.0.0",
+        "targetAbi": "12.1.0.0",
         "sourceUrl": "https://github.com/leguian/jellyfin-plugins/releases/download/customized-home-v1.8.0.0/customized-home_1.8.0.0_jellyfin-12.zip",
         "checksum": "de1bb27f7b2bf85a7c7a2b95c993e2ef",
         "timestamp": "2026-09-18T19:12:38Z"
@@ -51,7 +51,7 @@
       {
         "version": "1.8.0.0",
         "changelog": "New hero banner at the top of the home page: a carousel of featured media with backdrop, logo, synopsis, runtime, year and ratings, and actions to play or resume, watch the trailer, mark as favorite or watched. Sources can be combined (random, recently added movies / shows, latest movies / shows), with an adjustable number of media and rotation delay. Configured from the layout editor, per user and in the default layout.",
-        "targetAbi": "10.11.0.0",
+        "targetAbi": "10.11.11.0",
         "sourceUrl": "https://github.com/leguian/jellyfin-plugins/releases/download/customized-home-v1.8.0.0/customized-home_1.8.0.0_jellyfin-10.11.zip",
         "checksum": "3d4c50eac2014df484044247c51dc64d",
         "timestamp": "2026-09-18T19:12:38Z"
@@ -59,7 +59,7 @@
       {
         "version": "1.7.0.0",
         "changelog": "Custom genre thumbnails now come in three shapes (poster, landscape, square): the \"All genres\" section uses the one matching its card shape. The Genres tab shows the optimal image sizes. Thumbnails uploaded before this version are kept as poster thumbnails.",
-        "targetAbi": "12.0.0.0",
+        "targetAbi": "12.1.0.0",
         "sourceUrl": "https://github.com/leguian/jellyfin-plugins/releases/download/customized-home-v1.7.0.0/customized-home_1.7.0.0_jellyfin-12.zip",
         "checksum": "a9450671749fe3c78b1d899a18fa61a5",
         "timestamp": "2026-09-18T17:36:48Z"
@@ -67,7 +67,7 @@
       {
         "version": "1.7.0.0",
         "changelog": "Custom genre thumbnails now come in three shapes (poster, landscape, square): the \"All genres\" section uses the one matching its card shape. The Genres tab shows the optimal image sizes. Thumbnails uploaded before this version are kept as poster thumbnails.",
-        "targetAbi": "10.11.0.0",
+        "targetAbi": "10.11.11.0",
         "sourceUrl": "https://github.com/leguian/jellyfin-plugins/releases/download/customized-home-v1.7.0.0/customized-home_1.7.0.0_jellyfin-10.11.zip",
         "checksum": "0408d8edec4bd1b24575263914d1a4f7",
         "timestamp": "2026-09-18T17:36:48Z"
@@ -75,7 +75,7 @@
       {
         "version": "1.6.0.0",
         "changelog": "\"All genres\" section: choose the look of the cards from the format menu - posters of the genre, custom images uploaded by the administrator, or genre names on colored backgrounds.",
-        "targetAbi": "12.0.0.0",
+        "targetAbi": "12.1.0.0",
         "sourceUrl": "https://github.com/leguian/jellyfin-plugins/releases/download/customized-home-v1.6.0.0/customized-home_1.6.0.0_jellyfin-12.zip",
         "checksum": "95879387df7c2d5f9ee2433ac2c196a1",
         "timestamp": "2026-09-18T17:22:00Z"
@@ -83,7 +83,7 @@
       {
         "version": "1.6.0.0",
         "changelog": "\"All genres\" section: choose the look of the cards from the format menu - posters of the genre, custom images uploaded by the administrator, or genre names on colored backgrounds.",
-        "targetAbi": "10.11.0.0",
+        "targetAbi": "10.11.11.0",
         "sourceUrl": "https://github.com/leguian/jellyfin-plugins/releases/download/customized-home-v1.6.0.0/customized-home_1.6.0.0_jellyfin-10.11.zip",
         "checksum": "f0bcdc798883bb5e37a7efe2ba45c079",
         "timestamp": "2026-09-18T17:22:00Z"
@@ -91,7 +91,7 @@
       {
         "version": "1.5.0.0",
         "changelog": "Editor: tooltips on every icon, legend and new pictograms (house = Customized Home section, Jellyfin logo = default section), section title can be hidden, format menu stays open while picking several options, sections rendered by the plugin are always listed. Genre cards now show a poster shaped collage of four distinct posters; administrators can upload a thumbnail per genre (new Genres tab).",
-        "targetAbi": "12.0.0.0",
+        "targetAbi": "12.1.0.0",
         "sourceUrl": "https://github.com/leguian/jellyfin-plugins/releases/download/customized-home-v1.5.0.0/customized-home_1.5.0.0_jellyfin-12.zip",
         "checksum": "a8ff071d2ff0c0d8404a4f8547174d8f",
         "timestamp": "2026-09-18T16:50:33Z"
@@ -99,7 +99,7 @@
       {
         "version": "1.5.0.0",
         "changelog": "Editor: tooltips on every icon, legend and new pictograms (house = Customized Home section, Jellyfin logo = default section), section title can be hidden, format menu stays open while picking several options, sections rendered by the plugin are always listed. Genre cards now show a poster shaped collage of four distinct posters; administrators can upload a thumbnail per genre (new Genres tab).",
-        "targetAbi": "10.11.0.0",
+        "targetAbi": "10.11.11.0",
         "sourceUrl": "https://github.com/leguian/jellyfin-plugins/releases/download/customized-home-v1.5.0.0/customized-home_1.5.0.0_jellyfin-10.11.zip",
         "checksum": "fe921f6ea18bc6130075e94a2ffaaa3c",
         "timestamp": "2026-09-18T16:50:33Z"
@@ -107,7 +107,7 @@
       {
         "version": "1.4.0.1",
         "changelog": "Options form uses the full page width, plugin description aligned everywhere.",
-        "targetAbi": "12.0.0.0",
+        "targetAbi": "12.1.0.0",
         "sourceUrl": "https://github.com/leguian/jellyfin-plugins/releases/download/customized-home-v1.4.0.1/customized-home_1.4.0.1_jellyfin-12.zip",
         "checksum": "caaded6209530a12711523a1edadf159",
         "timestamp": "2026-09-18T16:05:33Z"
@@ -115,7 +115,7 @@
       {
         "version": "1.4.0.1",
         "changelog": "Options form uses the full page width, plugin description aligned everywhere.",
-        "targetAbi": "10.11.0.0",
+        "targetAbi": "10.11.11.0",
         "sourceUrl": "https://github.com/leguian/jellyfin-plugins/releases/download/customized-home-v1.4.0.1/customized-home_1.4.0.1_jellyfin-10.11.zip",
         "checksum": "7cfc24f2264512c1492270031bc66b79",
         "timestamp": "2026-09-18T16:05:33Z"
@@ -123,7 +123,7 @@
       {
         "version": "1.4.0.0",
         "changelog": "Genres: new \"All genres\" section (one card per genre, opens the genre list) and the \"Genre\" section can now show chosen genres, one row each (automatic pick when none is chosen). Sections of the Home Screen Sections plugin are no longer listed when that plugin is absent.",
-        "targetAbi": "12.0.0.0",
+        "targetAbi": "12.1.0.0",
         "sourceUrl": "https://github.com/leguian/jellyfin-plugins/releases/download/customized-home-v1.4.0.0/customized-home_1.4.0.0_jellyfin-12.zip",
         "checksum": "fa709a03e8041b203d030e2d632df414",
         "timestamp": "2026-09-18T15:41:34Z"
@@ -131,7 +131,7 @@
       {
         "version": "1.4.0.0",
         "changelog": "Genres: new \"All genres\" section (one card per genre, opens the genre list) and the \"Genre\" section can now show chosen genres, one row each (automatic pick when none is chosen). Sections of the Home Screen Sections plugin are no longer listed when that plugin is absent.",
-        "targetAbi": "10.11.0.0",
+        "targetAbi": "10.11.11.0",
         "sourceUrl": "https://github.com/leguian/jellyfin-plugins/releases/download/customized-home-v1.4.0.0/customized-home_1.4.0.0_jellyfin-10.11.zip",
         "checksum": "373e9f0ef7c0210fdc7c8ccdda6b5d39",
         "timestamp": "2026-09-18T15:41:34Z"
@@ -139,7 +139,7 @@
       {
         "version": "1.3.0.0",
         "changelog": "A customized home page with at least one section now replaces the default home page. Editor: add / remove actions per column, format menu opened directly, no actions menu in the right column. Administration: forcing the default layout locks the customization options, layouts tab widened to 1100px.",
-        "targetAbi": "12.0.0.0",
+        "targetAbi": "12.1.0.0",
         "sourceUrl": "https://github.com/leguian/jellyfin-plugins/releases/download/customized-home-v1.3.0.0/customized-home_1.3.0.0_jellyfin-12.zip",
         "checksum": "cfbb1ddb4afca17f30515d8210d493aa",
         "timestamp": "2026-09-18T15:15:15Z"
@@ -147,7 +147,7 @@
       {
         "version": "1.3.0.0",
         "changelog": "A customized home page with at least one section now replaces the default home page. Editor: add / remove actions per column, format menu opened directly, no actions menu in the right column. Administration: forcing the default layout locks the customization options, layouts tab widened to 1100px.",
-        "targetAbi": "10.11.0.0",
+        "targetAbi": "10.11.11.0",
         "sourceUrl": "https://github.com/leguian/jellyfin-plugins/releases/download/customized-home-v1.3.0.0/customized-home_1.3.0.0_jellyfin-10.11.zip",
         "checksum": "d1ce7fe47519a2f402920212b6a91fc5",
         "timestamp": "2026-09-18T15:15:15Z"
@@ -155,7 +155,7 @@
       {
         "version": "1.2.0.0",
         "changelog": "Editor in two columns (customized home page / sections not in the layout) with drag and drop between them, \"move to the very top\" shortcut on search results, redesigned administration page (tabs, cards, switches, status), save button on top of the default layout, browser test suite.",
-        "targetAbi": "12.0.0.0",
+        "targetAbi": "12.1.0.0",
         "sourceUrl": "https://github.com/leguian/jellyfin-plugins/releases/download/customized-home-v1.2.0.0/customized-home_1.2.0.0_jellyfin-12.zip",
         "checksum": "a285c49d4d27073cc02e1836b6406d63",
         "timestamp": "2026-09-18T14:37:56Z"
@@ -163,7 +163,7 @@
       {
         "version": "1.2.0.0",
         "changelog": "Editor in two columns (customized home page / sections not in the layout) with drag and drop between them, \"move to the very top\" shortcut on search results, redesigned administration page (tabs, cards, switches, status), save button on top of the default layout, browser test suite.",
-        "targetAbi": "10.11.0.0",
+        "targetAbi": "10.11.11.0",
         "sourceUrl": "https://github.com/leguian/jellyfin-plugins/releases/download/customized-home-v1.2.0.0/customized-home_1.2.0.0_jellyfin-10.11.zip",
         "checksum": "a02431d34ae28d44680b39021520d7d7",
         "timestamp": "2026-09-18T14:37:56Z"
@@ -171,7 +171,7 @@
       {
         "version": "1.1.0.0",
         "changelog": "Sections rendered by the plugin (combined continue watching / next up, latest by release date, collections, watch again, because you watched, genre), per-section display format (shape, size, titles), search in the editor, administration page with Options / Layouts tabs, plugin logo.",
-        "targetAbi": "12.0.0.0",
+        "targetAbi": "12.1.0.0",
         "sourceUrl": "https://github.com/leguian/jellyfin-plugins/releases/download/customized-home-v1.1.0.0/customized-home_1.1.0.0_jellyfin-12.zip",
         "checksum": "07dd32920d7e04db7c203f5206a43b21",
         "timestamp": "2026-09-18T11:30:12Z"
@@ -179,7 +179,7 @@
       {
         "version": "1.1.0.0",
         "changelog": "Sections rendered by the plugin (combined continue watching / next up, latest by release date, collections, watch again, because you watched, genre), per-section display format (shape, size, titles), search in the editor, administration page with Options / Layouts tabs, plugin logo.",
-        "targetAbi": "10.11.0.0",
+        "targetAbi": "10.11.11.0",
         "sourceUrl": "https://github.com/leguian/jellyfin-plugins/releases/download/customized-home-v1.1.0.0/customized-home_1.1.0.0_jellyfin-10.11.zip",
         "checksum": "47ff86cd565fce2de9abd196ab1f3c39",
         "timestamp": "2026-09-18T11:30:12Z"
@@ -187,7 +187,7 @@
       {
         "version": "1.0.0.0",
         "changelog": "Initial release.",
-        "targetAbi": "12.0.0.0",
+        "targetAbi": "12.1.0.0",
         "sourceUrl": "https://github.com/leguian/jellyfin-plugins/releases/download/customized-home-v1.0.0.0/customized-home_1.0.0.0_jellyfin-12.zip",
         "checksum": "89e40516aa0ce3d9c26c54b53a8b30f9",
         "timestamp": "2026-09-18T07:14:09Z"
@@ -195,7 +195,7 @@
       {
         "version": "1.0.0.0",
         "changelog": "Initial release.",
-        "targetAbi": "10.11.0.0",
+        "targetAbi": "10.11.11.0",
         "sourceUrl": "https://github.com/leguian/jellyfin-plugins/releases/download/customized-home-v1.0.0.0/customized-home_1.0.0.0_jellyfin-10.11.zip",
         "checksum": "87a53835d152201e3e5db15be885eb28",
         "timestamp": "2026-09-18T07:14:09Z"

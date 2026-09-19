@@ -19,8 +19,8 @@ Plugin Jellyfin qui permet de réorganiser la page d'accueil du client web :
 
 | Élément | Support |
 | --- | --- |
-| Jellyfin 12.x | oui (build `net10.0`, `targetAbi 12.0.0.0`) |
-| Jellyfin 10.11.x | oui (build `net9.0`, `targetAbi 10.11.0.0`) |
+| Jellyfin 12.x | oui, à partir de 12.0.0 (build `net10.0` compilé contre 12.0.0, `targetAbi 12.0.0.0`) |
+| Jellyfin 10.11.x | oui, à partir de 10.11.0 (build `net9.0` compilé contre 10.11.0, `targetAbi 10.11.0.0`). Les versions ≤ 1.8.2.0 du plugin ne se chargent que sur 10.11.11+ et 12.1.0+ |
 | Client web (navigateur), apps Android / iOS officielles (web UI embarquée), Jellyfin Desktop | oui |
 | Android TV, Swiftfin, Kodi, autres apps natives | non (elles n'utilisent pas jellyfin-web) |
 | Home Screen Sections ("Modular Home") | oui, sections identifiées par leur identifiant HSS |
@@ -172,19 +172,19 @@ Format d'une disposition (`Shape` : auto | portrait | landscape | square ; `Size
 # Jellyfin 12.x (défaut)
 dotnet build Jellyfin.Plugin.CustomizedHome/Jellyfin.Plugin.CustomizedHome.csproj -c Release
 # Jellyfin 10.11.x
-dotnet build Jellyfin.Plugin.CustomizedHome/Jellyfin.Plugin.CustomizedHome.csproj -c Release -p:JellyfinVersion=10.11.11
+dotnet build Jellyfin.Plugin.CustomizedHome/Jellyfin.Plugin.CustomizedHome.csproj -c Release -p:JellyfinVersion=10.11.0
 # zip + checksum (depuis la racine du dépôt)
-python3 scripts/package.py customized-home --jellyfin 12.1.0 --output artifacts
+python3 scripts/package.py customized-home --jellyfin 12 --output artifacts
 ```
 
-Release : pousser un tag `customized-home-v<version>` ; le workflow `release.yml` construit les deux cibles, publie la release GitHub et met à jour `manifest.json`.
+Release : monter `version` dans `build.yaml` et fusionner dans `main` ; le workflow `release.yml` attend les builds et les tests, construit les deux cibles, publie la release GitHub (tag `customized-home-v<version>`) et met à jour `manifest.json`.
 
 ## Tests
 
 Deux suites : tests unitaires C# (`Jellyfin.Plugin.CustomizedHome.Tests`, xUnit) pour la validation des dispositions et le stockage des miniatures de genres, et tests navigateur ci-dessous.
 
 ```bash
-dotnet test customized-home/Jellyfin.Plugin.CustomizedHome.Tests -p:JellyfinVersion=10.11.11   # SDK .NET 9
+dotnet test customized-home/Jellyfin.Plugin.CustomizedHome.Tests -p:JellyfinVersion=10.11.0   # SDK .NET 9
 dotnet test customized-home/Jellyfin.Plugin.CustomizedHome.Tests                                # SDK .NET 10 (CI)
 ```
 
@@ -220,3 +220,7 @@ Limite : ces tests valident le script contre un DOM simulé. Ils ne détectent p
 - Hero : une requête `Items` par source à l'ouverture de l'accueil (puis cache 5 min) ; la source aléatoire (`sortBy=Random`) coûte un tri complet côté serveur sur les très grosses bibliothèques. Les boutons d'action reposent sur le gestionnaire de clics de `emby-itemscontainer` du client web : à revérifier après une mise à jour majeure de Jellyfin.
 - Hero sous le menu : repose sur `.skinHeader` (menu fixe) et `.page` de jellyfin-web ; un thème CSS personnalisé qui restyle le menu peut entrer en conflit avec la transparence.
 - Les assets client sont servis sans authentification (comme HSS / Plugin Pages) : ils ne contiennent aucune donnée sensible.
+
+## Licence
+
+[GPL-3.0](../LICENSE).

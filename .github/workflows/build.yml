@@ -1,11 +1,16 @@
 name: Build plugins
 
+# Also called by release.yml: nothing is published unless every job below passes.
 on:
   push:
     branches: [main]
     paths-ignore: ["manifest.json", "**/*.md"]
   pull_request:
   workflow_dispatch:
+  workflow_call:
+
+permissions:
+  contents: read
 
 jobs:
   build:
@@ -14,7 +19,8 @@ jobs:
       fail-fast: false
       matrix:
         plugin: [customized-home]
-        jellyfin: ["12.1.0", "10.11.11"]
+        # Server lines; scripts/package.py resolves each one to its oldest release (JELLYFIN_FLOORS).
+        jellyfin: ["12", "10.11"]
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-dotnet@v4
@@ -33,12 +39,29 @@ jobs:
 
   unit-tests:
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        jellyfin: ["12", "10.11"]
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-dotnet@v4
         with:
-          dotnet-version: "10.0.x"
-      - run: dotnet test customized-home/Jellyfin.Plugin.CustomizedHome.Tests/Jellyfin.Plugin.CustomizedHome.Tests.csproj --nologo
+          # 10.11 targets net9.0: its runtime is needed to run the tests.
+          dotnet-version: |
+            9.0.x
+            10.0.x
+      - name: Package, then run the unit tests against the oldest server of the line and against that package
+        env:
+          JELLYFIN_LINE: ${{ matrix.jellyfin }}
+          PYTHONDONTWRITEBYTECODE: "1"
+        run: |
+          set -o pipefail
+          python3 scripts/package.py customized-home --jellyfin "${JELLYFIN_LINE}" --output artifacts > summary.json
+          CUSTOMIZED_HOME_PACKAGE="${GITHUB_WORKSPACE}/$(python3 -c "import json; print(json.load(open('summary.json'))['file'])")"
+          export CUSTOMIZED_HOME_PACKAGE
+          VERSION=$(python3 -c "import json; print(json.load(open('summary.json'))['jellyfin'])")
+          dotnet test customized-home/Jellyfin.Plugin.CustomizedHome.Tests/Jellyfin.Plugin.CustomizedHome.Tests.csproj --nologo -p:JellyfinVersion="${VERSION}"
 
   browser-tests:
     runs-on: ubuntu-latest

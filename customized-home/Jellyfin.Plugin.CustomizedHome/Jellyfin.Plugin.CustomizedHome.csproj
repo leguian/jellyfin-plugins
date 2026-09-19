@@ -2,11 +2,12 @@
 
   <PropertyGroup>
     <!--
-      Jellyfin server line to build against.
+      Jellyfin server line to build against, always its OLDEST release: a server only loads plugins whose
+      Jellyfin references are not newer than its own assemblies (scripts/package.py, JELLYFIN_FLOORS).
       12.x  -> net10.0 (default)
-      10.11 -> net9.0  (dotnet build -p:JellyfinVersion=10.11.11)
+      10.11 -> net9.0  (dotnet build -p:JellyfinVersion=10.11.0)
     -->
-    <JellyfinVersion Condition="'$(JellyfinVersion)' == ''">12.1.0</JellyfinVersion>
+    <JellyfinVersion Condition="'$(JellyfinVersion)' == ''">12.0.0</JellyfinVersion>
     <TargetFramework Condition="$(JellyfinVersion.StartsWith('10.11'))">net9.0</TargetFramework>
     <TargetFramework Condition="$(JellyfinVersion.StartsWith('12.'))">net10.0</TargetFramework>
     <RootNamespace>Jellyfin.Plugin.CustomizedHome</RootNamespace>
@@ -19,13 +20,14 @@
     <AnalysisLevel>latest-recommended</AnalysisLevel>
     <!-- CA1812: DI-instantiated classes; CA2227: settable collections are required by XmlSerializer. -->
     <NoWarn>$(NoWarn);CA1812;CA2227</NoWarn>
-    <Version Condition="'$(Version)' == ''">1.8.2.0</Version>
+    <Version Condition="'$(Version)' == ''">1.8.2.1</Version>
     <AssemblyVersion>$(Version)</AssemblyVersion>
     <FileVersion>$(Version)</FileVersion>
     <Authors>leguian</Authors>
     <Description>Easily edit and organize the sections on your homepage</Description>
     <RepositoryUrl>https://github.com/leguian/jellyfin-plugins</RepositoryUrl>
     <RepositoryType>git</RepositoryType>
+    <PackageLicenseExpression>GPL-3.0-only</PackageLicenseExpression>
     <SatelliteResourceLanguages>en</SatelliteResourceLanguages>
     <DebugType>portable</DebugType>
   </PropertyGroup>
