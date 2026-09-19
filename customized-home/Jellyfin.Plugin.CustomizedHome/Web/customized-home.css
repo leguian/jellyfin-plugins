@@ -1283,7 +1283,8 @@ html.ch-hero-under-header .skinHeader {
     color: #fff;
 }
 
-.skinHeader {
+/* Only while a hero is displayed: no rule of this stylesheet touches the header of the web client otherwise. */
+html.ch-hero-shown .skinHeader {
     transition: background-color 0.25s ease;
 }
 

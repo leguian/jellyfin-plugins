@@ -125,6 +125,24 @@ test('leaves the header alone when there is no hero', async ({ page }) => {
     await openHome(page, { layout: layout(hero({ Enabled: false })), enableIntegratedSections: true, heroItems: HERO_ITEMS });
     await expect(page.locator('.ch-hero')).toHaveCount(0);
     await expect(page.locator('html')).not.toHaveClass(/ch-hero-under-header/);
+    // Not even a transition: the stylesheet has no rule for the header of the web client without a hero.
+    await expect(page.locator('.skinHeader')).toHaveCSS('transition-duration', '0s');
+});
+
+test('the header only fades between its two looks while a hero is displayed', async ({ page }) => {
+    await openHome(page, { layout: layout(hero()), enableIntegratedSections: true, heroItems: HERO_ITEMS });
+    await expect(page.locator('.ch-hero')).toHaveCount(1);
+    await expect(page.locator('.skinHeader')).toHaveCSS('transition-duration', '0.25s');
+    // Scrolled below the hero: the background comes back, with the same fade.
+    await page.evaluate(() => {
+        document.body.style.minHeight = '400vh';
+        window.scrollTo(0, 3000);
+    });
+    await expect(page.locator('html')).not.toHaveClass(/ch-hero-under-header/);
+    await expect(page.locator('.skinHeader')).toHaveCSS('transition-duration', '0.25s');
+
+    await page.evaluate(() => document.querySelector('#homeTab')?.classList.remove('is-active'));
+    await expect(page.locator('.skinHeader')).toHaveCSS('transition-duration', '0s');
 });
 
 test('fills a slide with the media details and the native actions', async ({ page }) => {

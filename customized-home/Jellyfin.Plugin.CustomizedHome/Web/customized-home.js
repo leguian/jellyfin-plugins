@@ -323,7 +323,7 @@
         catalog: null,
         genreNames: null,
         userViews: null,
-        integratedCache: {},
+        integratedCache: dict(),
         // Everything above belongs to one user on one server (see checkSession).
         identity: null,
         epoch: 0,
@@ -376,6 +376,12 @@
             text = text.replace('{' + (i - 1) + '}', arguments[i]);
         }
         return text;
+    }
+
+    // Map keyed by values the script does not choose (layout keys, folder ids, genre names...): without a
+    // prototype, "constructor" or "__proto__" are keys like any other instead of inherited members.
+    function dict(entries) {
+        return Object.assign(Object.create(null), entries || {});
     }
 
     function escapeHtml(value) {
@@ -612,7 +618,7 @@
         state.catalog = null;
         state.genreNames = null;
         state.userViews = null;
-        state.integratedCache = {};
+        state.integratedCache = dict();
         state.discovered = [];
         state.loadFailures = 0;
         state.retryAt = 0;
@@ -795,7 +801,7 @@
     }
 
     function dedupeItems(items) {
-        const seen = {};
+        const seen = dict();
         return items.filter(function (item) {
             if (!item || !item.Id || seen[item.Id]) {
                 return false;
@@ -847,14 +853,14 @@
     // Uploaded thumbnails, by genre (upper case) then by card shape.
     function fetchGenreImages() {
         return apiGet('GenreImages').then(function (list) {
-            const byName = {};
+            const byName = dict();
             (list || []).forEach(function (entry) {
                 const key = entry.Name.toUpperCase();
-                (byName[key] = byName[key] || {})[entry.Shape || 'portrait'] = entry;
+                (byName[key] = byName[key] || dict())[entry.Shape || 'portrait'] = entry;
             });
             return byName;
         }).catch(function () {
-            return {};
+            return dict();
         });
     }
 
@@ -863,11 +869,11 @@
     }
 
     // The thumbnail made for the card shape; otherwise another uploaded one (cropped by the card) rather than nothing.
-    const GENRE_SHAPE_FALLBACK = {
+    const GENRE_SHAPE_FALLBACK = dict({
         portrait: ['portrait', 'square', 'landscape'],
         landscape: ['landscape', 'square', 'portrait'],
         square: ['square', 'portrait', 'landscape']
-    };
+    });
 
     function pickGenreImage(uploaded, shape) {
         if (!uploaded) {
@@ -1010,7 +1016,7 @@
                 return genres;
             });
         }
-        const images = style === 'custom' ? fetchGenreImages() : Promise.resolve({});
+        const images = style === 'custom' ? fetchGenreImages() : Promise.resolve(dict());
         const shape = formatFor(item, INTEGRATED['ch:allGenres']).shape;
         return Promise.all([fetchGenreList(), images]).then(function (results) {
             const custom = results[1];
@@ -1043,7 +1049,7 @@
     function autoGenres() {
         return itemsQuery({ includeItemTypes: 'Movie,Series', recursive: true, isPlayed: true, sortBy: 'DatePlayed', sortOrder: 'Descending', limit: 100, fields: 'Genres' })
             .then(function (played) {
-                const counts = {};
+                const counts = dict();
                 played.forEach(function (item) {
                     (item.Genres || []).forEach(function (genre) {
                         counts[genre] = (counts[genre] || 0) + 1;
@@ -1100,7 +1106,7 @@
         return ((item && item.Genres) || []).join('|') + '#' + style + '#' + shape;
     }
 
-    const INTEGRATED = {
+    const INTEGRATED = dict({
         // volatile: depends on what the user just watched, reloaded when the home page is shown again.
         'ch:combined': { titleKey: 'int_combined', shape: 'landscape', volatile: true, fetch: fetchCombined },
         'ch:latestMovies': { titleKey: 'int_latestMovies', shape: 'portrait', fetch: function () {
@@ -1118,7 +1124,7 @@
         'ch:becauseYouWatched': { titleKey: 'becauseYouWatched', shape: 'portrait', family: true, volatile: true, fetchInstances: fetchBecauseYouWatched },
         'ch:genre': { titleKey: 'genreTitle', shape: 'portrait', family: true, fetchInstances: fetchGenre },
         'ch:allGenres': { titleKey: 'int_allGenres', shape: 'portrait', fetch: fetchGenreCards }
-    };
+    });
 
     function imageUrlFor(item, shape) {
         const client = apiClient();
@@ -1279,7 +1285,7 @@
     }
 
     function wantedIntegrated(layout) {
-        const wanted = {};
+        const wanted = dict();
         if (!state.response || !state.response.EnableIntegratedSections) {
             return wanted;
         }
@@ -1298,7 +1304,7 @@
     }
 
     function syncIntegratedSections(container, wanted) {
-        const registry = container._chIntegrated || (container._chIntegrated = {});
+        const registry = container._chIntegrated || (container._chIntegrated = dict());
         Array.prototype.forEach.call(container.querySelectorAll(':scope > .ch-section'), function (node) {
             if (!wanted[node.dataset.chKey]) {
                 node.remove();
@@ -1468,7 +1474,7 @@
                 needed = true;
             }
         }
-        const registry = container._chIntegrated || {};
+        const registry = container._chIntegrated || dict();
         Object.keys(registry).forEach(function (key) {
             flag(registry[key], maxAgeOf(key));
         });
@@ -1518,13 +1524,13 @@
     const TICKS_PER_MINUTE = 600000000;
 
     // Order matters: it is the order of the settings menu and of the round robin between sources.
-    const HERO_SOURCES = {
+    const HERO_SOURCES = dict({
         random: { labelKey: 'heroSrcRandom', query: { includeItemTypes: 'Movie,Series', sortBy: 'Random' } },
         recentMovies: { labelKey: 'heroSrcRecentMovies', query: { includeItemTypes: 'Movie', sortBy: 'DateCreated,SortName', sortOrder: 'Descending' } },
         recentShows: { labelKey: 'heroSrcRecentShows', query: { includeItemTypes: 'Series', sortBy: 'DateCreated,SortName', sortOrder: 'Descending' } },
         latestMovies: { labelKey: 'heroSrcLatestMovies', query: { includeItemTypes: 'Movie', sortBy: 'PremiereDate,SortName', sortOrder: 'Descending' } },
         latestShows: { labelKey: 'heroSrcLatestShows', query: { includeItemTypes: 'Series', sortBy: 'PremiereDate,SortName', sortOrder: 'Descending' } }
-    };
+    });
 
     function normalizeHero(hero) {
         const result = Object.assign({}, HERO_DEFAULTS, hero || {});
@@ -1586,7 +1592,7 @@
             return item.Id;
         });
         return itemsQuery({ ids: ids.join(','), fields: HERO_FIELDS, enableImageTypes: HERO_IMAGE_TYPES }).then(function (fresh) {
-            const byId = {};
+            const byId = dict();
             fresh.forEach(function (item) {
                 byId[item.Id] = item;
             });
@@ -1929,6 +1935,8 @@
     }
 
     const HERO_UNDER_HEADER_CLASS = 'ch-hero-under-header';
+    // Set for as long as a hero is displayed: the header fades between its two looks, in both directions.
+    const HERO_SHOWN_CLASS = 'ch-hero-shown';
     const HERO_NAVIGATION_SETTLE_MS = 300;
     let heroChromeReady = false;
     let heroChromeScheduled = false;
@@ -1967,6 +1975,7 @@
             const header = document.querySelector('.skinHeader');
             under = node.getBoundingClientRect().bottom > (header ? header.offsetHeight : 0);
         }
+        setClass(document.documentElement, HERO_SHOWN_CLASS, !!node);
         setClass(document.documentElement, HERO_UNDER_HEADER_CLASS, under);
     }
 
@@ -2533,7 +2542,7 @@
         state.discovered = sections;
         observeSectionNodes(container);
 
-        const byKey = {};
+        const byKey = dict();
         sections.forEach(function (section) {
             (byKey[section.key] = byKey[section.key] || []).push(section);
         });
@@ -2545,7 +2554,7 @@
 
         const items = layout.Items || [];
         const replacesHome = layoutReplacesHome(layout);
-        const existingFolders = {};
+        const existingFolders = dict();
         const folderNodes = container.querySelectorAll(':scope > .ch-folder');
         for (let i = 0; i < folderNodes.length; i++) {
             existingFolders[folderNodes[i].dataset.chFolderId] = folderNodes[i];
@@ -2554,8 +2563,8 @@
         let order = ORDER_STEP;
         let shownTotal = 0;
         let resolved = 0;
-        const used = {};
-        const integratedRegistry = container._chIntegrated || {};
+        const used = dict();
+        const integratedRegistry = container._chIntegrated || dict();
 
         function place(item, visible, folder, collapsed) {
             const key = item.Key;
@@ -2591,7 +2600,7 @@
             return shown;
         }
 
-        const keptFolders = {};
+        const keptFolders = dict();
         items.forEach(function (item) {
             if (item.Type === 'folder') {
                 if (!item.Id) {
@@ -2953,8 +2962,8 @@
 
     function buildKnown(catalog, userViews, mode) {
         const lang = getLanguage();
-        const known = {};
-        const byKey = {};
+        const known = dict();
+        const byKey = dict();
         catalog.forEach(function (definition) {
             byKey[definition.Key] = definition;
         });
@@ -3352,7 +3361,7 @@
     }
 
     function usedKeys(model) {
-        const keys = {};
+        const keys = dict();
         model.Items.forEach(function (item) {
             if (item.Type === 'folder') {
                 (item.Items || []).forEach(function (member) {
@@ -4181,7 +4190,7 @@
 
     let popup = null;
     let popupAnchor = null;
-    const MENU_KEYS = { ArrowDown: 1, ArrowRight: 1, ArrowUp: -1, ArrowLeft: -1, Home: 0, End: 0 };
+    const MENU_KEYS = dict({ ArrowDown: 1, ArrowRight: 1, ArrowUp: -1, ArrowLeft: -1, Home: 0, End: 0 });
 
     // returnFocus: the menu was left from the keyboard or by choosing an entry, the focus goes back to the button
     // that opened it (rebuilt meanwhile, more often than not). Not after a click elsewhere.
@@ -4682,7 +4691,7 @@
         version: VERSION,
         openEditor: openEditor,
         refresh: function () {
-            state.integratedCache = {};
+            state.integratedCache = dict();
             return reloadLayout();
         },
         apply: scheduleApply,
