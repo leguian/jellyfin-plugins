@@ -284,7 +284,9 @@ test('configures the hero from the editor and saves it with the layout', async (
     await menu.locator('.ch-hero-more-count').click();
     await menu.locator('.ch-hero-more-count').click();
     await expect(menu.locator('.ch-hero-count')).toHaveText('8');
-    await menu.locator('.ch-hero-interval', { hasText: '15 s' }).click();
+    // Offered delays, manual mode last.
+    await expect(menu.locator('.ch-hero-interval > span:last-child')).toHaveText(['3 s', '5 s', '10 s', 'manual']);
+    await menu.locator('.ch-hero-interval', { hasText: '5 s' }).click();
     await menu.locator('.ch-hero-exclude-played').click();
     await expect(menu).toBeVisible();
     await expect(row.locator('.ch-row-sub')).toContainText('Random');
@@ -299,7 +301,7 @@ test('configures the hero from the editor and saves it with the layout', async (
         Enabled: true,
         Sources: ['random', 'recentMovies', 'recentShows'],
         Count: 8,
-        IntervalSeconds: 15,
+        IntervalSeconds: 5,
         ExcludePlayed: false,
         RequireBackdrop: true
     });

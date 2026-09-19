@@ -13,7 +13,7 @@
         return;
     }
 
-    const VERSION = '1.8.1';
+    const VERSION = '1.8.2';
     const API = 'CustomizedHome';
     const ORDER_STEP = 1000;
     const ORDER_UNLISTED_BASE = 1000000000;
@@ -1093,7 +1093,8 @@
     const HERO_DEFAULT_SOURCES = ['recentMovies', 'recentShows'];
     const HERO_MIN_COUNT = 1;
     const HERO_MAX_COUNT = 12;
-    const HERO_INTERVALS = [0, 6, 10, 15, 20, 30];
+    // Seconds; 0 is the manual mode, listed last.
+    const HERO_INTERVALS = [3, 5, 10, 0];
     const HERO_BACKDROP_WIDTHS = [960, 1280, 1920];
     const HERO_LOGO_WIDTH = 600;
     const HERO_MAX_GENRES = 3;

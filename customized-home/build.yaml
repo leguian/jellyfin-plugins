@@ -1,7 +1,7 @@
 ---
 name: "Customized Home"
 guid: "7c99a4bf-cd3b-4bc8-b941-7ddccd816f3c"
-version: "1.8.1.0"
+version: "1.8.2.0"
 targetAbi: "12.0.0.0"
 framework: "net10.0"
 overview: "Easily edit and organize the sections on your homepage"
@@ -20,6 +20,4 @@ owner: "leguian"
 artifacts:
 - "Jellyfin.Plugin.CustomizedHome.dll"
 changelog: >
-  The hero banner now spans the whole width of the page, starts under the top menu (which becomes
-  see-through while it lies over the hero) and dissolves into the page below instead of ending on
-  an edge.
+  Hero banner: the automatic rotation delay is now chosen among 3 s, 5 s, 10 s and manual.

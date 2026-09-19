@@ -66,7 +66,7 @@ Carrousel de médias en tête de l'accueil, configuré dans l'éditeur : ligne �
 |---------|---------|--------|
 | Sources (cumulables) | Aléatoire, Films ajoutés récemment, Séries ajoutées récemment, Derniers films (date de sortie), Dernières séries (date de sortie) | Films + séries ajoutés récemment à l'activation |
 | Nombre de médias | 1 à 12 | 6 |
-| Rotation automatique | manuelle, 6, 10, 15, 20, 30 s (4 à 60 s acceptées par l'API) | 10 s |
+| Rotation automatique | 3, 5, 10 s, manuelle (3 à 60 s acceptées par l'API) | 10 s |
 | Exclure les médias déjà vus | oui / non | oui |
 | Uniquement les médias avec image de fond | oui / non | oui |
 
