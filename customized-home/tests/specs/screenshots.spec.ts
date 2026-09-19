@@ -1,5 +1,5 @@
 import { test } from '@playwright/test';
-import { openAdminPage, openEditor, openHome, type Layout } from './support';
+import { LIGHT_DASHBOARD_STYLE, openAdminPage, openEditor, openHome, type Layout } from './support';
 
 // Visual review helper, not an assertion suite: run with `npm run screenshots`.
 
@@ -37,6 +37,27 @@ test('home with colored genre cards', async ({ page }) => {
     await page.locator('[data-ch-key="ch:allGenres"]').screenshot({ path: `${OUTPUT_DIR}/home-all-genres-colors.png` });
 });
 
+test('home with a rotating hero: pause button next to the dots, keyboard focus on it', async ({ page }) => {
+    const media = [1, 2, 3].map((index) => ({
+        Id: `hero-${index}`, Name: `Featured movie ${index}`, Type: 'Movie' as const, MediaType: 'Video', ProductionYear: 2024,
+        Overview: 'A synopsis long enough to show how the text sits above the actions of the hero.', BackdropImageTags: ['backdrop']
+    }));
+    await openHome(page, {
+        enableIntegratedSections: true,
+        heroItems: { recentMovies: media },
+        layout: {
+            Version: 1, HideUnlisted: false, Items: [{ Type: 'section', Key: 'jf:resume', Visible: true }],
+            Hero: { Enabled: true, Sources: ['recentMovies'], Count: 3, IntervalSeconds: 10, ExcludePlayed: true, RequireBackdrop: true }
+        }
+    });
+    await page.addStyleTag({ url: MATERIAL_ICONS });
+    await page.locator('.ch-hero .ch-hero-pause').waitFor();
+    await page.keyboard.press('Tab');
+    await page.locator('.ch-hero .ch-hero-pause').focus();
+    await page.waitForTimeout(500);
+    await page.screenshot({ path: `${OUTPUT_DIR}/home-hero-pause.png` });
+});
+
 test('user editor', async ({ page }) => {
     await openHome(page, { enableIntegratedSections: true, layout: DEFAULT_LAYOUT });
     await page.addStyleTag({ url: MATERIAL_ICONS });
@@ -52,6 +73,14 @@ test('user editor', async ({ page }) => {
     await page.fill('.ch-overlay .ch-search', 'continue');
     await page.locator('.ch-overlay .ch-list .ch-row').first().hover();
     await page.screenshot({ path: `${OUTPUT_DIR}/editor-search.png` });
+    // Unsaved changes: the question takes the place of the footer.
+    await page.fill('.ch-overlay .ch-search', '');
+    await page.locator('.ch-overlay .ch-list .ch-row').first().locator('.ch-handle').focus();
+    await page.keyboard.press('ArrowDown');
+    await page.screenshot({ path: `${OUTPUT_DIR}/editor-keyboard-move.png` });
+    await page.keyboard.press('Escape');
+    await page.locator('.ch-overlay .ch-confirm').waitFor();
+    await page.screenshot({ path: `${OUTPUT_DIR}/editor-unsaved-changes.png` });
 });
 
 test('administration page', async ({ page }) => {
@@ -65,4 +94,16 @@ test('administration page', async ({ page }) => {
     await page.click('#chTabGenres');
     await page.locator('#chGenres .cha-genre').first().waitFor();
     await page.screenshot({ path: `${OUTPUT_DIR}/admin-genres.png`, fullPage: true });
+});
+
+test('administration page on a light dashboard', async ({ page }) => {
+    await openAdminPage(page, { defaultLayout: DEFAULT_LAYOUT, enableIntegratedSections: true });
+    await page.addStyleTag({ url: MATERIAL_ICONS });
+    await page.addStyleTag({ content: LIGHT_DASHBOARD_STYLE });
+    await page.click('#chTabLayouts');
+    await page.waitForSelector('#chDefaultEditor .ch-row');
+    await page.waitForTimeout(500);
+    await page.screenshot({ path: `${OUTPUT_DIR}/admin-layouts-light.png`, fullPage: true });
+    await page.locator('#chDefaultEditor .ch-list .ch-row').first().locator('.ch-act-menu').click();
+    await page.screenshot({ path: `${OUTPUT_DIR}/admin-layouts-light-menu.png`, fullPage: true });
 });

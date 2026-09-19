@@ -45,6 +45,9 @@
             cancel: 'Cancel',
             reset: 'Reset',
             resetConfirm: 'Remove your custom layout and go back to the default one?',
+            discardConfirm: 'Discard the changes you made to the layout?',
+            discard: 'Discard',
+            keepEditing: 'Keep editing',
             saved: 'Home layout saved',
             saveError: 'Could not save the layout',
             loadError: 'Could not load the layout',
@@ -54,11 +57,13 @@
             legendJellyfin: 'Jellyfin default section',
             legendOther: 'Section from another plugin',
             dragHandle: 'Drag to reorder, or to move to the other column',
+            reorderHandle: 'Reorder: drag, press the up and down arrow keys, or activate for a menu',
+            movedPosition: '{0}: row {1} of {2}',
             showSectionTitle: 'Show the section title',
             noSectionTitle: 'no section title',
             cardOptions: 'Cards',
             sectionOptions: 'Section',
-            hint: 'The left column is your home page: as soon as it holds one section, it replaces the default home page. Add sections from the right column, drag the handles to reorder.',
+            hint: 'The left column is your home page: as soon as it holds one section, it replaces the default home page. Add sections from the right column, drag the handles to reorder (keyboard: focus a handle, then use the up and down arrow keys).',
             addToLayout: 'Add to the customized home page',
             removeAction: 'Remove from the customized home page',
             layoutEmpty: 'Empty: the default home page is displayed. Add sections from the right column to build your own.',
@@ -154,6 +159,8 @@
             latestUnavailable: 'Recently added (library not available)',
             heroMore: 'More info',
             heroPrev: 'Previous media',
+            heroPause: 'Pause the automatic rotation',
+            heroResumeRotation: 'Resume the automatic rotation',
             heroNext: 'Next media',
             heroPosition: '{0} of {1}',
             heroHours: '{0} h {1} min',
@@ -178,6 +185,9 @@
             cancel: 'Annuler',
             reset: 'Réinitialiser',
             resetConfirm: 'Supprimer votre disposition personnalisée et revenir à celle par défaut ?',
+            discardConfirm: 'Abandonner les modifications apportées à la disposition ?',
+            discard: 'Abandonner',
+            keepEditing: 'Continuer la modification',
             saved: 'Disposition enregistrée',
             saveError: "Impossible d'enregistrer la disposition",
             loadError: 'Impossible de charger la disposition',
@@ -187,11 +197,13 @@
             legendJellyfin: 'Section Jellyfin par défaut',
             legendOther: "Section d'un autre plugin",
             dragHandle: "Glisser pour réordonner, ou pour changer de colonne",
+            reorderHandle: 'Réordonner : glisser, flèches haut et bas du clavier, ou activer pour un menu',
+            movedPosition: '{0} : ligne {1} sur {2}',
             showSectionTitle: 'Afficher le titre de la section',
             noSectionTitle: 'sans titre de section',
             cardOptions: 'Cartes',
             sectionOptions: 'Section',
-            hint: "La colonne de gauche est votre page d'accueil : dès qu'elle contient une section, elle remplace la page d'accueil par défaut. Ajoutez des sections depuis la colonne de droite, glissez les poignées pour réordonner.",
+            hint: "La colonne de gauche est votre page d'accueil : dès qu'elle contient une section, elle remplace la page d'accueil par défaut. Ajoutez des sections depuis la colonne de droite, glissez les poignées pour réordonner (au clavier : focus sur une poignée, puis flèches haut et bas).",
             addToLayout: "Ajouter à la page d'accueil modifiée",
             removeAction: "Supprimer de la page d'accueil modifiée",
             layoutEmpty: "Vide : la page d'accueil par défaut est affichée. Ajoutez des sections depuis la colonne de droite pour composer la vôtre.",
@@ -287,6 +299,8 @@
             latestUnavailable: 'Ajouts récents (médiathèque indisponible)',
             heroMore: "Plus d'infos",
             heroPrev: 'Média précédent',
+            heroPause: 'Mettre la rotation automatique en pause',
+            heroResumeRotation: 'Reprendre la rotation automatique',
             heroNext: 'Média suivant',
             heroPosition: '{0} sur {1}',
             heroHours: '{0} h {1} min',
@@ -309,7 +323,7 @@
         catalog: null,
         genreNames: null,
         userViews: null,
-        integratedCache: {},
+        integratedCache: dict(),
         // Everything above belongs to one user on one server (see checkSession).
         identity: null,
         epoch: 0,
@@ -317,7 +331,9 @@
         retryAt: 0,
         retryTimer: null,
         warnedEmptyHome: false,
-        noticeDismissed: false
+        noticeDismissed: false,
+        // The user stopped the rotation of the hero: it stays stopped, whatever rebuilds the hero, until they resume.
+        heroPaused: false
     };
 
     /* ------------------------------------------------------------------ */
@@ -362,15 +378,55 @@
         return text;
     }
 
+    // Map keyed by values the script does not choose (layout keys, folder ids, genre names...): without a
+    // prototype, "constructor" or "__proto__" are keys like any other instead of inherited members.
+    function dict(entries) {
+        return Object.assign(Object.create(null), entries || {});
+    }
+
     function escapeHtml(value) {
         return String(value == null ? '' : value).replace(/[&<>"']/g, function (c) {
             return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
         });
     }
 
+    const SLUG_MAX_LENGTH = 80;
+    // Accents of the Latin, Greek and Cyrillic letters. The marks of the other scripts are not decoration (vowel
+    // signs of the Indic scripts, voicing of the kana...): they stay in the slug.
+    const COMBINING_DIACRITICS = /[\u0300-\u036f]/g;
+    const LEGACY_SLUG_SEPARATORS = /[^a-z0-9]+/g;
+    // Everything that is not a letter, a digit or a mark, in any script. Built at run time: an engine without Unicode
+    // property escapes (Chromium < 64, Safari < 11.1) would reject the whole script for a literal it cannot parse.
+    // There, an approximation: ASCII as before, and outside ASCII everything but the punctuation and symbol blocks.
+    const SLUG_SEPARATORS = (function () {
+        try {
+            return new RegExp('[^\\p{L}\\p{N}\\p{M}]+', 'gu');
+        } catch (e) {
+            return /[^a-z0-9\u00c0-\u00d6\u00d8-\u00f6\u00f8-\u1fff\u2c00-\u2dff\u3005-\u3007\u3040-\u309f\u30a1-\u30fa\u30fc-\u31ff\u3400-\ud7ff\uf900-\ufdff\ufe70-\ufeff\uff10-\uff19\uff21-\uff3a\uff41-\uff5a\uff66-\uffdc]+/g;
+        }
+    })();
+
+    function normalizeText(text, form) {
+        return typeof text.normalize === 'function' ? text.normalize(form) : text;
+    }
+
+    function slugWith(text, separators) {
+        const base = normalizeText(String(text || '').toLowerCase(), 'NFD').replace(COMBINING_DIACRITICS, '');
+        // Composed again: a shorter key, and the same one whatever form the title came in.
+        return normalizeText(base.replace(separators, '-').replace(/^-+|-+$/g, ''), 'NFC').substring(0, SLUG_MAX_LENGTH)
+            // The cut may fall inside a surrogate pair: half a character would not survive the trip to the server.
+            .replace(/[\ud800-\udbff]$/, '');
+    }
+
+    // Letters and digits of any script. For a title in ASCII or in accented Latin letters the result is the one of
+    // legacySlug, byte for byte: saved layouts hold these keys.
     function slug(text) {
-        return String(text || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '')
-            .replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').substring(0, 80);
+        return slugWith(text, SLUG_SEPARATORS);
+    }
+
+    // Up to 1.8.3 only a-z and 0-9 were kept: "Популярное" and "最新电影" both gave an empty slug.
+    function legacySlug(text) {
+        return slugWith(text, LEGACY_SLUG_SEPARATORS);
     }
 
     function storageGet(key) {
@@ -417,12 +473,43 @@
         }
     }
 
+    // The order of the sections relies on a flex container whose built-in wrappers are "display: contents". An
+    // engine that does not know it (Chromium < 65, Safari < 11.1) would pin every wrapped section at the top of the
+    // page: there the container keeps its native flow. Sections are still hidden and formatted, not reordered.
+    function canReorder() {
+        return !!(window.CSS && typeof window.CSS.supports === 'function' && window.CSS.supports('display', 'contents'));
+    }
+
+    // What the plugin adds finds its place through "order"; without reordering it is inserted where it belongs
+    // (the native sections themselves are never moved).
+    function insertOwnNode(container, node, atTop) {
+        if (canReorder()) {
+            container.appendChild(node);
+        } else if (atTop) {
+            const hero = node.classList.contains('ch-hero') ? null : container.querySelector(':scope > .ch-hero');
+            container.insertBefore(node, hero ? hero.nextSibling : container.firstChild);
+        } else {
+            container.insertBefore(node, container.querySelector(':scope > .ch-customize-bar'));
+        }
+    }
+
     let toastTimer = null;
+
+    // A modal editor declares everything outside its dialog inert (aria-modal): a message shown meanwhile lives
+    // inside the dialog, or a screen reader would never announce "could not save".
+    function toastHost() {
+        return editor && !editor.embedded && editor.dialog.isConnected ? editor.dialog : document.body;
+    }
+
     function toast(message) {
         let node = document.querySelector('.ch-toast');
         if (!node) {
             node = el('div', 'ch-toast');
-            document.body.appendChild(node);
+            node.setAttribute('role', 'status');
+            node.setAttribute('aria-live', 'polite');
+        }
+        if (node.parentNode !== toastHost()) {
+            toastHost().appendChild(node);
         }
         node.textContent = message;
         node.classList.add('ch-toast-visible');
@@ -531,13 +618,14 @@
         state.catalog = null;
         state.genreNames = null;
         state.userViews = null;
-        state.integratedCache = {};
+        state.integratedCache = dict();
         state.discovered = [];
         state.loadFailures = 0;
         state.retryAt = 0;
         state.retryTimer = null;
         state.warnedEmptyHome = false;
         state.noticeDismissed = false;
+        state.heroPaused = false;
     }
 
     // Returns false while nobody is logged in.
@@ -713,7 +801,7 @@
     }
 
     function dedupeItems(items) {
-        const seen = {};
+        const seen = dict();
         return items.filter(function (item) {
             if (!item || !item.Id || seen[item.Id]) {
                 return false;
@@ -765,14 +853,14 @@
     // Uploaded thumbnails, by genre (upper case) then by card shape.
     function fetchGenreImages() {
         return apiGet('GenreImages').then(function (list) {
-            const byName = {};
+            const byName = dict();
             (list || []).forEach(function (entry) {
                 const key = entry.Name.toUpperCase();
-                (byName[key] = byName[key] || {})[entry.Shape || 'portrait'] = entry;
+                (byName[key] = byName[key] || dict())[entry.Shape || 'portrait'] = entry;
             });
             return byName;
         }).catch(function () {
-            return {};
+            return dict();
         });
     }
 
@@ -781,11 +869,11 @@
     }
 
     // The thumbnail made for the card shape; otherwise another uploaded one (cropped by the card) rather than nothing.
-    const GENRE_SHAPE_FALLBACK = {
+    const GENRE_SHAPE_FALLBACK = dict({
         portrait: ['portrait', 'square', 'landscape'],
         landscape: ['landscape', 'square', 'portrait'],
         square: ['square', 'portrait', 'landscape']
-    };
+    });
 
     function pickGenreImage(uploaded, shape) {
         if (!uploaded) {
@@ -928,7 +1016,7 @@
                 return genres;
             });
         }
-        const images = style === 'custom' ? fetchGenreImages() : Promise.resolve({});
+        const images = style === 'custom' ? fetchGenreImages() : Promise.resolve(dict());
         const shape = formatFor(item, INTEGRATED['ch:allGenres']).shape;
         return Promise.all([fetchGenreList(), images]).then(function (results) {
             const custom = results[1];
@@ -961,7 +1049,7 @@
     function autoGenres() {
         return itemsQuery({ includeItemTypes: 'Movie,Series', recursive: true, isPlayed: true, sortBy: 'DatePlayed', sortOrder: 'Descending', limit: 100, fields: 'Genres' })
             .then(function (played) {
-                const counts = {};
+                const counts = dict();
                 played.forEach(function (item) {
                     (item.Genres || []).forEach(function (genre) {
                         counts[genre] = (counts[genre] || 0) + 1;
@@ -1018,7 +1106,7 @@
         return ((item && item.Genres) || []).join('|') + '#' + style + '#' + shape;
     }
 
-    const INTEGRATED = {
+    const INTEGRATED = dict({
         // volatile: depends on what the user just watched, reloaded when the home page is shown again.
         'ch:combined': { titleKey: 'int_combined', shape: 'landscape', volatile: true, fetch: fetchCombined },
         'ch:latestMovies': { titleKey: 'int_latestMovies', shape: 'portrait', fetch: function () {
@@ -1036,7 +1124,7 @@
         'ch:becauseYouWatched': { titleKey: 'becauseYouWatched', shape: 'portrait', family: true, volatile: true, fetchInstances: fetchBecauseYouWatched },
         'ch:genre': { titleKey: 'genreTitle', shape: 'portrait', family: true, fetchInstances: fetchGenre },
         'ch:allGenres': { titleKey: 'int_allGenres', shape: 'portrait', fetch: fetchGenreCards }
-    };
+    });
 
     function imageUrlFor(item, shape) {
         const client = apiClient();
@@ -1180,7 +1268,7 @@
             + '<div is="emby-scroller" class="padded-top-focusscale padded-bottom-focusscale" data-centerfocus="true">'
             + '<div is="emby-itemscontainer" class="itemsContainer scrollSlider focuscontainer-x ch-items"></div>'
             + '</div>';
-        container.appendChild(node);
+        insertOwnNode(container, node, false);
         return node;
     }
 
@@ -1197,7 +1285,7 @@
     }
 
     function wantedIntegrated(layout) {
-        const wanted = {};
+        const wanted = dict();
         if (!state.response || !state.response.EnableIntegratedSections) {
             return wanted;
         }
@@ -1216,7 +1304,7 @@
     }
 
     function syncIntegratedSections(container, wanted) {
-        const registry = container._chIntegrated || (container._chIntegrated = {});
+        const registry = container._chIntegrated || (container._chIntegrated = dict());
         Array.prototype.forEach.call(container.querySelectorAll(':scope > .ch-section'), function (node) {
             if (!wanted[node.dataset.chKey]) {
                 node.remove();
@@ -1386,7 +1474,7 @@
                 needed = true;
             }
         }
-        const registry = container._chIntegrated || {};
+        const registry = container._chIntegrated || dict();
         Object.keys(registry).forEach(function (key) {
             flag(registry[key], maxAgeOf(key));
         });
@@ -1436,13 +1524,13 @@
     const TICKS_PER_MINUTE = 600000000;
 
     // Order matters: it is the order of the settings menu and of the round robin between sources.
-    const HERO_SOURCES = {
+    const HERO_SOURCES = dict({
         random: { labelKey: 'heroSrcRandom', query: { includeItemTypes: 'Movie,Series', sortBy: 'Random' } },
         recentMovies: { labelKey: 'heroSrcRecentMovies', query: { includeItemTypes: 'Movie', sortBy: 'DateCreated,SortName', sortOrder: 'Descending' } },
         recentShows: { labelKey: 'heroSrcRecentShows', query: { includeItemTypes: 'Series', sortBy: 'DateCreated,SortName', sortOrder: 'Descending' } },
         latestMovies: { labelKey: 'heroSrcLatestMovies', query: { includeItemTypes: 'Movie', sortBy: 'PremiereDate,SortName', sortOrder: 'Descending' } },
         latestShows: { labelKey: 'heroSrcLatestShows', query: { includeItemTypes: 'Series', sortBy: 'PremiereDate,SortName', sortOrder: 'Descending' } }
-    };
+    });
 
     function normalizeHero(hero) {
         const result = Object.assign({}, HERO_DEFAULTS, hero || {});
@@ -1504,7 +1592,7 @@
             return item.Id;
         });
         return itemsQuery({ ids: ids.join(','), fields: HERO_FIELDS, enableImageTypes: HERO_IMAGE_TYPES }).then(function (fresh) {
-            const byId = {};
+            const byId = dict();
             fresh.forEach(function (item) {
                 byId[item.Id] = item;
             });
@@ -1701,10 +1789,25 @@
         });
     }
 
+    function prefersReducedMotion() {
+        return !!(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches);
+    }
+
+    // A toggle button: the name stays, aria-pressed says whether the rotation is stopped.
+    function updateHeroPause(node) {
+        const button = node.querySelector('.ch-hero-pause');
+        if (button) {
+            button.setAttribute('aria-pressed', state.heroPaused ? 'true' : 'false');
+            button.title = t(state.heroPaused ? 'heroResumeRotation' : 'heroPause');
+            button.querySelector('.material-icons').textContent = state.heroPaused ? 'play_arrow' : 'pause';
+        }
+    }
+
     function startHero(node, intervalSeconds, startIndex) {
         const slides = node.querySelectorAll('.ch-hero-slide');
         const dots = node.querySelectorAll('.ch-hero-dot');
-        const reducedMotion = !!(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches);
+        const reducedMotion = prefersReducedMotion();
+        // paused: for as long as the pointer or the focus is on the hero. state.heroPaused: asked for by the user.
         const carousel = { index: 0, timer: null, paused: false };
         node._chHero = carousel;
 
@@ -1718,7 +1821,7 @@
 
         function schedule() {
             clearTimeout(carousel.timer);
-            if (intervalSeconds <= 0 || reducedMotion || slides.length < 2 || carousel.paused || node._chHero !== carousel) {
+            if (intervalSeconds <= 0 || reducedMotion || slides.length < 2 || carousel.paused || state.heroPaused || node._chHero !== carousel) {
                 return;
             }
             carousel.timer = setTimeout(function () {
@@ -1770,6 +1873,12 @@
         }
 
         node.addEventListener('click', function (e) {
+            if (e.target.closest('.ch-hero-pause')) {
+                state.heroPaused = !state.heroPaused;
+                updateHeroPause(node);
+                schedule();
+                return;
+            }
             const control = e.target.closest('.ch-hero-prev, .ch-hero-next, .ch-hero-dot');
             if (control) {
                 if (control.classList.contains('ch-hero-dot')) {
@@ -1821,13 +1930,18 @@
             swipeStart = null;
         });
 
+        updateHeroPause(node);
         show(startIndex || 0);
     }
 
     const HERO_UNDER_HEADER_CLASS = 'ch-hero-under-header';
+    // Set for as long as a hero is displayed: the header fades between its two looks, in both directions.
+    const HERO_SHOWN_CLASS = 'ch-hero-shown';
     const HERO_NAVIGATION_SETTLE_MS = 300;
     let heroChromeReady = false;
     let heroChromeScheduled = false;
+    let heroTabObserver = null;
+    let heroTab = null;
 
     function currentHero() {
         const container = state.container;
@@ -1861,6 +1975,7 @@
             const header = document.querySelector('.skinHeader');
             under = node.getBoundingClientRect().bottom > (header ? header.offsetHeight : 0);
         }
+        setClass(document.documentElement, HERO_SHOWN_CLASS, !!node);
         setClass(document.documentElement, HERO_UNDER_HEADER_CLASS, under);
     }
 
@@ -1873,6 +1988,24 @@
             heroChromeScheduled = false;
             updateHeroChrome(false);
         });
+    }
+
+    // The web client switches between the tabs of the home page (Home, Favorites) with the "is-active" class of
+    // their panels (maintabsmanager.js); its "tabchange" events do not bubble and no view is shown. The header must
+    // not stay see-through over the favorites: the class of the panel that holds the hero is watched.
+    function observeHeroTab(node) {
+        const tab = node.closest('.pageTabContent') || node.closest('#homeTab');
+        if (!tab || tab === heroTab || !window.MutationObserver) {
+            return;
+        }
+        if (heroTabObserver) {
+            heroTabObserver.disconnect();
+        }
+        heroTab = tab;
+        heroTabObserver = new MutationObserver(function () {
+            updateHeroChrome(true);
+        });
+        heroTabObserver.observe(tab, { attributes: true, attributeFilter: ['class'] });
     }
 
     function initHeroChrome() {
@@ -1898,7 +2031,7 @@
         const shownId = shown ? shown.getAttribute('data-id') : null;
         const previousNode = container.querySelector(':scope > .ch-hero');
         const focusedControl = previousNode && previousNode.contains(document.activeElement)
-            ? ['ch-hero-play', 'ch-hero-restart', 'ch-hero-trailer', 'ch-hero-favorite', 'ch-hero-played', 'ch-hero-more'].filter(function (name) {
+            ? ['ch-hero-play', 'ch-hero-restart', 'ch-hero-trailer', 'ch-hero-favorite', 'ch-hero-played', 'ch-hero-more', 'ch-hero-pause'].filter(function (name) {
                 return document.activeElement.classList.contains(name);
             })[0] || 'ch-hero-play'
             : null;
@@ -1919,20 +2052,26 @@
         if (items.length > 1) {
             html += '<button type="button" class="ch-hero-nav ch-hero-prev" aria-label="' + escapeHtml(t('heroPrev')) + '"><span class="material-icons" aria-hidden="true">chevron_left</span></button>'
                 + '<button type="button" class="ch-hero-nav ch-hero-next" aria-label="' + escapeHtml(t('heroNext')) + '"><span class="material-icons" aria-hidden="true">chevron_right</span></button>'
-                + '<div class="ch-hero-dots">' + items.map(function (item, index) {
+                // Something that moves on its own for more than five seconds can be stopped (WCAG 2.2.2): a real
+                // button, since hovering is no answer on a touch screen and the focus leaves the hero sooner or later.
+                + '<div class="ch-hero-dots">' + (hero.IntervalSeconds > 0 && !prefersReducedMotion()
+                    ? '<button type="button" class="ch-hero-pause" aria-pressed="false" aria-label="' + escapeHtml(t('heroPause')) + '"><span class="material-icons" aria-hidden="true">pause</span></button>'
+                    : '') + items.map(function (item, index) {
                     return '<button type="button" class="ch-hero-dot" data-ch-index="' + index + '" aria-label="' + escapeHtml(t('heroPosition', index + 1, items.length)) + '"></button>';
                 }).join('') + '</div>';
         }
         node.innerHTML = html;
-        container.appendChild(node);
+        insertOwnNode(container, node, true);
         startHero(node, hero.IntervalSeconds, startIndex);
         if (focusedControl) {
-            const target = node.querySelector('.ch-hero-slide.ch-active .' + focusedControl) || node.querySelector('.ch-hero-slide.ch-active .ch-hero-play');
+            const target = node.querySelector('.ch-hero-slide.ch-active .' + focusedControl + ', .ch-hero-dots .' + focusedControl)
+                || node.querySelector('.ch-hero-slide.ch-active .ch-hero-play');
             if (target) {
                 target.focus();
             }
         }
         initHeroChrome();
+        observeHeroTab(node);
         updateHeroChrome(true);
         return node;
     }
@@ -2139,6 +2278,28 @@
         return null;
     }
 
+    function layoutHoldsKey(key) {
+        return layoutSections(state.layout || {}).some(function (entry) {
+            return entry.item.Key === key;
+        });
+    }
+
+    // Key of a section that is only known by its title.
+    function titleKey(prefix, label) {
+        const text = slug(label);
+        if (!text) {
+            // Nothing but symbols (stars, emoji): a hash keeps two such sections apart. "~" never comes out of slug().
+            return prefix + '~' + textHash(normalizeText(String(label).toLowerCase(), 'NFC')).toString(36);
+        }
+        // A layout saved before the other scripts were kept ("Coup de cœur" was "coup-de-c-ur") keeps its section
+        // for as long as it holds that key.
+        const legacy = legacySlug(label);
+        if (legacy && legacy !== text && layoutHoldsKey(prefix + legacy) && !layoutHoldsKey(prefix + text)) {
+            return prefix + legacy;
+        }
+        return prefix + text;
+    }
+
     function describeSection(node, wrapperType, index, subIndex, ctx) {
         const info = { el: node, key: null, label: sectionTitle(node), origin: 'other', family: null, instance: null, origOrder: 0 };
 
@@ -2183,7 +2344,7 @@
         // settings could not be read: its key must be the library id, never its name.
         const libraryId = libraryIdFromSection(node) || (type === 'latestmedia' ? libraryIdFromTitle(info.label, ctx) : null);
         if (type === 'latestmedia' || (!type && libraryId)) {
-            info.key = 'jf:latestmedia:' + (libraryId || slug(info.label));
+            info.key = libraryId ? 'jf:latestmedia:' + libraryId : titleKey('jf:latestmedia:', info.label);
             info.origin = 'jellyfin';
             return info;
         }
@@ -2193,7 +2354,7 @@
             return info;
         }
 
-        info.key = info.label ? 'title:' + slug(info.label) : 'anon:' + index + ':' + (subIndex || 0);
+        info.key = info.label ? titleKey('title:', info.label) : 'anon:' + index + ':' + (subIndex || 0);
         return info;
     }
 
@@ -2315,8 +2476,8 @@
         if (!bar) {
             bar = el('div', 'ch-customize-bar');
             bar.innerHTML = '<button type="button" class="ch-customize-button"><span class="material-icons" aria-hidden="true">other_houses</span><span></span></button>';
-            bar.querySelector('button').addEventListener('click', function () {
-                openEditor({ mode: 'user' });
+            bar.querySelector('button').addEventListener('click', function (e) {
+                openEditor({ mode: 'user', opener: e.currentTarget });
             });
             container.appendChild(bar);
         }
@@ -2366,7 +2527,9 @@
         }
         const ctx = state.ctx;
         ctx.hss = !!container.querySelector(':scope > [data-page]');
+        const ordered = canReorder();
         setClass(container, 'ch-container', true);
+        setClass(container, 'ch-ordered', ordered);
 
         const layout = state.layout || { Items: [], HideUnlisted: false };
         syncIntegratedSections(container, wantedIntegrated(layout));
@@ -2379,7 +2542,7 @@
         state.discovered = sections;
         observeSectionNodes(container);
 
-        const byKey = {};
+        const byKey = dict();
         sections.forEach(function (section) {
             (byKey[section.key] = byKey[section.key] || []).push(section);
         });
@@ -2391,7 +2554,7 @@
 
         const items = layout.Items || [];
         const replacesHome = layoutReplacesHome(layout);
-        const existingFolders = {};
+        const existingFolders = dict();
         const folderNodes = container.querySelectorAll(':scope > .ch-folder');
         for (let i = 0; i < folderNodes.length; i++) {
             existingFolders[folderNodes[i].dataset.chFolderId] = folderNodes[i];
@@ -2400,8 +2563,8 @@
         let order = ORDER_STEP;
         let shownTotal = 0;
         let resolved = 0;
-        const used = {};
-        const integratedRegistry = container._chIntegrated || {};
+        const used = dict();
+        const integratedRegistry = container._chIntegrated || dict();
 
         function place(item, visible, folder, collapsed) {
             const key = item.Key;
@@ -2437,26 +2600,31 @@
             return shown;
         }
 
-        const keptFolders = {};
+        const keptFolders = dict();
         items.forEach(function (item) {
             if (item.Type === 'folder') {
                 if (!item.Id) {
                     return;
                 }
-                keptFolders[item.Id] = true;
-                const collapsed = isFolderCollapsed(item);
-                const header = ensureFolderHeader(container, item, existingFolders);
-                setOrder(header, order);
+                // Without reordering a header cannot sit above its members: no header, and nothing to collapse.
+                const header = ordered ? ensureFolderHeader(container, item, existingFolders) : null;
+                const collapsed = ordered && isFolderCollapsed(item);
+                if (header) {
+                    keptFolders[item.Id] = true;
+                    setOrder(header, order);
+                }
                 order += ORDER_STEP;
                 let visibleMembers = 0;
                 (item.Items || []).forEach(function (member) {
                     if (member.Type === 'folder' || !member.Key) {
                         return;
                     }
-                    visibleMembers += place(member, item.Visible !== false && member.Visible !== false, item, collapsed);
+                    visibleMembers += place(member, item.Visible !== false && member.Visible !== false, header ? item : null, collapsed);
                 });
-                updateFolderHeader(header, item, collapsed, visibleMembers);
-                setClass(header, 'ch-hidden', item.Visible === false || visibleMembers === 0);
+                if (header) {
+                    updateFolderHeader(header, item, collapsed, visibleMembers);
+                    setClass(header, 'ch-hidden', item.Visible === false || visibleMembers === 0);
+                }
             } else if (item.Key) {
                 place(item, item.Visible !== false, null, false);
             }
@@ -2580,12 +2748,12 @@
         });
         if (canCustomize) {
             notice.querySelector('.ch-notice-customize').textContent = t('customize');
-            notice.querySelector('.ch-notice-customize').addEventListener('click', function () {
-                openEditor({ mode: 'user' });
+            notice.querySelector('.ch-notice-customize').addEventListener('click', function (e) {
+                openEditor({ mode: 'user', opener: e.currentTarget });
             });
         }
         setOrder(notice, ORDER_NOTICE);
-        container.appendChild(notice);
+        insertOwnNode(container, notice, true);
     }
 
     function layoutReplacesHome(layout) {
@@ -2757,7 +2925,8 @@
             link.querySelector('.navMenuOptionText').textContent = t('menuEntry');
             link.addEventListener('click', function (e) {
                 e.preventDefault();
-                openEditor({ mode: 'user' });
+                // The drawer slides away: giving the focus back to this link would pull it into view again.
+                openEditor({ mode: 'user', opener: null });
             });
             drawer.appendChild(link);
         }
@@ -2768,6 +2937,8 @@
     /* ------------------------------------------------------------------ */
 
     let editor = null;
+    const DIALOG_TITLE_ID = 'chDialogTitle';
+    const CONFIRM_TEXT_ID = 'chConfirmText';
 
     function isLibrarySection(key) {
         return String(key || '').toLowerCase().indexOf('jf:latestmedia:') === 0;
@@ -2791,8 +2962,8 @@
 
     function buildKnown(catalog, userViews, mode) {
         const lang = getLanguage();
-        const known = {};
-        const byKey = {};
+        const known = dict();
+        const byKey = dict();
         catalog.forEach(function (definition) {
             byKey[definition.Key] = definition;
         });
@@ -2860,6 +3031,9 @@
         }
         const mode = options.mode === 'default' ? 'default' : 'user';
         const epoch = state.epoch;
+        // The element that gets the focus back when the editor closes (unless the caller names one, or none).
+        const active = document.activeElement && document.activeElement !== document.body ? document.activeElement : null;
+        const opener = options.opener === undefined ? active : options.opener;
         ensureLoaded().then(function () {
             if (epoch !== state.epoch) {
                 return null;
@@ -2872,7 +3046,7 @@
             return Promise.all([loadCatalog(), loadUserViews(), layoutPromise]).then(function (results) {
                 // Requested by someone who is gone: never open their layout in the next session.
                 if (epoch === state.epoch) {
-                    buildEditor(mode, results[0] || [], results[1] || [], results[2] || { Items: [] }, options);
+                    buildEditor(mode, results[0] || [], results[1] || [], results[2] || { Items: [] }, options, opener);
                 }
             });
         }).catch(function (error) {
@@ -2883,7 +3057,7 @@
         });
     }
 
-    function buildEditor(mode, catalog, userViews, layout, options) {
+    function buildEditor(mode, catalog, userViews, layout, options, opener) {
         const info = buildKnown(catalog, userViews, mode);
         const model = cloneLayout(layout);
         model.Hero = normalizeHero(model.Hero);
@@ -2931,19 +3105,27 @@
             query: '',
             embedded: embedded,
             options: options,
+            opener: opener || null,
             overlay: null,
+            dialog: null,
             list: null,
-            body: null
+            body: null,
+            confirm: null,
+            snapshot: ''
         };
 
         const overlay = el('div', embedded ? 'ch-embedded' : 'ch-overlay');
         const dialog = el('div', 'ch-dialog');
-        dialog.setAttribute('role', 'dialog');
-        dialog.setAttribute('aria-modal', 'true');
+        // Embedded in the administration page it is a part of that page, not a modal: the rest stays reachable.
+        dialog.setAttribute('role', embedded ? 'group' : 'dialog');
+        if (!embedded) {
+            dialog.setAttribute('aria-modal', 'true');
+        }
+        dialog.setAttribute('aria-labelledby', DIALOG_TITLE_ID);
         dialog.tabIndex = -1;
         dialog.innerHTML = '<div class="ch-dialog-header">'
             + '<span class="material-icons" aria-hidden="true">other_houses</span>'
-            + '<h2 class="ch-dialog-title"></h2>'
+            + '<h2 class="ch-dialog-title" id="' + DIALOG_TITLE_ID + '"></h2>'
             + '<button type="button" class="ch-icon-btn ch-close" data-ch-tip="' + escapeHtml(t('close')) + '" aria-label="' + escapeHtml(t('close')) + '"><span class="material-icons" aria-hidden="true">close</span></button>'
             + '</div>'
             + '<div class="ch-dialog-body">'
@@ -2962,6 +3144,7 @@
             + '<div class="ch-col ch-col-unlisted"><h3 class="ch-col-title"></h3><div class="ch-unlisted"></div></div>'
             + '</div>'
             + '</div>'
+            + '<div class="ch-live" role="status" aria-live="polite"></div>'
             + '<div class="ch-dialog-footer">'
             + '<button type="button" class="ch-btn ch-btn-danger ch-reset"></button>'
             + '<span style="flex:1"></span>'
@@ -2975,10 +3158,12 @@
         }
 
         editor.overlay = overlay;
+        editor.dialog = dialog;
         editor.list = dialog.querySelector('.ch-list');
         editor.unlisted = dialog.querySelector('.ch-unlisted');
         editor.heroSlot = dialog.querySelector('.ch-hero-slot');
         editor.columns = dialog.querySelector('.ch-columns');
+        editor.live = dialog.querySelector('.ch-live');
         dialog.querySelector('.ch-legend-customized').textContent = t('legendCustomized');
         dialog.querySelector('.ch-legend-jellyfin').textContent = t('legendJellyfin');
         dialog.querySelector('.ch-col-layout .ch-col-title').textContent = t('colLayout');
@@ -3005,16 +3190,8 @@
             resetButton.style.display = 'none';
         }
 
-        dialog.querySelector('.ch-close').addEventListener('click', closeEditor);
-        dialog.querySelector('.ch-cancel').addEventListener('click', function () {
-            if (embedded) {
-                // Embedded editor: cancel reloads the stored layout.
-                closeEditor();
-                openEditor(options);
-            } else {
-                closeEditor();
-            }
-        });
+        dialog.querySelector('.ch-close').addEventListener('click', requestClose);
+        dialog.querySelector('.ch-cancel').addEventListener('click', requestClose);
         resetButton.addEventListener('click', resetEditor);
         dialog.querySelector('.ch-search').addEventListener('input', function (e) {
             editor.query = e.target.value.trim().toLowerCase();
@@ -3027,22 +3204,20 @@
         if (!embedded) {
             overlay.addEventListener('click', function (e) {
                 if (e.target === overlay) {
-                    closeEditor();
+                    requestClose();
                 }
             });
-            overlay.addEventListener('keydown', function (e) {
-                if (e.key === 'Escape') {
-                    e.stopPropagation();
-                    closeEditor();
-                }
-            });
+            // On the document, not on the overlay: Escape and Tab must work wherever the focus went.
+            document.addEventListener('keydown', onEditorKeyDown, true);
         }
         editor.columns.addEventListener('click', onListClick);
+        editor.list.addEventListener('keydown', onListKeyDown);
         editor.list.addEventListener('input', onListInput);
         initDrag(editor.columns, editor.list, editor.unlisted);
         initTooltips(overlay);
 
         renderEditor();
+        editor.snapshot = JSON.stringify(serializeModel(model));
         if (!embedded) {
             dialog.focus();
         }
@@ -3056,14 +3231,137 @@
         if (!editor) {
             return;
         }
+        const current = editor;
         closePopup();
         hideTooltip();
-        editor.overlay.remove();
+        document.removeEventListener('keydown', onEditorKeyDown, true);
+        // A message on screen outlives the dialog it was announced in.
+        const message = current.dialog.querySelector('.ch-toast');
+        if (message) {
+            document.body.appendChild(message);
+        }
+        current.overlay.remove();
         editor = null;
+        if (!current.embedded) {
+            const opener = current.opener && current.opener.isConnected ? current.opener : document.querySelector('.ch-customize-button');
+            if (opener) {
+                opener.focus();
+            }
+        }
+    }
+
+    /* ---- closing, confirmations, keyboard of the modal ---- */
+
+    function isEditorDirty() {
+        return JSON.stringify(serializeModel(editor.model)) !== editor.snapshot;
+    }
+
+    // Close button, Cancel, Escape, click on the backdrop: changes are never dropped without a question.
+    function requestClose() {
+        if (!editor) {
+            return;
+        }
+        const current = editor;
+        function leave() {
+            closeEditor();
+            if (current.embedded) {
+                // Embedded editor: it never goes away, cancel reloads the stored layout.
+                openEditor(current.options);
+            }
+        }
+        if (isEditorDirty()) {
+            askInEditor(t('discardConfirm'), t('discard'), leave);
+        } else {
+            leave();
+        }
+    }
+
+    // A question asked inside the dialog, in place of its footer: window.confirm is missing or blocked in several
+    // of the shells that embed the web client, and it cannot be styled or translated.
+    function askInEditor(question, confirmLabel, onConfirm) {
+        dismissQuestion(false);
+        closePopup();
+        const dialog = editor.dialog;
+        const returnTo = dialog.contains(document.activeElement) ? document.activeElement : null;
+        const bar = el('div', 'ch-confirm', '<p class="ch-confirm-text" id="' + CONFIRM_TEXT_ID + '"></p>'
+            + '<button type="button" class="ch-btn ch-confirm-no"></button>'
+            + '<button type="button" class="ch-btn ch-btn-danger ch-confirm-yes"></button>');
+        bar.setAttribute('role', 'alertdialog');
+        bar.setAttribute('aria-labelledby', CONFIRM_TEXT_ID);
+        bar.querySelector('.ch-confirm-text').textContent = question;
+        bar.querySelector('.ch-confirm-no').textContent = t('keepEditing');
+        bar.querySelector('.ch-confirm-yes').textContent = confirmLabel;
+        bar.querySelector('.ch-confirm-no').addEventListener('click', function () {
+            dismissQuestion(true);
+        });
+        bar.querySelector('.ch-confirm-yes').addEventListener('click', function () {
+            dismissQuestion(false);
+            onConfirm();
+        });
+        dialog.insertBefore(bar, dialog.querySelector('.ch-dialog-footer'));
+        dialog.classList.add('ch-confirming');
+        editor.confirm = { bar: bar, returnTo: returnTo };
+        // The answer that loses nothing has the focus.
+        bar.querySelector('.ch-confirm-no').focus();
+    }
+
+    function dismissQuestion(restoreFocus) {
+        if (!editor || !editor.confirm) {
+            return;
+        }
+        const question = editor.confirm;
+        editor.confirm = null;
+        question.bar.remove();
+        editor.dialog.classList.remove('ch-confirming');
+        if (restoreFocus) {
+            (question.returnTo && question.returnTo.isConnected ? question.returnTo : editor.dialog).focus();
+        }
+    }
+
+    function isTabStop(node) {
+        return !node.disabled && node.tabIndex >= 0 && node.getClientRects().length > 0 && getComputedStyle(node).visibility !== 'hidden';
+    }
+
+    function tabStops(root) {
+        return Array.prototype.filter.call(root.querySelectorAll('button, input, select, textarea, a[href], [tabindex]'), isTabStop);
+    }
+
+    // Tab and Shift+Tab stay in the dialog, or in what is open on top of it (question, menu).
+    function trapFocus(e) {
+        const scope = editor.confirm ? editor.confirm.bar : (popup || editor.dialog);
+        const stops = tabStops(scope);
+        if (!stops.length) {
+            e.preventDefault();
+            return;
+        }
+        const index = stops.indexOf(document.activeElement);
+        const last = stops.length - 1;
+        if (index < 0 || (e.shiftKey && index === 0) || (!e.shiftKey && index === last)) {
+            e.preventDefault();
+            stops[e.shiftKey ? (index <= 0 ? last : index - 1) : (index < 0 || index === last ? 0 : index + 1)].focus();
+        }
+    }
+
+    function onEditorKeyDown(e) {
+        if (!editor || editor.embedded) {
+            return;
+        }
+        if (e.key === 'Tab') {
+            trapFocus(e);
+        } else if (e.key === 'Escape' && !popup) {
+            // An open menu closes first (onPopupKeyDown); then a pending question means "keep editing".
+            e.stopPropagation();
+            e.preventDefault();
+            if (editor.confirm) {
+                dismissQuestion(true);
+            } else {
+                requestClose();
+            }
+        }
     }
 
     function usedKeys(model) {
-        const keys = {};
+        const keys = dict();
         model.Items.forEach(function (item) {
             if (item.Type === 'folder') {
                 (item.Items || []).forEach(function (member) {
@@ -3103,19 +3401,20 @@
 
     function renderSectionRow(item, parent, index, siblings) {
         const entry = editor.known[item.Key] || { label: item.Label || item.Key, origin: 'other', present: false, family: false };
-        const row = el('div', 'ch-row' + (parent ? ' ch-row-child' : '') + (item.Visible === false ? ' ch-row-hidden' : '') + (entry.present ? '' : ' ch-row-absent'));
+        // The administration editor has no home page under it: "not displayed right now" would be noise there.
+        const absent = !entry.present && editor.mode !== 'default';
+        const row = el('div', 'ch-row' + (parent ? ' ch-row-child' : '') + (item.Visible === false ? ' ch-row-hidden' : '') + (absent ? ' ch-row-absent' : ''));
         row._item = item;
         row._parent = parent;
         const subtitle = [originLabel(entry.origin)];
         if (entry.family) {
             subtitle.push(t('family'));
         }
-        // The administration editor has no home page under it: "not displayed right now" would be noise there.
-        if (!entry.present && entry.origin !== 'customized' && editor.mode !== 'default') {
+        if (absent && entry.origin !== 'customized') {
             subtitle.push(t('absent'));
         }
         const badge = formatBadge(item);
-        row.innerHTML = '<span class="material-icons ch-handle" data-ch-tip="' + escapeHtml(t('dragHandle')) + '" aria-hidden="true">drag_indicator</span>'
+        row.innerHTML = handleHtml(item)
             + originIconHtml(entry.origin)
             + '<div class="ch-row-text"><div class="ch-row-title"></div><div class="ch-row-sub"></div></div>'
             + (badge ? '<span class="ch-row-format"></span>' : '')
@@ -3149,8 +3448,19 @@
             + (origin === 'customized' ? 'house' : 'extension') + '</span>';
     }
 
-    function actionButton(className, title, icon) {
-        return '<button type="button" class="ch-icon-btn ' + className + '" data-ch-tip="' + escapeHtml(title) + '" aria-label="' + escapeHtml(title) + '"><span class="material-icons" aria-hidden="true">' + icon + '</span></button>';
+    // Left column: a real button, because dragging needs a pointer. It takes the focus, moves its row with the
+    // up and down arrow keys, and opens a "move up / move down" menu when activated (touch, screen reader).
+    // Right column: "add" is the alternative to dragging, the handle stays out of the tab order.
+    function handleHtml(item) {
+        if (item._unlisted) {
+            return '<span class="material-icons ch-handle" data-ch-tip="' + escapeHtml(t('dragHandle')) + '" aria-hidden="true">drag_indicator</span>';
+        }
+        return '<button type="button" class="ch-handle" aria-haspopup="menu" data-ch-tip="' + escapeHtml(t('reorderHandle')) + '" aria-label="' + escapeHtml(t('reorderHandle')) + '">'
+            + '<span class="material-icons" aria-hidden="true">drag_indicator</span></button>';
+    }
+
+    function actionButton(className, title, icon, opensMenu) {
+        return '<button type="button" class="ch-icon-btn ' + className + '"' + (opensMenu ? ' aria-haspopup="menu" aria-expanded="false"' : '') + ' data-ch-tip="' + escapeHtml(title) + '" aria-label="' + escapeHtml(title) + '"><span class="material-icons" aria-hidden="true">' + icon + '</span></button>';
     }
 
     function rowActionsHtml(item) {
@@ -3160,7 +3470,7 @@
         }
         return (editor.query ? actionButton('ch-act-top', t('moveToTop'), 'vertical_align_top') : '')
             + actionButton('ch-act-visibility', item.Visible === false ? t('show') : t('hide'), item.Visible === false ? 'visibility_off' : 'visibility')
-            + actionButton('ch-act-menu', t('format'), 'aspect_ratio')
+            + actionButton('ch-act-menu', t('format'), 'aspect_ratio', true)
             + actionButton('ch-act-remove', t('removeAction'), 'close');
     }
 
@@ -3332,6 +3642,10 @@
     }
 
     function renderHeroRow() {
+        keepingFocus(editor.heroSlot, buildHeroRow);
+    }
+
+    function buildHeroRow() {
         const slot = editor.heroSlot;
         slot.innerHTML = '';
         // The hero is rendered by the plugin: nothing to configure when the administrator disabled that.
@@ -3346,7 +3660,7 @@
             + '<div class="ch-row-actions">'
             + '<button type="button" class="ch-icon-btn ch-hero-toggle" role="switch" aria-checked="' + (hero.Enabled ? 'true' : 'false') + '" data-ch-tip="' + escapeHtml(toggleLabel) + '" aria-label="' + escapeHtml(toggleLabel) + '">'
             + '<span class="material-icons" aria-hidden="true">' + (hero.Enabled ? 'toggle_on' : 'toggle_off') + '</span></button>'
-            + actionButton('ch-hero-settings', t('heroSettings'), 'tune')
+            + actionButton('ch-hero-settings', t('heroSettings'), 'tune', true)
             + '</div>';
         row.querySelector('.ch-row-title').textContent = t('heroTitle');
         row.querySelector('.ch-row-sub').textContent = hero.Enabled ? heroBadge(hero) : t('heroHint');
@@ -3365,6 +3679,7 @@
             openHeroMenu(e.currentTarget);
         });
         slot.appendChild(row);
+        markPopupAnchor();
     }
 
     // Same behavior as the format menu: it stays open while options are toggled.
@@ -3476,12 +3791,12 @@
         const row = el('div', 'ch-row ch-row-folder' + (item.Visible === false ? ' ch-row-hidden' : ''));
         row._item = item;
         row._parent = null;
-        row.innerHTML = '<span class="material-icons ch-handle" aria-hidden="true">drag_indicator</span>'
-            + '<button type="button" class="ch-icon-btn ch-act-icon" data-ch-tip="' + escapeHtml(t('chooseIcon')) + '" aria-label="' + escapeHtml(t('chooseIcon')) + '"><span class="material-icons" aria-hidden="true">' + escapeHtml(item.Icon || 'folder') + '</span></button>'
+        row.innerHTML = handleHtml(item)
+            + '<button type="button" class="ch-icon-btn ch-act-icon" aria-haspopup="menu" aria-expanded="false" data-ch-tip="' + escapeHtml(t('chooseIcon')) + '" aria-label="' + escapeHtml(t('chooseIcon')) + '"><span class="material-icons" aria-hidden="true">' + escapeHtml(item.Icon || 'folder') + '</span></button>'
             + '<input type="text" class="ch-folder-name" maxlength="100" placeholder="' + escapeHtml(t('folderName')) + '" />'
             + '<div class="ch-row-actions">'
             + '<button type="button" class="ch-icon-btn ch-act-visibility" data-ch-tip="' + escapeHtml(item.Visible === false ? t('show') : t('hide')) + '" aria-label="' + escapeHtml(item.Visible === false ? t('show') : t('hide')) + '"><span class="material-icons" aria-hidden="true">' + (item.Visible === false ? 'visibility_off' : 'visibility') + '</span></button>'
-            + '<button type="button" class="ch-icon-btn ch-act-menu" data-ch-tip="' + escapeHtml(t('more')) + '" aria-label="' + escapeHtml(t('more')) + '"><span class="material-icons" aria-hidden="true">more_vert</span></button>'
+            + '<button type="button" class="ch-icon-btn ch-act-menu" aria-haspopup="menu" aria-expanded="false" data-ch-tip="' + escapeHtml(t('more')) + '" aria-label="' + escapeHtml(t('more')) + '"><span class="material-icons" aria-hidden="true">more_vert</span></button>'
             + '</div>';
         row.querySelector('.ch-folder-name').value = item.Name || '';
         return row;
@@ -3497,9 +3812,12 @@
     }
 
     function renderEditor() {
-        if (!editor) {
-            return;
+        if (editor) {
+            keepingFocus(editor.columns, buildRows);
         }
+    }
+
+    function buildRows() {
         const list = editor.list;
         const side = editor.unlisted;
         const scrollTop = editor.body.scrollTop;
@@ -3507,7 +3825,7 @@
         side.innerHTML = '';
         const model = editor.model;
         setClass(editor.columns, 'ch-filtered', !!editor.query);
-        renderHeroRow();
+        buildHeroRow();
 
         model.Items.forEach(function (item, index) {
             if (item.Type === 'folder') {
@@ -3541,6 +3859,7 @@
             side.appendChild(el('div', 'ch-empty', escapeHtml(editor.query ? t('searchNoResult') : t('dropToRemove'))));
         }
         editor.body.scrollTop = scrollTop;
+        markPopupAnchor();
     }
 
     function materialize(item) {
@@ -3590,6 +3909,166 @@
         renderEditor();
     }
 
+    /* ---- reordering without a pointer (keyboard, remote, screen reader) ---- */
+
+    function folderOf(item) {
+        return editor.model.Items.filter(function (candidate) {
+            return candidate.Type === 'folder' && (candidate.Items || []).indexOf(item) >= 0;
+        })[0] || null;
+    }
+
+    // One step up (-1) or down (+1) in the order of the rows, across folder borders like a drag would: a section
+    // leaves its folder at either end, and enters the folder it meets. Null when there is nowhere to go.
+    function stepTarget(item, parent, delta) {
+        const top = editor.model.Items;
+        if (parent) {
+            const members = parent.Items;
+            const index = members.indexOf(item);
+            if (index < 0) {
+                return null;
+            }
+            if (members[index + delta]) {
+                return { folder: parent, before: delta < 0 ? members[index - 1] : (members[index + 2] || null) };
+            }
+            return { folder: null, before: delta < 0 ? parent : (top[top.indexOf(parent) + 1] || null) };
+        }
+        const index = top.indexOf(item);
+        const neighbour = index < 0 ? null : top[index + delta];
+        if (!neighbour) {
+            return null;
+        }
+        if (neighbour.Type === 'folder' && item.Type !== 'folder') {
+            return { folder: neighbour, before: delta < 0 ? null : (neighbour.Items[0] || null) };
+        }
+        return { folder: null, before: delta < 0 ? neighbour : (top[index + 2] || null) };
+    }
+
+    function rowOf(item) {
+        return Array.prototype.filter.call(editor.columns.querySelectorAll('.ch-row'), function (row) {
+            return row._item === item || (!!item.Key && !!row._item && row._item.Key === item.Key);
+        })[0] || null;
+    }
+
+    const CONTROL_CLASS = /^ch-(act-[a-z]+|handle|folder-name|hero-toggle|hero-settings)$/;
+
+    // What a control of the two columns is, in terms that survive the rebuild of its row.
+    function describeControl(node) {
+        const row = node.closest('.ch-row');
+        return {
+            node: node,
+            name: Array.prototype.filter.call(node.classList, function (name) {
+                return CONTROL_CLASS.test(name);
+            })[0] || null,
+            hero: !!node.closest('.ch-hero-slot'),
+            item: row ? row._item : null,
+            column: row && row.parentNode === editor.unlisted ? editor.unlisted : editor.list,
+            index: row ? Array.prototype.indexOf.call(row.parentNode.querySelectorAll('.ch-row'), row) : -1
+        };
+    }
+
+    function resolveControl(control) {
+        if (control.node.isConnected) {
+            return control.node;
+        }
+        if (control.hero) {
+            return control.name ? editor.heroSlot.querySelector('.' + control.name) : null;
+        }
+        let row = control.item ? rowOf(control.item) : null;
+        if (!row || row.parentNode !== control.column) {
+            // Added, removed or filtered out: the row that took its place keeps the keyboard where it was.
+            const rows = control.column.querySelectorAll('.ch-row');
+            row = rows[Math.min(control.index, rows.length - 1)] || row;
+        }
+        if (!row) {
+            return null;
+        }
+        return (control.name ? row.querySelector('.' + control.name + ':not([disabled])') : null)
+            || row.querySelector('.ch-row-actions button:not([disabled])');
+    }
+
+    // Rebuilding rows drops the focus on the body, where Escape and the arrow keys mean nothing any more.
+    function keepingFocus(root, render) {
+        const control = root.contains(document.activeElement) ? describeControl(document.activeElement) : null;
+        render();
+        if (control) {
+            (resolveControl(control) || editor.dialog).focus();
+        }
+    }
+
+    // The rows are rebuilt by every change: the focus goes back to the same control of the same row.
+    function focusRowControl(item, selector) {
+        const row = rowOf(item);
+        const control = row ? (row.querySelector(selector) || row.querySelector('button:not([disabled])')) : null;
+        if (control) {
+            control.focus();
+        }
+        return control;
+    }
+
+    function announceRow(item) {
+        const row = rowOf(item);
+        if (!row || !editor.live) {
+            return;
+        }
+        const rows = editor.list.querySelectorAll('.ch-row');
+        const label = item.Type === 'folder' ? (item.Name || t('folder')) : row.querySelector('.ch-row-title').textContent;
+        editor.live.textContent = t('movedPosition', label, Array.prototype.indexOf.call(rows, row) + 1, rows.length);
+    }
+
+    // Not while a search filters the rows, like drag and drop: a step would jump over rows that are not shown.
+    function stepItem(item, parent, delta) {
+        const target = editor.query ? null : stepTarget(item, parent, delta);
+        if (target) {
+            moveItem(item, target);
+            announceRow(item);
+        }
+        return focusRowControl(item, '.ch-handle');
+    }
+
+    // Opened by activating a handle. It stays open, like the format menu: a row often moves by several steps.
+    function openMoveMenu(anchor, item, parent, focusDelta) {
+        const menu = el('div', 'ch-move-menu');
+        const buttons = [[-1, 'moveUp', 'arrow_upward'], [1, 'moveDown', 'arrow_downward']].map(function (choice) {
+            const button = el('button', choice[0] < 0 ? 'ch-move-up' : 'ch-move-down', '<span class="material-icons" aria-hidden="true">' + choice[2] + '</span><span></span>');
+            button.type = 'button';
+            button.setAttribute('role', 'menuitem');
+            button.disabled = !stepTarget(item, parent, choice[0]);
+            button.querySelector('span:last-child').textContent = t(choice[1]);
+            button.addEventListener('click', function () {
+                const handle = stepItem(item, parent, choice[0]);
+                if (handle) {
+                    openMoveMenu(handle, item, folderOf(item), choice[0]);
+                }
+            });
+            menu.appendChild(button);
+            return button;
+        });
+        if (buttons[0].disabled && buttons[1].disabled) {
+            // A single row: nothing to offer.
+            closePopup();
+            return;
+        }
+        showPopup(anchor, menu);
+        const wanted = buttons[focusDelta > 0 ? 1 : 0];
+        (wanted.disabled ? buttons[focusDelta > 0 ? 0 : 1] : wanted).focus();
+    }
+
+    function onListKeyDown(e) {
+        if ((e.key !== 'ArrowUp' && e.key !== 'ArrowDown') || e.altKey || e.ctrlKey || e.metaKey || e.shiftKey) {
+            return;
+        }
+        const handle = e.target.closest ? e.target.closest('button.ch-handle') : null;
+        const row = handle ? handle.closest('.ch-row') : null;
+        if (!row || !row._item) {
+            return;
+        }
+        // The arrows belong to the handle: neither the page scroll nor the spatial navigation of the TV layout.
+        e.preventDefault();
+        e.stopPropagation();
+        closePopup();
+        stepItem(row._item, row._parent, e.key === 'ArrowUp' ? -1 : 1);
+    }
+
     function onListInput(e) {
         const input = e.target.closest('.ch-folder-name');
         if (!input) {
@@ -3613,7 +4092,11 @@
         const item = row._item;
         const parent = row._parent;
 
-        if (button.classList.contains('ch-act-visibility')) {
+        if (button.classList.contains('ch-handle')) {
+            if (!editor.query) {
+                openMoveMenu(button, item, parent, -1);
+            }
+        } else if (button.classList.contains('ch-act-visibility')) {
             materialize(item);
             item.Visible = item.Visible === false;
             renderEditor();
@@ -3685,8 +4168,19 @@
                 showTooltip(target);
             }
         }
+        function onFocus(e) {
+            let fromKeyboard = true;
+            try {
+                fromKeyboard = e.target.matches(':focus-visible');
+            } catch (err) {
+                /* older engine: no such selector, every focus counts */
+            }
+            if (fromKeyboard) {
+                onEnter(e);
+            }
+        }
         root.addEventListener('mouseover', onEnter);
-        root.addEventListener('focusin', onEnter);
+        root.addEventListener('focusin', onFocus);
         root.addEventListener('mouseout', hideTooltip);
         root.addEventListener('focusout', hideTooltip);
         root.addEventListener('pointerdown', hideTooltip);
@@ -3695,38 +4189,82 @@
     /* ---- popup menus ---- */
 
     let popup = null;
+    let popupAnchor = null;
+    const MENU_KEYS = dict({ ArrowDown: 1, ArrowRight: 1, ArrowUp: -1, ArrowLeft: -1, Home: 0, End: 0 });
 
-    function closePopup() {
-        if (popup) {
-            popup.remove();
-            popup = null;
-            document.removeEventListener('pointerdown', onDocumentPointerDown, true);
-            document.removeEventListener('keydown', onPopupKeyDown, true);
+    // returnFocus: the menu was left from the keyboard or by choosing an entry, the focus goes back to the button
+    // that opened it (rebuilt meanwhile, more often than not). Not after a click elsewhere.
+    function closePopup(returnFocus) {
+        if (!popup) {
+            return;
+        }
+        const anchor = popupAnchor;
+        popup.remove();
+        popup = null;
+        popupAnchor = null;
+        document.removeEventListener('pointerdown', onDocumentPointerDown, true);
+        document.removeEventListener('keydown', onPopupKeyDown, true);
+        if (!editor || !anchor) {
+            return;
+        }
+        const button = resolveControl(anchor);
+        if (button && button.hasAttribute('aria-haspopup')) {
+            button.setAttribute('aria-expanded', 'false');
+        }
+        if (returnFocus) {
+            (button || editor.dialog).focus();
+        }
+    }
+
+    // The button a menu belongs to is rebuilt while the menu stays open: it still says "expanded".
+    function markPopupAnchor() {
+        const button = popup && popupAnchor ? resolveControl(popupAnchor) : null;
+        if (button && button.hasAttribute('aria-haspopup')) {
+            button.setAttribute('aria-expanded', 'true');
         }
     }
 
     function onDocumentPointerDown(e) {
         if (popup && !popup.contains(e.target)) {
-            closePopup();
+            closePopup(false);
         }
     }
 
     function onPopupKeyDown(e) {
-        if (popup && e.key === 'Escape') {
+        if (!popup) {
+            return;
+        }
+        if (e.key === 'Escape') {
             // Close the menu only, not the editor behind it.
             e.stopPropagation();
             e.preventDefault();
-            closePopup();
+            closePopup(true);
+        } else if (MENU_KEYS[e.key] !== undefined && popup.contains(e.target) && !e.altKey && !e.ctrlKey && !e.metaKey) {
+            // A menu is walked with the arrow keys; Tab works too (see trapFocus).
+            const entries = tabStops(popup);
+            const index = entries.indexOf(document.activeElement);
+            const step = MENU_KEYS[e.key];
+            const next = step === 0 ? (e.key === 'Home' ? 0 : entries.length - 1) : (index + step + entries.length) % entries.length;
+            if (entries[next]) {
+                e.stopPropagation();
+                e.preventDefault();
+                entries[next].focus();
+            }
         }
     }
 
     function showPopup(anchor, node) {
-        closePopup();
+        closePopup(false);
         // The tooltip of the button that opens the menu would sit on top of it.
         hideTooltip();
         popup = node;
+        popupAnchor = describeControl(anchor);
         popup.classList.add('ch-popup');
-        document.body.appendChild(popup);
+        popup.setAttribute('role', 'menu');
+        popup.setAttribute('aria-label', anchor.getAttribute('aria-label') || '');
+        anchor.setAttribute('aria-expanded', 'true');
+        // Inside the modal dialog: everything outside it is inert for assistive technologies (aria-modal).
+        (editor.embedded ? document.body : editor.dialog).appendChild(popup);
         const rect = anchor.getBoundingClientRect();
         const width = popup.offsetWidth;
         const height = popup.offsetHeight;
@@ -3744,6 +4282,10 @@
         setTimeout(function () {
             document.addEventListener('pointerdown', onDocumentPointerDown, true);
         }, 0);
+        const first = tabStops(popup)[0];
+        if (first) {
+            first.focus();
+        }
     }
 
     function openRowMenu(anchor, item, parent) {
@@ -3752,13 +4294,17 @@
             return candidate.Type === 'folder';
         });
 
-        function addAction(icon, label, handler) {
+        function addAction(icon, label, handler, checked) {
             const button = el('button', '', '<span class="material-icons" aria-hidden="true">' + icon + '</span><span></span>');
             button.type = 'button';
+            button.setAttribute('role', checked === undefined ? 'menuitem' : 'menuitemcheckbox');
+            if (checked !== undefined) {
+                button.setAttribute('aria-checked', checked ? 'true' : 'false');
+            }
             button.querySelector('span:last-child').textContent = label;
             button.addEventListener('click', function () {
-                closePopup();
                 handler();
+                closePopup(true);
             });
             menu.appendChild(button);
         }
@@ -3767,7 +4313,7 @@
             addAction(item.Collapsed ? 'check_box' : 'check_box_outline_blank', t('collapsedByDefault'), function () {
                 item.Collapsed = !item.Collapsed;
                 renderEditor();
-            });
+            }, !!item.Collapsed);
             addAction('delete', t('deleteFolder'), function () {
                 const index = editor.model.Items.indexOf(item);
                 if (index >= 0) {
@@ -3793,10 +4339,13 @@
             const button = el('button', icon === item.Icon ? 'ch-selected' : '', '<span class="material-icons" aria-hidden="true">' + icon + '</span>');
             button.type = 'button';
             button.title = icon;
+            button.setAttribute('role', 'menuitemradio');
+            button.setAttribute('aria-checked', icon === item.Icon ? 'true' : 'false');
+            button.setAttribute('aria-label', icon);
             button.addEventListener('click', function () {
                 item.Icon = icon;
-                closePopup();
                 renderEditor();
+                closePopup(true);
             });
             inner.appendChild(button);
         });
@@ -3809,6 +4358,7 @@
 
     function initDrag(root, list, side) {
         let drag = null;
+        let dragJustEnded = false;
 
         function isInside(node, e) {
             const rect = node.getBoundingClientRect();
@@ -3931,6 +4481,13 @@
             }
             const current = drag;
             drag = null;
+            if (current.active) {
+                // The click that ends a drag is not an activation of the handle (which opens the move menu).
+                dragJustEnded = true;
+                setTimeout(function () {
+                    dragJustEnded = false;
+                }, 0);
+            }
             if (current.ghost) {
                 current.ghost.remove();
             }
@@ -3995,6 +4552,13 @@
         root.addEventListener('pointercancel', function () {
             finish(false);
         });
+        root.addEventListener('click', function (e) {
+            if (dragJustEnded) {
+                dragJustEnded = false;
+                e.stopPropagation();
+                e.preventDefault();
+            }
+        }, true);
     }
 
     /* ---- save / reset ---- */
@@ -4081,9 +4645,12 @@
     }
 
     function resetEditor() {
-        if (!editor || !window.confirm(t('resetConfirm'))) {
-            return;
+        if (editor) {
+            askInEditor(t('resetConfirm'), t('reset'), deleteUserLayout);
         }
+    }
+
+    function deleteUserLayout() {
         apiSend('DELETE', 'Layout').then(function () {
             closeEditor();
             return reloadLayout();
@@ -4124,7 +4691,7 @@
         version: VERSION,
         openEditor: openEditor,
         refresh: function () {
-            state.integratedCache = {};
+            state.integratedCache = dict();
             return reloadLayout();
         },
         apply: scheduleApply,
