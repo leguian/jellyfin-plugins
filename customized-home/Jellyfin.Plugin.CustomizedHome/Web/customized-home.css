@@ -1061,8 +1061,8 @@
 
 /* ---------- Hero (carousel of featured media) ---------- */
 .ch-hero {
-    /* Always first: layout sections start at 1000. */
-    order: -1;
+    /* Always first: layout sections start at 1000, the empty home message sits at -1. */
+    order: -2;
     position: relative;
     overflow: hidden;
     /* Full bleed and under the header: the negative margins are measured by the script. */
@@ -1269,12 +1269,16 @@ html.ch-hero-under-header .skinHeader {
     background: rgba(255, 255, 255, 0.85);
 }
 
-.ch-hero-favorite .ratingbutton-icon-withrating {
+.ch-hero-favorite.ch-on .material-icons {
     color: #e0245e;
 }
 
-.ch-hero-played .playstatebutton-icon-played {
+.ch-hero-played.ch-on .material-icons {
     color: #52b54b;
+}
+
+.ch-hero-round:disabled {
+    cursor: progress;
 }
 
 .ch-hero-nav {
@@ -1448,4 +1452,55 @@ html.ch-hero-under-header .skinHeader {
     min-width: 1.6em;
     text-align: center;
     font-variant-numeric: tabular-nums;
+}
+
+/* ---------- Message shown when a layout exists but the default home page is displayed ---------- */
+.ch-notice {
+    /* Above the transparent end of the hero, which overlaps what follows it. */
+    position: relative;
+    z-index: 1;
+    display: flex;
+    align-items: flex-start;
+    gap: 0.8em;
+    margin: 2em max(env(safe-area-inset-right), 3.3%) 1em max(env(safe-area-inset-left), 3.3%);
+    padding: 0.9em 1em;
+    border: 1px solid rgba(128, 128, 128, 0.35);
+    border: 1px solid color-mix(in srgb, currentColor 16%, transparent);
+    border-radius: 0.6em;
+    background: rgba(128, 128, 128, 0.12);
+    background: color-mix(in srgb, currentColor 7%, transparent);
+}
+
+.ch-notice-icon {
+    color: #00a4dc;
+    font-size: 1.6em;
+}
+
+.ch-notice-text {
+    flex: 1;
+    min-width: 0;
+    line-height: 1.5;
+}
+
+.ch-notice-title {
+    margin: 0 0 0.2em;
+    font-size: 1.05em;
+    font-weight: 600;
+}
+
+.ch-notice-why,
+.ch-notice-fix {
+    margin: 0;
+}
+
+.ch-notice-fix {
+    margin-top: 0.3em;
+    opacity: 0.85;
+}
+
+.ch-notice-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5em;
+    margin-top: 0.7em;
 }

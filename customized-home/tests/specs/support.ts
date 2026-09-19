@@ -77,6 +77,16 @@ export interface MockRequest {
     path: string;
     url?: string;
     body: unknown;
+    failed?: boolean;
+    /** Date.now() of the page when the request was made (the fake clock when one is installed). */
+    ts?: number;
+}
+
+export interface CardItem {
+    Id: string;
+    Name: string;
+    Type: string;
+    UserData?: { PlaybackPositionTicks?: number; PlayedPercentage?: number };
 }
 
 export interface MockOptions {
@@ -87,6 +97,15 @@ export interface MockOptions {
     enableIntegratedSections?: boolean;
     genreImages?: { Name: string; Shape?: 'portrait' | 'landscape' | 'square'; Version: number }[];
     heroItems?: Partial<Record<HeroSource, HeroItem[]>>;
+    /** Replaces the three default genres. */
+    genres?: { Id: string; Name: string; Type: string }[];
+    /** Layout per user id, for tests that switch users; the other options apply to everyone. */
+    layoutsByUser?: Record<string, Layout>;
+    resumeItems?: CardItem[];
+    /** "<METHOD> <path>" -> number of failures (-1: always). */
+    failures?: Record<string, number>;
+    /** "<METHOD> <path>" -> milliseconds before the answer. */
+    delays?: Record<string, number>;
 }
 
 interface MockWindow {
@@ -119,31 +138,44 @@ export const GENRES = [
     { Id: 'genre-drama', Name: 'Drama', Type: 'Genre' }
 ];
 
-function mockState(options: MockOptions): Record<string, unknown> {
+function layoutResponse(options: MockOptions, layout: Layout | undefined): Record<string, unknown> {
     return {
+        Source: layout ? 'user' : 'none',
+        Layout: layout ?? EMPTY_LAYOUT,
+        CanCustomize: options.canCustomize ?? true,
+        HasUserLayout: options.hasUserLayout ?? layout !== undefined,
+        IsAdministrator: true,
+        ShowCustomizeButtonOnHome: true,
+        ShowUserMenuEntry: true,
+        FoldersCollapsible: true,
+        EnableIntegratedSections: options.enableIntegratedSections ?? false,
+        PluginVersion: 'test'
+    };
+}
+
+function mockState(options: MockOptions): Record<string, unknown> {
+    const layoutResponses: Record<string, unknown> = {};
+    for (const [userId, layout] of Object.entries(options.layoutsByUser ?? {})) {
+        layoutResponses[userId] = layoutResponse(options, layout);
+    }
+    return {
+        layoutResponses,
+        resumeItems: options.resumeItems ?? [],
+        failures: options.failures ?? {},
+        delays: options.delays ?? {},
         catalog: CATALOG,
-        genres: GENRES,
+        genres: options.genres ?? GENRES,
         genreImages: options.genreImages ?? [],
         heroItems: options.heroItems ?? {},
         defaultLayout: options.defaultLayout ?? EMPTY_LAYOUT,
         // The administration page reads the default layout summary from the plugin configuration.
         pluginConfiguration: { DefaultLayout: options.defaultLayout ?? EMPTY_LAYOUT },
-        layoutResponse: {
-            Source: options.layout ? 'user' : 'none',
-            Layout: options.layout ?? EMPTY_LAYOUT,
-            CanCustomize: options.canCustomize ?? true,
-            HasUserLayout: options.hasUserLayout ?? options.layout !== undefined,
-            IsAdministrator: true,
-            ShowCustomizeButtonOnHome: true,
-            ShowUserMenuEntry: true,
-            FoldersCollapsible: true,
-            EnableIntegratedSections: options.enableIntegratedSections ?? false,
-            PluginVersion: 'test'
-        }
+        layoutResponse: layoutResponse(options, options.layout)
     };
 }
 
-async function injectPlugin(page: Page, options: MockOptions): Promise<void> {
+/** Seeds the mock, then loads the stub, the stylesheet and the plugin script into the current page. */
+export async function injectPlugin(page: Page, options: MockOptions): Promise<void> {
     await page.evaluate((state) => {
         (window as unknown as { __mock: Record<string, unknown> }).__mock = state;
     }, mockState(options));
@@ -152,11 +184,43 @@ async function injectPlugin(page: Page, options: MockOptions): Promise<void> {
     await page.addScriptTag({ path: SCRIPT_PATH });
 }
 
-/** Opens the mocked home page with the plugin script and stylesheet injected. */
-export async function openHome(page: Page, options: MockOptions = {}): Promise<void> {
+/** Loads the mocked home page and the plugin without waiting for a layout to be applied (failing server...). */
+export async function loadHome(page: Page, options: MockOptions = {}): Promise<void> {
     await page.goto(HOME_FIXTURE_URL);
     await injectPlugin(page, options);
+}
+
+/** Opens the mocked home page with the plugin script and stylesheet injected. */
+export async function openHome(page: Page, options: MockOptions = {}): Promise<void> {
+    await loadHome(page, options);
     await page.waitForSelector('#homeTab .sections.ch-container');
+}
+
+/** Changes window.__mock from a test, then touches the DOM like jellyfin-web does all the time. */
+export async function updateMock(page: Page, changes: Record<string, unknown>): Promise<void> {
+    await page.evaluate((values) => {
+        Object.assign((window as unknown as MockWindow).__mock, values);
+        document.body.appendChild(document.createElement('i')).remove();
+    }, changes);
+}
+
+/** jellyfin-web threw the cached home view away and rendered a new one: same native sections, new container. */
+export async function rebuildHomeView(page: Page): Promise<void> {
+    await page.evaluate(() => {
+        const container = document.querySelector('#homeTab .sections');
+        if (!container) {
+            throw new Error('home container missing');
+        }
+        const fresh = container.cloneNode(true) as HTMLElement;
+        fresh.querySelectorAll('.ch-section, .ch-hero, .ch-folder, .ch-customize-bar, .ch-notice').forEach((node) => node.remove());
+        fresh.className = 'sections homeSectionsContainer';
+        container.replaceWith(fresh);
+    });
+}
+
+/** jellyfin-web dispatches a bubbling "viewshow" on the view it shows again (back navigation, end of playback). */
+export async function showHomeAgain(page: Page): Promise<void> {
+    await page.evaluate(() => document.querySelector('#indexPage')?.dispatchEvent(new CustomEvent('viewshow', { bubbles: true })));
 }
 
 /** Opens the user editor (modal) from the home page button. */

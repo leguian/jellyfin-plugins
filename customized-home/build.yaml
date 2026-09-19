@@ -1,7 +1,7 @@
 ---
 name: "Customized Home"
 guid: "7c99a4bf-cd3b-4bc8-b941-7ddccd816f3c"
-version: "1.8.2.1"
+version: "1.8.3.0"
 targetAbi: "12.0.0.0"
 framework: "net10.0"
 overview: "Easily edit and organize the sections on your homepage"
@@ -20,6 +20,10 @@ owner: "leguian"
 artifacts:
 - "Jellyfin.Plugin.CustomizedHome.dll"
 changelog: >
-  Compatibility fix: the plugin is now compiled against the oldest server of each line (10.11.0 and
-  12.0.0). Earlier packages only loaded on Jellyfin 10.11.11+ and 12.1.0+ and were disabled by older
-  servers. No functional change. The project is now licensed under GPL-3.0.
+  Reliability and privacy. Logging out or switching user in the same tab no longer keeps the previous
+  user's layout and cached rows. Continue Watching / Next Up, Watch Again, Because You Watched and the hero
+  are reloaded when the home page is shown again, without flicker. A failing server is retried with
+  growing delays. A message explains why a layout is not applied or why the home page is empty, and how to
+  fix it. Hero: favorite and watched now work on mobile and TV, "From the beginning" really restarts. The
+  default layout no longer reveals libraries a user cannot access. "All genres" is displayed at once and
+  loads its poster collages as the cards come into view. Layout uploads are size limited.

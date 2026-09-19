@@ -13,7 +13,7 @@
         return;
     }
 
-    const VERSION = '1.8.2.1';
+    const VERSION = '1.8.3';
     const API = 'CustomizedHome';
     const ORDER_STEP = 1000;
     const ORDER_UNLISTED_BASE = 1000000000;
@@ -28,6 +28,15 @@
     const I18N = {
         en: {
             customize: 'Customize home',
+            emptyHomeTitle: 'The home layout is not applied',
+            emptyHomeTitleBlank: 'Nothing to show on the home page',
+            emptyHomeHidden: 'Every section of the layout is hidden.',
+            emptyHomeEmpty: 'The sections of the layout have nothing to display for now (nothing in progress, empty library...).',
+            emptyHomeMissing: 'The sections of the layout are no longer offered on this home page (Jellyfin update, plugin removed, Jellyfin home settings). The default home page is shown instead.',
+            emptyHomeDisabled: 'The layout only holds sections rendered by Customized Home, which the administrator turned off. The default home page is shown instead.',
+            emptyHomeFix: 'Open "Customize home" to show or add sections, or reset the layout.',
+            emptyHomeFixAdmin: 'This layout is managed by the administrator: ask them to update it.',
+            emptyHomeDismiss: 'Hide this message',
             editorTitle: 'Customize the home screen',
             defaultTitle: 'Default home layout (all users)',
             newFolder: 'New folder',
@@ -141,6 +150,8 @@
             heroTrailer: 'Trailer',
             heroFavorite: 'Favorite',
             heroPlayed: 'Watched',
+            heroActionError: 'Could not update this media',
+            latestUnavailable: 'Recently added (library not available)',
             heroMore: 'More info',
             heroPrev: 'Previous media',
             heroNext: 'Next media',
@@ -150,6 +161,15 @@
         },
         fr: {
             customize: "Personnaliser l'accueil",
+            emptyHomeTitle: "La disposition de l'accueil n'est pas appliquée",
+            emptyHomeTitleBlank: "Rien à afficher sur l'accueil",
+            emptyHomeHidden: 'Toutes les sections de la disposition sont masquées.',
+            emptyHomeEmpty: "Les sections de la disposition n'ont rien à afficher pour le moment (rien en cours de lecture, bibliothèque vide…).",
+            emptyHomeMissing: "Les sections de la disposition ne sont plus proposées sur cet accueil (mise à jour de Jellyfin, plugin retiré, réglages d'accueil Jellyfin). La page d'accueil par défaut est affichée à la place.",
+            emptyHomeDisabled: "La disposition ne contient que des sections rendues par Customized Home, désactivées par l'administrateur. La page d'accueil par défaut est affichée à la place.",
+            emptyHomeFix: "Ouvrez « Personnaliser l'accueil » pour réafficher ou ajouter des sections, ou réinitialisez la disposition.",
+            emptyHomeFixAdmin: "Cette disposition est gérée par l'administrateur : demandez-lui de la mettre à jour.",
+            emptyHomeDismiss: 'Masquer ce message',
             editorTitle: "Personnaliser l'accueil",
             defaultTitle: 'Disposition par défaut (tous les utilisateurs)',
             newFolder: 'Nouveau dossier',
@@ -263,6 +283,8 @@
             heroTrailer: 'Bande-annonce',
             heroFavorite: 'Favori',
             heroPlayed: 'Vu',
+            heroActionError: 'Impossible de mettre à jour ce média',
+            latestUnavailable: 'Ajouts récents (médiathèque indisponible)',
             heroMore: "Plus d'infos",
             heroPrev: 'Média précédent',
             heroNext: 'Média suivant',
@@ -287,7 +309,15 @@
         catalog: null,
         genreNames: null,
         userViews: null,
-        integratedCache: {}
+        integratedCache: {},
+        // Everything above belongs to one user on one server (see checkSession).
+        identity: null,
+        epoch: 0,
+        loadFailures: 0,
+        retryAt: 0,
+        retryTimer: null,
+        warnedEmptyHome: false,
+        noticeDismissed: false
     };
 
     /* ------------------------------------------------------------------ */
@@ -441,30 +471,133 @@
     /* Data loading                                                        */
     /* ------------------------------------------------------------------ */
 
+    const LOAD_RETRY_BASE_MS = 2000;
+    const LOAD_RETRY_MAX_MS = 5 * 60 * 1000;
+    const RETRY_TIMER_MARGIN_MS = 50;
+
+    function sessionIdentity() {
+        const userId = currentUserId();
+        if (!userId) {
+            return null;
+        }
+        let serverId = '';
+        try {
+            serverId = apiClient().serverId() || '';
+        } catch (e) {
+            serverId = '';
+        }
+        return userId + '@' + serverId;
+    }
+
+    // Gives the home sections back their native look and removes what the plugin rendered.
+    function restoreContainer(container) {
+        removeHero(container);
+        Array.prototype.forEach.call(container.querySelectorAll(':scope > .ch-section, :scope > .ch-folder, :scope > .ch-customize-bar, :scope > .ch-notice'), function (node) {
+            node.remove();
+        });
+        container._chIntegrated = null;
+        container._chHeroEntry = null;
+        Array.prototype.forEach.call(container.querySelectorAll('.verticalSection'), function (node) {
+            ['ch-hidden', 'ch-in-folder', 'ch-notitle', 'ch-nosectiontitle', 'ch-shape-portrait', 'ch-shape-landscape', 'ch-shape-square', 'ch-size-small', 'ch-size-large'].forEach(function (name) {
+                setClass(node, name, false);
+            });
+            if (node.style.order) {
+                node.style.order = '';
+            }
+            if (node.dataset.chFolder !== undefined) {
+                delete node.dataset.chFolder;
+            }
+        });
+    }
+
+    // Logout, login as someone else, other server: nothing loaded or rendered for the previous session may survive.
+    function resetSession() {
+        state.epoch++;
+        closeEditor();
+        if (state.container && state.container.isConnected) {
+            restoreContainer(state.container);
+            // The next user's sections get their content after the login: same patience as for a new page.
+            startSettling(state.container);
+        }
+        Array.prototype.forEach.call(document.querySelectorAll('.ch-menu-entry'), function (node) {
+            node.remove();
+        });
+        clearTimeout(state.retryTimer);
+        state.response = null;
+        state.layout = null;
+        state.ctx = null;
+        state.ctxStale = false;
+        state.loadPromise = null;
+        state.catalog = null;
+        state.genreNames = null;
+        state.userViews = null;
+        state.integratedCache = {};
+        state.discovered = [];
+        state.loadFailures = 0;
+        state.retryAt = 0;
+        state.retryTimer = null;
+        state.warnedEmptyHome = false;
+        state.noticeDismissed = false;
+    }
+
+    // Returns false while nobody is logged in.
+    function checkSession() {
+        const identity = sessionIdentity();
+        if (identity !== state.identity) {
+            if (state.identity !== null) {
+                resetSession();
+            }
+            state.identity = identity;
+        }
+        return identity !== null;
+    }
+
+    // After a failed load the next attempts are spaced out (2 s, 4 s ... 5 min) instead of following every DOM change.
+    function canLoad() {
+        return !!state.loadPromise || Date.now() >= state.retryAt;
+    }
+
     function ensureLoaded() {
         if (state.loadPromise) {
             return state.loadPromise;
         }
+        const epoch = state.epoch;
         state.loadPromise = waitForApiClient()
             .then(function () {
                 return Promise.all([apiGet('Layout'), loadContext()]);
             })
             .then(function (results) {
+                if (epoch !== state.epoch) {
+                    throw new Error('session changed while loading');
+                }
                 state.response = results[0];
                 state.layout = results[0].Layout || { Items: [] };
                 state.ctx = results[1];
+                state.loadFailures = 0;
+                state.retryAt = 0;
                 return state.response;
             })
             .catch(function (error) {
-                console.warn('[CustomizedHome] could not load the layout', error);
-                state.loadPromise = null;
+                if (epoch === state.epoch) {
+                    console.warn('[CustomizedHome] could not load the layout', error);
+                    state.loadPromise = null;
+                    state.loadFailures++;
+                    const delay = Math.min(LOAD_RETRY_MAX_MS, LOAD_RETRY_BASE_MS * Math.pow(2, state.loadFailures - 1));
+                    state.retryAt = Date.now() + delay;
+                    clearTimeout(state.retryTimer);
+                    state.retryTimer = setTimeout(scheduleScan, delay + RETRY_TIMER_MARGIN_MS);
+                }
                 throw error;
             });
         return state.loadPromise;
     }
 
     function reloadLayout() {
+        const epoch = state.epoch;
         return apiGet('Layout').then(function (response) {
+            if (epoch !== state.epoch) {
+                return response;
+            }
             state.response = response;
             state.layout = response.Layout || { Items: [] };
             scheduleApply();
@@ -523,11 +656,20 @@
 
     function loadUserViews() {
         const client = apiClient();
-        return client.getUserViews({}, currentUserId()).then(function (result) {
-            state.userViews = (result && result.Items) || [];
-            return state.userViews;
-        }).catch(function () {
-            return state.userViews || [];
+        const epoch = state.epoch;
+        // Hidden from "My Media" is a display choice: those libraries still have their "recently added" row.
+        return client.getUserViews({ includeHidden: true }, currentUserId()).then(function (result) {
+            const views = (result && result.Items) || [];
+            if (epoch === state.epoch) {
+                state.userViews = views;
+            }
+            return views;
+        }).catch(function (error) {
+            // Without the libraries every library row would read "not available": better no editor than a wrong one.
+            if (epoch === state.epoch && state.userViews) {
+                return state.userViews;
+            }
+            throw error;
         });
     }
 
@@ -553,6 +695,23 @@
         });
     }
 
+    // Sub-requests may fail one by one without taking the row down. When they all fail the row itself failed:
+    // the caller then keeps what is on screen instead of replacing it with nothing.
+    function tolerant(requests, fallback) {
+        let failures = 0;
+        return Promise.all(requests.map(function (request) {
+            return request.catch(function () {
+                failures++;
+                return fallback;
+            });
+        })).then(function (results) {
+            if (requests.length > 0 && failures === requests.length) {
+                throw new Error('every request failed');
+            }
+            return results;
+        });
+    }
+
     function dedupeItems(items) {
         const seen = {};
         return items.filter(function (item) {
@@ -567,10 +726,10 @@
     function fetchCombined() {
         const client = apiClient();
         const common = { userId: currentUserId(), fields: IMAGE_FIELDS, imageTypeLimit: 1, enableImageTypes: IMAGE_TYPES, enableTotalRecordCount: false };
-        return Promise.all([
-            client.getJSON(client.getUrl('UserItems/Resume', Object.assign({ limit: 12, mediaTypes: 'Video' }, common))).catch(function () { return null; }),
-            client.getJSON(client.getUrl('Shows/NextUp', Object.assign({ limit: 24, enableResumable: false }, common))).catch(function () { return null; })
-        ]).then(function (results) {
+        return tolerant([
+            client.getJSON(client.getUrl('UserItems/Resume', Object.assign({ limit: 12, mediaTypes: 'Video' }, common))),
+            client.getJSON(client.getUrl('Shows/NextUp', Object.assign({ limit: 24, enableResumable: false }, common)))
+        ], null).then(function (results) {
             const resume = (results[0] && results[0].Items) || [];
             const nextUp = (results[1] && results[1].Items) || [];
             return dedupeItems(resume.concat(nextUp));
@@ -580,16 +739,13 @@
     function fetchBecauseYouWatched() {
         return itemsQuery({ includeItemTypes: 'Movie,Series', recursive: true, isPlayed: true, sortBy: 'DatePlayed', sortOrder: 'Descending', limit: 3, fields: 'PrimaryImageAspectRatio' })
             .then(function (seeds) {
-                return Promise.all(seeds.map(function (seed) {
+                return tolerant(seeds.map(function (seed) {
                     const client = apiClient();
                     return client.getJSON(client.getUrl('Items/' + seed.Id + '/Similar', { userId: currentUserId(), limit: 12, fields: IMAGE_FIELDS }))
                         .then(function (result) {
                             return { title: t('becauseYouWatched', seed.Name), items: (result && result.Items) || [] };
-                        })
-                        .catch(function () {
-                            return { title: '', items: [] };
                         });
-                }));
+                }), { title: '', items: [] });
             })
             .then(function (list) {
                 return list.filter(function (instance) {
@@ -603,29 +759,8 @@
 
     const GENRE_COLLAGE_SIZE = 4;
     const GENRE_FETCH_CONCURRENCY = 6;
+    const GENRE_EAGER_COLLAGES = 12;
 
-    // Runs `worker` over `values` with a bounded number of requests in flight.
-    function mapLimit(values, limit, worker) {
-        const results = new Array(values.length);
-        let next = 0;
-        function run() {
-            if (next >= values.length) {
-                return Promise.resolve();
-            }
-            const index = next++;
-            return worker(values[index]).then(function (result) {
-                results[index] = result;
-                return run();
-            });
-        }
-        const runners = [];
-        for (let i = 0; i < Math.min(limit, values.length); i++) {
-            runners.push(run());
-        }
-        return Promise.all(runners).then(function () {
-            return results;
-        });
-    }
 
     // Uploaded thumbnails, by genre (upper case) then by card shape.
     function fetchGenreImages() {
@@ -682,6 +817,88 @@
         return 'linear-gradient(135deg, ' + pair[0] + ', ' + pair[1] + ')';
     }
 
+    // Poster collages of the "all genres" cards cost one request per genre: they are loaded when a card comes
+    // close to the screen, a few at a time, and kept for the session.
+    const COLLAGE_ROOT_MARGIN = '300px';
+    const collageQueue = [];
+    let collageRunning = 0;
+
+    function collageHtml(collage) {
+        // Each cell keeps the poster ratio on portrait cards (2 x 2 posters = one poster shaped card).
+        return '<div class="ch-collage ch-collage-' + collage.length + '">' + collage.map(function (url) {
+            return '<span class="ch-collage-cell" style="background-image:url(&quot;' + escapeHtml(url) + '&quot;)"></span>';
+        }).join('') + '</div>';
+    }
+
+    function runCollageQueue() {
+        while (collageRunning < GENRE_FETCH_CONCURRENCY && collageQueue.length) {
+            const job = collageQueue.shift();
+            collageRunning++;
+            job().then(function () {
+                collageRunning--;
+                runCollageQueue();
+            });
+        }
+    }
+
+    function fillCollage(card, genre) {
+        const epoch = state.epoch;
+        collageQueue.push(function () {
+            if (epoch !== state.epoch || !card.isConnected) {
+                return Promise.resolve();
+            }
+            return withPosterCollage(genre).then(function () {
+                const holder = card.querySelector('.cardImageContainer');
+                if (epoch !== state.epoch || !holder || !genre._chCollage || !genre._chCollage.length) {
+                    return;
+                }
+                const text = holder.querySelector('.cardDefaultText');
+                if (text) {
+                    text.remove();
+                }
+                holder.insertAdjacentHTML('afterbegin', collageHtml(genre._chCollage));
+            });
+        });
+        runCollageQueue();
+    }
+
+    function observeLazyCollages(node, items) {
+        const cards = node.querySelectorAll('.ch-card');
+        const waiting = [];
+        items.forEach(function (item, index) {
+            if (item._chLazyCollage && !item._chCollage && cards[index]) {
+                waiting.push({ card: cards[index], genre: item });
+            }
+        });
+        if (!waiting.length) {
+            return;
+        }
+        if (typeof IntersectionObserver !== 'function') {
+            // Old browser: the first cards only, the others keep the genre name.
+            waiting.slice(0, GENRE_EAGER_COLLAGES).forEach(function (entry) {
+                fillCollage(entry.card, entry.genre);
+            });
+            return;
+        }
+        const observer = new IntersectionObserver(function (entries) {
+            entries.forEach(function (entry) {
+                if (!entry.isIntersecting) {
+                    return;
+                }
+                observer.unobserve(entry.target);
+                const match = waiting.filter(function (candidate) {
+                    return candidate.card === entry.target;
+                })[0];
+                if (match) {
+                    fillCollage(match.card, match.genre);
+                }
+            });
+        }, { rootMargin: COLLAGE_ROOT_MARGIN });
+        waiting.forEach(function (entry) {
+            observer.observe(entry.card);
+        });
+    }
+
     function withPosterCollage(genre) {
         return itemsQuery({ genreIds: genre.Id, includeItemTypes: 'Movie,Series', recursive: true, sortBy: 'Random', imageTypes: 'Primary', limit: GENRE_COLLAGE_SIZE, fields: 'PrimaryImageAspectRatio' })
             .then(function (items) {
@@ -715,14 +932,16 @@
         const shape = formatFor(item, INTEGRATED['ch:allGenres']).shape;
         return Promise.all([fetchGenreList(), images]).then(function (results) {
             const custom = results[1];
-            return mapLimit(results[0], GENRE_FETCH_CONCURRENCY, function (genre) {
+            // No request per genre here: the row is displayed at once, the collages follow (observeLazyCollages).
+            results[0].forEach(function (genre) {
                 const uploaded = pickGenreImage(custom[String(genre.Name).toUpperCase()], shape);
                 if (uploaded) {
                     genre._chImage = genreImageUrl(uploaded);
-                    return Promise.resolve(genre);
+                } else {
+                    genre._chLazyCollage = true;
                 }
-                return withPosterCollage(genre);
             });
+            return results[0];
         });
     }
 
@@ -778,15 +997,12 @@
         const source = selected.length ? Promise.resolve(selected) : autoGenres();
         return source
             .then(function (genres) {
-                return Promise.all(genres.map(function (genre) {
+                return tolerant(genres.map(function (genre) {
                     return itemsQuery({ genres: genre, includeItemTypes: 'Movie,Series', recursive: true, sortBy: 'Random', limit: GENRE_ROW_ITEMS })
                         .then(function (items) {
                             return { title: t('genreTitle', genre), items: items };
-                        })
-                        .catch(function () {
-                            return { title: genre, items: [] };
                         });
-                }));
+                }), { title: '', items: [] });
             })
             .then(function (list) {
                 return list.filter(function (instance) {
@@ -803,7 +1019,8 @@
     }
 
     const INTEGRATED = {
-        'ch:combined': { titleKey: 'int_combined', shape: 'landscape', fetch: fetchCombined },
+        // volatile: depends on what the user just watched, reloaded when the home page is shown again.
+        'ch:combined': { titleKey: 'int_combined', shape: 'landscape', volatile: true, fetch: fetchCombined },
         'ch:latestMovies': { titleKey: 'int_latestMovies', shape: 'portrait', fetch: function () {
             return itemsQuery({ includeItemTypes: 'Movie', recursive: true, sortBy: 'PremiereDate,SortName', sortOrder: 'Descending', limit: 16 });
         } },
@@ -813,10 +1030,10 @@
         'ch:collections': { titleKey: 'int_collections', shape: 'portrait', fetch: function () {
             return itemsQuery({ includeItemTypes: 'BoxSet', recursive: true, sortBy: 'DateCreated,SortName', sortOrder: 'Descending', limit: 16 });
         } },
-        'ch:watchAgain': { titleKey: 'int_watchAgain', shape: 'portrait', fetch: function () {
+        'ch:watchAgain': { titleKey: 'int_watchAgain', shape: 'portrait', volatile: true, fetch: function () {
             return itemsQuery({ includeItemTypes: 'Movie,Series', recursive: true, isPlayed: true, sortBy: 'DatePlayed', sortOrder: 'Descending', limit: 16 });
         } },
-        'ch:becauseYouWatched': { titleKey: 'becauseYouWatched', shape: 'portrait', family: true, fetchInstances: fetchBecauseYouWatched },
+        'ch:becauseYouWatched': { titleKey: 'becauseYouWatched', shape: 'portrait', family: true, volatile: true, fetchInstances: fetchBecauseYouWatched },
         'ch:genre': { titleKey: 'genreTitle', shape: 'portrait', family: true, fetchInstances: fetchGenre },
         'ch:allGenres': { titleKey: 'int_allGenres', shape: 'portrait', fetch: fetchGenreCards }
     };
@@ -929,10 +1146,7 @@
         if (item._chColor) {
             defaultText = '<div class="ch-genre-color" style="background:' + escapeHtml(item._chColor) + '"><span>' + escapeHtml(title) + '</span></div>';
         } else if (collage.length) {
-            // Each cell keeps the poster ratio on portrait cards (2 x 2 posters = one poster shaped card).
-            defaultText = '<div class="ch-collage ch-collage-' + collage.length + '">' + collage.map(function (url) {
-                return '<span class="ch-collage-cell" style="background-image:url(&quot;' + escapeHtml(url) + '&quot;)"></span>';
-            }).join('') + '</div>';
+            defaultText = collageHtml(collage);
         } else if (!image) {
             defaultText = '<div class="cardText cardDefaultText">' + escapeHtml(title) + '</div>';
         }
@@ -979,6 +1193,7 @@
             return cardHtml(item, shape, showTitle);
         }).join('');
         setClass(node, 'hide', items.length === 0);
+        observeLazyCollages(node, items);
     }
 
     function wantedIntegrated(layout) {
@@ -1011,56 +1226,175 @@
         Object.keys(wanted).forEach(function (key) {
             const known = registry[key];
             const signature = dataSignature(wanted[key]);
+            let fresh = false;
             if (known) {
                 // The web client may have wiped the container (settings change, navigation): render again.
                 const missing = !known.loading && known.count > 0 && !container.querySelector('[data-ch-key="' + key + '"]');
                 const changed = known.signature !== signature;
-                if (!missing && !changed) {
+                fresh = !known.loading && !!known.refresh;
+                if (!missing && !changed && !fresh) {
                     return;
                 }
-                if (changed) {
-                    Array.prototype.forEach.call(container.querySelectorAll(':scope > [data-ch-key="' + key + '"]'), function (node) {
-                        node.remove();
-                    });
-                }
-                delete registry[key];
             }
-            const definition = INTEGRATED[key];
-            const entry = { loading: true, count: 0, signature: signature };
-            registry[key] = entry;
-            const cacheKey = key + '#' + signature;
-            const cached = state.integratedCache[cacheKey];
-            let dataPromise;
-            if (cached && Date.now() - cached.ts < INTEGRATED_CACHE_MS) {
-                dataPromise = Promise.resolve(cached.data);
-            } else {
-                const load = definition.family
-                    ? definition.fetchInstances(wanted[key])
-                    : definition.fetch(wanted[key]).then(function (items) {
-                        return [{ title: t(definition.titleKey), items: items }];
-                    });
-                dataPromise = load.then(function (data) {
-                    state.integratedCache[cacheKey] = { ts: Date.now(), data: data };
-                    return data;
+            loadIntegratedSection(container, registry, key, wanted[key], signature, fresh);
+        });
+    }
+
+    // What a reload may change on screen: the media, their order and the user data drawn on the cards.
+    function itemState(item) {
+        const userData = item.UserData || {};
+        return [item.Id, userData.PlaybackPositionTicks || 0, Math.round(userData.PlayedPercentage || 0), !!userData.Played, !!userData.IsFavorite,
+            userData.UnplayedItemCount || 0, item._chImage || '', item._chColor || ''];
+    }
+
+    function maxAgeOf(key) {
+        return INTEGRATED[key] && INTEGRATED[key].volatile ? VOLATILE_REFRESH_MS : INTEGRATED_CACHE_MS;
+    }
+
+    // Keyboard and remote users: the focus follows the media from the old nodes to the new ones.
+    function focusedItemId(nodes) {
+        const active = document.activeElement;
+        for (let i = 0; i < nodes.length; i++) {
+            if (active && nodes[i].contains(active)) {
+                const holder = active.closest('[data-id]');
+                return holder ? holder.getAttribute('data-id') : '';
+            }
+        }
+        return null;
+    }
+
+    function restoreFocus(nodes, itemId) {
+        if (itemId === null) {
+            return;
+        }
+        for (let i = 0; i < nodes.length; i++) {
+            const holder = itemId ? nodes[i].querySelector('[data-id="' + itemId.replace(/"/g, '') + '"]') : null;
+            const target = holder ? (holder.matches('a, button') ? holder : holder.querySelector('a, button')) : null;
+            if (target) {
+                target.focus();
+                return;
+            }
+        }
+    }
+
+    // The rows on screen stay until the new data is there, and are only replaced when it differs: no flicker,
+    // no lost scroll position, and a failed reload keeps them.
+    function loadIntegratedSection(container, registry, key, item, signature, fresh) {
+        const definition = INTEGRATED[key];
+        const previous = registry[key];
+        const sameData = !!previous && previous.signature === signature;
+        const entry = {
+            loading: true,
+            // first: nothing was ever loaded for this key, the page waits for it before judging the layout.
+            first: !previous || !previous.loaded,
+            loaded: !!previous && previous.loaded,
+            count: previous ? previous.count : 0,
+            signature: signature,
+            ts: previous ? previous.ts : 0,
+            refresh: false,
+            rendered: sameData ? previous.rendered : null
+        };
+        registry[key] = entry;
+        const epoch = state.epoch;
+        const cacheKey = state.identity + '|' + key + '#' + signature;
+        const cached = state.integratedCache[cacheKey];
+        let dataPromise;
+        if (!fresh && cached && Date.now() - cached.ts < INTEGRATED_CACHE_MS) {
+            dataPromise = Promise.resolve(cached);
+        } else {
+            const load = definition.family
+                ? definition.fetchInstances(item)
+                : definition.fetch(item).then(function (items) {
+                    return [{ title: t(definition.titleKey), items: items }];
                 });
-            }
-            dataPromise.then(function (instances) {
-                entry.loading = false;
-                entry.count = instances.length;
-                if (!container.isConnected || container._chIntegrated !== registry || registry[key] !== entry) {
-                    return;
+            dataPromise = load.then(function (data) {
+                const record = { ts: Date.now(), data: data };
+                if (epoch === state.epoch) {
+                    state.integratedCache[cacheKey] = record;
                 }
+                return record;
+            });
+        }
+        function current() {
+            return epoch === state.epoch && container.isConnected && container._chIntegrated === registry && registry[key] === entry;
+        }
+        function nodesOf() {
+            return container.querySelectorAll(':scope > [data-ch-key="' + key + '"]');
+        }
+        dataPromise.then(function (record) {
+            entry.loading = false;
+            if (!current()) {
+                return;
+            }
+            const instances = record.data;
+            const rendered = JSON.stringify(instances.map(function (instance) {
+                return [instance.title, instance.items.map(itemState)];
+            }));
+            entry.loaded = true;
+            entry.first = false;
+            // The age is the age of the data: rows served from the cache of a previous home view get old on time.
+            entry.ts = record.ts;
+            const old = nodesOf();
+            if (rendered !== entry.rendered || old.length !== instances.length) {
+                const focused = focusedItemId(old);
+                Array.prototype.forEach.call(old, function (node) {
+                    node.remove();
+                });
                 instances.forEach(function (instance, index) {
                     const node = createIntegratedSection(container, key, index);
-                    const format = formatFor(wanted[key], definition);
+                    const format = formatFor(item, definition);
                     renderIntegratedSection(node, instance.title, instance.items, format.shape, format.showTitle);
                 });
-                scheduleApply();
-            }).catch(function (error) {
-                entry.loading = false;
-                console.warn('[CustomizedHome] section ' + key + ' failed', error);
-            });
+                restoreFocus(nodesOf(), focused);
+            }
+            entry.rendered = rendered;
+            entry.count = instances.length;
+            if (Date.now() - entry.ts > maxAgeOf(key)) {
+                entry.refresh = true;
+            }
+            scheduleApply();
+        }).catch(function (error) {
+            entry.loading = false;
+            console.warn('[CustomizedHome] section ' + key + ' failed', error);
+            if (!current()) {
+                return;
+            }
+            entry.first = false;
+            if (!nodesOf().length) {
+                // Nothing to look for any more: a wiped row must not turn every pass into a request.
+                entry.count = 0;
+            }
+            // The layout may now have nothing to show at all: let the next pass decide.
+            scheduleApply();
         });
+    }
+
+    // Home page shown again (back navigation, end of playback, tab back to front): reload what got old.
+    // Rows that depend on what was just watched go first; the others follow the cache lifetime.
+    const VOLATILE_REFRESH_MS = 15 * 1000;
+
+    function requestRefresh() {
+        const container = state.container;
+        if (!container || !container.isConnected || container.offsetParent === null || document.hidden) {
+            return;
+        }
+        const now = Date.now();
+        let needed = false;
+        function flag(entry, maxAge) {
+            if (entry && !entry.loading && !entry.refresh && now - entry.ts > maxAge) {
+                entry.refresh = true;
+                needed = true;
+            }
+        }
+        const registry = container._chIntegrated || {};
+        Object.keys(registry).forEach(function (key) {
+            flag(registry[key], maxAgeOf(key));
+        });
+        // The hero carries the resume position and the favorite / watched states.
+        flag(container._chHeroEntry, VOLATILE_REFRESH_MS);
+        if (needed) {
+            scheduleApply();
+        }
     }
 
     function applyFormat(node, item) {
@@ -1140,7 +1474,7 @@
     }
 
     function fetchHeroItems(hero) {
-        return Promise.all(hero.Sources.map(function (source) {
+        return tolerant(hero.Sources.map(function (source) {
             const query = Object.assign({ recursive: true, limit: hero.Count, fields: HERO_FIELDS, enableImageTypes: HERO_IMAGE_TYPES }, HERO_SOURCES[source].query);
             if (hero.ExcludePlayed) {
                 query.isPlayed = false;
@@ -1148,10 +1482,8 @@
             if (hero.RequireBackdrop) {
                 query.imageTypes = 'Backdrop';
             }
-            return itemsQuery(query).catch(function () {
-                return [];
-            });
-        })).then(function (lists) {
+            return itemsQuery(query);
+        }), []).then(function (lists) {
             // Round robin between the sources, so that each of them is represented.
             const mixed = [];
             for (let i = 0; i < hero.Count; i++) {
@@ -1162,6 +1494,25 @@
                 });
             }
             return dedupeItems(mixed).slice(0, hero.Count);
+        });
+    }
+
+    // Reload of a hero on screen: same selection, fresh user data (resume position, favorite, watched). One request
+    // instead of one per source, and the random source does not deal new media under the user's eyes.
+    function refreshHeroItems(hero, items) {
+        const ids = items.map(function (item) {
+            return item.Id;
+        });
+        return itemsQuery({ ids: ids.join(','), fields: HERO_FIELDS, enableImageTypes: HERO_IMAGE_TYPES }).then(function (fresh) {
+            const byId = {};
+            fresh.forEach(function (item) {
+                byId[item.Id] = item;
+            });
+            return ids.map(function (id) {
+                return byId[id];
+            }).filter(function (item) {
+                return !!item && !(hero.ExcludePlayed && item.UserData && item.UserData.Played);
+            });
         });
     }
 
@@ -1226,12 +1577,14 @@
         return parts.join('');
     }
 
-    function heroButton(className, action, icon, label) {
-        return '<button is="emby-button" type="button" class="ch-hero-btn ' + className + ' itemAction" data-action="' + action + '" aria-label="' + escapeHtml(label) + '">'
+    // extraAttributes: the native click handler takes the item from the closest element carrying data-id, the
+    // button itself when it has one.
+    function heroButton(className, action, icon, label, extraAttributes) {
+        return '<button is="emby-button" type="button" class="ch-hero-btn ' + className + ' itemAction" data-action="' + action + '" aria-label="' + escapeHtml(label) + '"' + (extraAttributes || '') + '>'
             + '<span class="material-icons" aria-hidden="true">' + icon + '</span><span>' + escapeHtml(label) + '</span></button>';
     }
 
-    function heroSlideHtml(item, index, total) {
+    function heroSlideHtml(item, index, total, active) {
         const serverId = item.ServerId || apiClient().serverId();
         const userData = item.UserData || {};
         const title = item.Name || '';
@@ -1242,8 +1595,8 @@
         const ids = ' data-id="' + escapeHtml(item.Id) + '" data-serverid="' + escapeHtml(serverId) + '"';
 
         // The native click handler of the items container reads the item from these attributes.
-        let html = '<div class="ch-hero-slide' + (index === 0 ? ' ch-active' : '') + '" role="group" aria-roledescription="slide" aria-label="' + escapeHtml(t('heroPosition', index + 1, total)) + '"'
-            + (index === 0 ? '' : ' aria-hidden="true"') + ids
+        let html = '<div class="ch-hero-slide' + (active ? ' ch-active' : '') + '" role="group" aria-roledescription="slide" aria-label="' + escapeHtml(t('heroPosition', index + 1, total)) + '"'
+            + (active ? '' : ' aria-hidden="true"') + ids
             + ' data-type="' + escapeHtml(item.Type || '') + '" data-isfolder="' + (item.IsFolder ? 'true' : 'false') + '"'
             + (item.MediaType ? ' data-mediatype="' + escapeHtml(item.MediaType) + '"' : '')
             + ' data-positionticks="' + escapeHtml(userData.PlaybackPositionTicks || 0) + '">';
@@ -1261,7 +1614,10 @@
             ? heroButton('ch-hero-play', 'resume', 'play_arrow', t('heroResume'))
             : heroButton('ch-hero-play', 'play', 'play_arrow', t('heroPlay'));
         if (resumable) {
-            html += heroButton('ch-hero-restart', 'play', 'replay', t('heroRestart'));
+            // "play" and "resume" both start at data-positionticks: the restart button is its own item, at position 0.
+            html += heroButton('ch-hero-restart', 'play', 'replay', t('heroRestart'), ids
+                + ' data-type="' + escapeHtml(item.Type || '') + '" data-isfolder="' + (item.IsFolder ? 'true' : 'false') + '"'
+                + (item.MediaType ? ' data-mediatype="' + escapeHtml(item.MediaType) + '"' : '') + ' data-positionticks="0"');
         }
         if (item.LocalTrailerCount > 0) {
             html += heroButton('ch-hero-trailer', 'playtrailer', 'theaters', t('heroTrailer'));
@@ -1269,14 +1625,14 @@
             html += '<a is="emby-linkbutton" class="ch-hero-btn ch-hero-trailer" target="_blank" rel="noopener noreferrer" aria-label="' + escapeHtml(t('heroTrailer')) + '" href="' + escapeHtml(remoteTrailerUrl(item)) + '">'
                 + '<span class="material-icons" aria-hidden="true">theaters</span><span>' + escapeHtml(t('heroTrailer')) + '</span></a>';
         }
-        html += '<button is="emby-ratingbutton" type="button" class="ch-hero-round ch-hero-favorite' + (userData.IsFavorite ? ' ratingbutton-withrating' : '') + '"' + ids
-            + ' data-itemtype="' + escapeHtml(item.Type || '') + '" data-likes="' + (userData.Likes == null ? '' : escapeHtml(userData.Likes)) + '" data-isfavorite="' + (userData.IsFavorite ? 'true' : 'false') + '"'
+        // Plain buttons handled by the plugin: the rating and play state elements of the web client are only
+        // registered once another view needed them, which left these buttons dead on the home page.
+        html += '<button type="button" class="ch-hero-round ch-hero-favorite' + (userData.IsFavorite ? ' ch-on' : '') + '" aria-pressed="' + (userData.IsFavorite ? 'true' : 'false') + '"'
             + ' title="' + escapeHtml(t('heroFavorite')) + '" aria-label="' + escapeHtml(t('heroFavorite')) + '">'
-            + '<span class="material-icons favorite' + (userData.IsFavorite ? ' ratingbutton-icon-withrating' : '') + '" aria-hidden="true"></span></button>';
-        html += '<button is="emby-playstatebutton" type="button" class="ch-hero-round ch-hero-played' + (userData.Played ? ' playstatebutton-played' : '') + '"' + ids
-            + ' data-itemtype="' + escapeHtml(item.Type || '') + '" data-played="' + (userData.Played ? 'true' : 'false') + '"'
+            + '<span class="material-icons" aria-hidden="true">favorite</span></button>';
+        html += '<button type="button" class="ch-hero-round ch-hero-played' + (userData.Played ? ' ch-on' : '') + '" aria-pressed="' + (userData.Played ? 'true' : 'false') + '"'
             + ' title="' + escapeHtml(t('heroPlayed')) + '" aria-label="' + escapeHtml(t('heroPlayed')) + '">'
-            + '<span class="material-icons check' + (userData.Played ? ' playstatebutton-icon-played' : '') + '" aria-hidden="true"></span></button>';
+            + '<span class="material-icons" aria-hidden="true">check</span></button>';
         html += '<a is="emby-linkbutton" class="ch-hero-btn ch-hero-more" aria-label="' + escapeHtml(t('heroMore')) + '" href="' + href + '"><span class="material-icons" aria-hidden="true">info</span><span>' + escapeHtml(t('heroMore')) + '</span></a>';
         html += '</div></div></div>';
         return html;
@@ -1289,7 +1645,63 @@
         }
     }
 
-    function startHero(node, intervalSeconds) {
+    // Favorite / watched: optimistic, reverted when the server refuses. The media kept by the hero entry and by
+    // the cache is updated too, so that the next reload sees nothing to replace.
+    function toggleHeroUserData(node, button) {
+        const slide = button.closest('.ch-hero-slide');
+        const client = apiClient();
+        const userId = currentUserId();
+        // Busy flag, not "disabled": a disabled button drops the keyboard / remote focus to the page.
+        if (!slide || !userId || button.getAttribute('aria-busy') === 'true') {
+            return;
+        }
+        const itemId = slide.getAttribute('data-id');
+        const favorite = button.classList.contains('ch-hero-favorite');
+        const value = button.getAttribute('aria-pressed') !== 'true';
+        const epoch = state.epoch;
+        function show(on) {
+            setClass(button, 'ch-on', on);
+            button.setAttribute('aria-pressed', on ? 'true' : 'false');
+        }
+        show(value);
+        button.setAttribute('aria-busy', 'true');
+        const container = node.parentNode;
+        const entryAtClick = container && container._chHeroEntry;
+        let request;
+        if (favorite) {
+            request = client.updateFavoriteStatus(userId, itemId, value);
+        } else {
+            request = value ? client.markPlayed(userId, itemId, new Date()) : client.markUnplayed(userId, itemId);
+        }
+        Promise.resolve(request).then(function (userData) {
+            const entry = container && container._chHeroEntry;
+            if (epoch !== state.epoch || !entry || !entry.items) {
+                return;
+            }
+            // The server answers with the whole user data (a watched series also loses its unplayed count...).
+            entry.items.forEach(function (item) {
+                if (item.Id === itemId) {
+                    item.UserData = Object.assign(item.UserData || {}, userData && typeof userData === 'object' ? userData : {});
+                    item.UserData[favorite ? 'IsFavorite' : 'Played'] = value;
+                }
+            });
+            if (entry !== entryAtClick || entry.loading || !node.isConnected) {
+                // A reload crossed this change: what it fetched may be older than the write. Load once more.
+                entry.refresh = true;
+                scheduleApply();
+            } else {
+                entry.rendered = JSON.stringify(entry.items.map(itemState));
+            }
+        }).catch(function (error) {
+            console.warn('[CustomizedHome] hero action failed', error);
+            show(!value);
+            toast(t('heroActionError'));
+        }).then(function () {
+            button.removeAttribute('aria-busy');
+        });
+    }
+
+    function startHero(node, intervalSeconds, startIndex) {
         const slides = node.querySelectorAll('.ch-hero-slide');
         const dots = node.querySelectorAll('.ch-hero-dot');
         const reducedMotion = !!(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches);
@@ -1333,6 +1745,15 @@
                 } else {
                     slides[i].setAttribute('aria-hidden', 'true');
                 }
+                // The spatial navigation of the TV layout only skips elements with tabindex="-1": a hidden slide keeps
+                // its size, and its buttons would otherwise catch the remote.
+                Array.prototype.forEach.call(slides[i].querySelectorAll('a, button'), function (control) {
+                    if (active) {
+                        control.removeAttribute('tabindex');
+                    } else {
+                        control.setAttribute('tabindex', '-1');
+                    }
+                });
                 if (dots[i]) {
                     setClass(dots[i], 'ch-active', active);
                     dots[i].setAttribute('aria-current', active ? 'true' : 'false');
@@ -1358,13 +1779,9 @@
                 }
                 return;
             }
-            if (e.target.closest('.ch-hero-favorite, .ch-hero-played')) {
-                // The cached items no longer reflect the user data: fetch them again next time.
-                Object.keys(state.integratedCache).forEach(function (key) {
-                    if (key.indexOf('hero#') === 0) {
-                        delete state.integratedCache[key];
-                    }
-                });
+            const toggle = e.target.closest('.ch-hero-favorite, .ch-hero-played');
+            if (toggle) {
+                toggleHeroUserData(node, toggle);
             }
         });
         node.addEventListener('mouseenter', function () {
@@ -1404,7 +1821,7 @@
             swipeStart = null;
         });
 
-        show(0);
+        show(startIndex || 0);
     }
 
     const HERO_UNDER_HEADER_CLASS = 'ch-hero-under-header';
@@ -1476,12 +1893,28 @@
     }
 
     function renderHero(container, hero, items) {
+        // A reload keeps the media the user is looking at in front, when it is still part of the selection.
+        const shown = container.querySelector(':scope > .ch-hero .ch-hero-slide.ch-active');
+        const shownId = shown ? shown.getAttribute('data-id') : null;
+        const previousNode = container.querySelector(':scope > .ch-hero');
+        const focusedControl = previousNode && previousNode.contains(document.activeElement)
+            ? ['ch-hero-play', 'ch-hero-restart', 'ch-hero-trailer', 'ch-hero-favorite', 'ch-hero-played', 'ch-hero-more'].filter(function (name) {
+                return document.activeElement.classList.contains(name);
+            })[0] || 'ch-hero-play'
+            : null;
+        let startIndex = 0;
+        items.forEach(function (item, index) {
+            if (item.Id === shownId) {
+                startIndex = index;
+            }
+        });
+        removeHero(container);
         const node = el('div', 'ch-hero');
         node.setAttribute('role', 'region');
         node.setAttribute('aria-roledescription', 'carousel');
         node.setAttribute('aria-label', t('heroTitle'));
         let html = '<div is="emby-itemscontainer" class="ch-hero-slides" data-multiselect="false">' + items.map(function (item, index) {
-            return heroSlideHtml(item, index, items.length);
+            return heroSlideHtml(item, index, items.length, index === startIndex);
         }).join('') + '</div>';
         if (items.length > 1) {
             html += '<button type="button" class="ch-hero-nav ch-hero-prev" aria-label="' + escapeHtml(t('heroPrev')) + '"><span class="material-icons" aria-hidden="true">chevron_left</span></button>'
@@ -1492,7 +1925,13 @@
         }
         node.innerHTML = html;
         container.appendChild(node);
-        startHero(node, hero.IntervalSeconds);
+        startHero(node, hero.IntervalSeconds, startIndex);
+        if (focusedControl) {
+            const target = node.querySelector('.ch-hero-slide.ch-active .' + focusedControl) || node.querySelector('.ch-hero-slide.ch-active .ch-hero-play');
+            if (target) {
+                target.focus();
+            }
+        }
         initHeroChrome();
         updateHeroChrome(true);
         return node;
@@ -1514,36 +1953,89 @@
             }
             return;
         }
-        const signature = heroDataSignature(hero) + '#' + hero.IntervalSeconds;
+        const dataSignatureOfHero = heroDataSignature(hero);
+        const signature = dataSignatureOfHero + '#' + hero.IntervalSeconds;
         const known = container._chHeroEntry;
+        let fresh = false;
         if (known && known.signature === signature) {
             // The web client may have wiped the container: render again.
             const missing = !known.loading && known.count > 0 && !container.querySelector(':scope > .ch-hero');
-            if (!missing) {
+            fresh = !known.loading && !!known.refresh;
+            if (!missing && !fresh) {
                 return;
             }
         }
-        removeHero(container);
-        const entry = { loading: true, count: 0, signature: signature };
+        // The hero on screen stays until the new data is there, and is only replaced when it differs.
+        const sameSelection = !!known && known.dataSignature === dataSignatureOfHero;
+        const entry = {
+            loading: true,
+            count: known ? known.count : 0,
+            signature: signature,
+            dataSignature: dataSignatureOfHero,
+            ts: known ? known.ts : 0,
+            selectedAt: sameSelection ? known.selectedAt : 0,
+            items: sameSelection ? known.items : null,
+            refresh: false,
+            rendered: known && known.signature === signature ? known.rendered : null
+        };
         container._chHeroEntry = entry;
-        const cacheKey = 'hero#' + heroDataSignature(hero);
+        const epoch = state.epoch;
+        const cacheKey = state.identity + '|hero#' + dataSignatureOfHero;
         const cached = state.integratedCache[cacheKey];
-        const dataPromise = cached && Date.now() - cached.ts < INTEGRATED_CACHE_MS
-            ? Promise.resolve(cached.data)
-            : fetchHeroItems(hero).then(function (items) {
-                state.integratedCache[cacheKey] = { ts: Date.now(), data: items };
-                return items;
+        let dataPromise;
+        if (!fresh && cached && Date.now() - cached.selectedAt < INTEGRATED_CACHE_MS) {
+            dataPromise = Promise.resolve(cached);
+        } else {
+            // A selection that is still young only gets its user data reloaded; past the cache lifetime the sources run again.
+            const keep = fresh && entry.items && entry.items.length && Date.now() - entry.selectedAt < INTEGRATED_CACHE_MS;
+            const selectedAt = keep ? entry.selectedAt : Date.now();
+            const expected = keep ? entry.items.length : 0;
+            dataPromise = (keep ? refreshHeroItems(hero, entry.items) : fetchHeroItems(hero)).then(function (items) {
+                // Media watched or removed since: a smaller hero (or none) is not an answer, the sources are.
+                if (keep && items.length < expected) {
+                    return fetchHeroItems(hero).then(function (selection) {
+                        return { ts: Date.now(), selectedAt: Date.now(), data: selection };
+                    });
+                }
+                return { ts: Date.now(), selectedAt: selectedAt, data: items };
+            }).then(function (record) {
+                if (epoch === state.epoch) {
+                    state.integratedCache[cacheKey] = record;
+                }
+                return record;
             });
-        dataPromise.then(function (items) {
+        }
+        function current() {
+            return epoch === state.epoch && container.isConnected && container._chHeroEntry === entry;
+        }
+        dataPromise.then(function (record) {
             entry.loading = false;
-            entry.count = items.length;
-            if (!container.isConnected || container._chHeroEntry !== entry || !items.length) {
+            if (!current()) {
                 return;
             }
-            renderHero(container, hero, items);
+            const items = record.data;
+            const rendered = JSON.stringify(items.map(itemState));
+            entry.ts = record.ts;
+            entry.selectedAt = record.selectedAt;
+            entry.items = items;
+            entry.count = items.length;
+            const node = container.querySelector(':scope > .ch-hero');
+            if (!items.length) {
+                removeHero(container);
+            } else if (rendered !== entry.rendered || !node) {
+                renderHero(container, hero, items);
+            }
+            entry.rendered = rendered;
+            if (Date.now() - entry.ts > VOLATILE_REFRESH_MS) {
+                entry.refresh = true;
+            }
+            scheduleApply();
         }).catch(function (error) {
             entry.loading = false;
             console.warn('[CustomizedHome] hero failed', error);
+            if (current() && !container.querySelector(':scope > .ch-hero')) {
+                entry.count = 0;
+            }
         });
     }
 
@@ -1586,6 +2078,28 @@
         const href = link ? link.getAttribute('href') || '' : '';
         const match = /[?&](?:topParentId|parentId)=([^&#]+)/i.exec(href);
         return match ? decodeURIComponent(match[1]) : null;
+    }
+
+    // TV layout: the row titles are not links. The library is then the one whose name the title ends with;
+    // the user's views are fetched once for that, and the next pass uses them.
+    function libraryIdFromTitle(title, ctx) {
+        if (!ctx || !title) {
+            return null;
+        }
+        if (!state.userViews) {
+            if (!ctx.viewsRequested) {
+                ctx.viewsRequested = true;
+                loadUserViews().then(scheduleApply).catch(function () { /* the title based key stays */ });
+            }
+            return null;
+        }
+        let best = null;
+        state.userViews.forEach(function (view) {
+            if (view.Name && title.indexOf(view.Name) >= 0 && (!best || view.Name.length > best.Name.length)) {
+                best = view;
+            }
+        });
+        return best ? best.Id : null;
     }
 
     function catalogLabels(ctx, key) {
@@ -1665,8 +2179,10 @@
         if (!type) {
             type = typeFromTitle(node, info.label, ctx);
         }
-        if (type === 'latestmedia') {
-            const libraryId = libraryIdFromSection(node);
+        // A title that links to a library is a "recently added" row, whatever the language and even when the home
+        // settings could not be read: its key must be the library id, never its name.
+        const libraryId = libraryIdFromSection(node) || (type === 'latestmedia' ? libraryIdFromTitle(info.label, ctx) : null);
+        if (type === 'latestmedia' || (!type && libraryId)) {
             info.key = 'jf:latestmedia:' + (libraryId || slug(info.label));
             info.origin = 'jellyfin';
             return info;
@@ -1820,7 +2336,8 @@
         const children = container.children;
         for (let i = 0; i < children.length; i++) {
             const child = children[i];
-            if (child.nodeType !== 1 || child.classList.contains('ch-folder') || child.classList.contains('ch-customize-bar') || child.classList.contains('ch-hero')) {
+            if (child.nodeType !== 1 || child.classList.contains('ch-folder') || child.classList.contains('ch-customize-bar') || child.classList.contains('ch-hero')
+                || child.classList.contains('ch-notice')) {
                 continue;
             }
             nodes.push(child);
@@ -1873,6 +2390,7 @@
         });
 
         const items = layout.Items || [];
+        const replacesHome = layoutReplacesHome(layout);
         const existingFolders = {};
         const folderNodes = container.querySelectorAll(':scope > .ch-folder');
         for (let i = 0; i < folderNodes.length; i++) {
@@ -1880,12 +2398,19 @@
         }
 
         let order = ORDER_STEP;
+        let shownTotal = 0;
+        let resolved = 0;
         const used = {};
+        const integratedRegistry = container._chIntegrated || {};
 
         function place(item, visible, folder, collapsed) {
             const key = item.Key;
             used[key] = true;
             const group = byKey[key];
+            // Resolved: the section exists on this server, displayed or not (hidden by the user, empty for now).
+            if (group || (integratedRegistry[key] && integratedRegistry[key].loaded)) {
+                resolved++;
+            }
             if (!group) {
                 return 0;
             }
@@ -1908,6 +2433,7 @@
                 }
             });
             order += ORDER_STEP;
+            shownTotal += shown;
             return shown;
         }
 
@@ -1942,13 +2468,40 @@
             }
         });
 
+        // Safety net: a layout whose sections all went missing (renamed by an update, plugin removed...) would leave
+        // an empty page for good: the default home page comes back. A section that exists but is empty or hidden
+        // keeps the layout in charge. First loads of plugin sections are waited for, reloads are not.
+        const pending = Object.keys(integratedRegistry).some(function (key) {
+            return integratedRegistry[key].loading && integratedRegistry[key].first;
+        });
+        // The native sections arrive one by one: the verdict only falls once the page had time to fill.
+        const settling = Date.now() - (container._chAttachedAt || 0) < EMPTY_HOME_GRACE_MS;
+        const hideUnlisted = replacesHome && (resolved > 0 || pending || settling);
+        if (replacesHome && !hideUnlisted && !state.warnedEmptyHome) {
+            state.warnedEmptyHome = true;
+            console.warn('[CustomizedHome] no section of the layout exists on this home page: showing the default home page instead');
+        }
+        // Default home page back although a layout exists, or nothing at all on the page: say why, and how to fix it.
+        let noticeReason = null;
+        const heroEntry = container._chHeroEntry;
+        if (replacesHome && !hideUnlisted) {
+            noticeReason = 'missing';
+        } else if (!replacesHome && layoutSections(layout).length > 0) {
+            noticeReason = 'disabled';
+        } else if (replacesHome && shownTotal === 0 && !pending && !settling && !(heroEntry && (heroEntry.loading || heroEntry.count > 0))) {
+            noticeReason = layoutSections(layout).every(function (entry) {
+                return !entry.visible;
+            }) ? 'hidden' : 'empty';
+        }
+        syncEmptyHomeNotice(container, noticeReason);
+
         sections.forEach(function (section) {
             if (used[section.key]) {
                 return;
             }
             setOrder(section.el, ORDER_UNLISTED_BASE + section.origOrder);
             applyFormat(section.el, null);
-            setClass(section.el, 'ch-hidden', items.length > 0);
+            setClass(section.el, 'ch-hidden', hideUnlisted);
             setClass(section.el, 'ch-in-folder', false);
             if (section.el.dataset.chFolder !== undefined) {
                 delete section.el.dataset.chFolder;
@@ -1958,6 +2511,93 @@
         ensureCustomizeBar(container);
     }
 
+    // A layout replaces the default home page as soon as it lists one section that can exist: sections rendered
+    // by the plugin do not count while the administrator keeps them disabled.
+    const EMPTY_HOME_GRACE_MS = 5000;
+    // After the hero (-2 in the stylesheet), before anything else: sections the web client left empty keep the default order 0.
+    const ORDER_NOTICE = -1;
+    const EMPTY_HOME_TEXT = { hidden: 'emptyHomeHidden', empty: 'emptyHomeEmpty', missing: 'emptyHomeMissing', disabled: 'emptyHomeDisabled' };
+    // With these reasons the default home page is displayed; with the others the page is just empty.
+    const EMPTY_HOME_FALLBACK = { missing: true, disabled: true };
+
+    function startSettling(container) {
+        container._chAttachedAt = Date.now();
+        clearTimeout(container._chSettleTimer);
+        container._chSettleTimer = setTimeout(scheduleApply, EMPTY_HOME_GRACE_MS + RETRY_TIMER_MARGIN_MS);
+    }
+
+    // The sections of a layout with their effective visibility (a hidden folder hides its members).
+    function layoutSections(layout) {
+        const list = [];
+        (layout.Items || []).forEach(function (item) {
+            if (item.Type === 'folder') {
+                (item.Items || []).forEach(function (member) {
+                    if (member.Key) {
+                        list.push({ item: member, visible: item.Visible !== false && member.Visible !== false });
+                    }
+                });
+            } else if (item.Key) {
+                list.push({ item: item, visible: item.Visible !== false });
+            }
+        });
+        return list;
+    }
+
+    function syncEmptyHomeNotice(container, reason) {
+        const existing = container.querySelector(':scope > .ch-notice');
+        if (!reason || state.noticeDismissed) {
+            if (existing) {
+                existing.remove();
+            }
+            return;
+        }
+        const canCustomize = !!(state.response && state.response.CanCustomize);
+        const signature = reason + '|' + canCustomize + '|' + getLanguage();
+        if (existing && existing.dataset.chNotice === signature) {
+            return;
+        }
+        if (existing) {
+            existing.remove();
+        }
+        const notice = el('div', 'ch-notice');
+        notice.dataset.chNotice = signature;
+        notice.dataset.chReason = reason;
+        notice.setAttribute('role', 'status');
+        notice.innerHTML = '<span class="material-icons ch-notice-icon" aria-hidden="true">info</span>'
+            + '<div class="ch-notice-text"><h2 class="ch-notice-title"></h2><p class="ch-notice-why"></p><p class="ch-notice-fix"></p>'
+            + '<div class="ch-notice-actions">'
+            + (canCustomize ? '<button type="button" class="ch-btn ch-btn-primary ch-notice-customize"></button>' : '')
+            + '<button type="button" class="ch-btn ch-notice-dismiss"></button>'
+            + '</div></div>';
+        notice.querySelector('.ch-notice-title').textContent = t(EMPTY_HOME_FALLBACK[reason] ? 'emptyHomeTitle' : 'emptyHomeTitleBlank');
+        notice.querySelector('.ch-notice-why').textContent = t(EMPTY_HOME_TEXT[reason]);
+        notice.querySelector('.ch-notice-fix').textContent = t(canCustomize ? 'emptyHomeFix' : 'emptyHomeFixAdmin');
+        notice.querySelector('.ch-notice-dismiss').textContent = t('emptyHomeDismiss');
+        notice.querySelector('.ch-notice-dismiss').addEventListener('click', function () {
+            // For this session only: the message comes back with the next page load, as long as the cause is there.
+            state.noticeDismissed = true;
+            notice.remove();
+        });
+        if (canCustomize) {
+            notice.querySelector('.ch-notice-customize').textContent = t('customize');
+            notice.querySelector('.ch-notice-customize').addEventListener('click', function () {
+                openEditor({ mode: 'user' });
+            });
+        }
+        setOrder(notice, ORDER_NOTICE);
+        container.appendChild(notice);
+    }
+
+    function layoutReplacesHome(layout) {
+        const integratedAllowed = !!(state.response && state.response.EnableIntegratedSections);
+        function counts(item) {
+            return !!item.Key && (integratedAllowed || !INTEGRATED[item.Key]);
+        }
+        return (layout.Items || []).some(function (item) {
+            return item.Type === 'folder' ? (item.Items || []).some(counts) : counts(item);
+        });
+    }
+
     function scheduleApply() {
         if (state.applyScheduled) {
             return;
@@ -1965,16 +2605,22 @@
         state.applyScheduled = true;
         requestAnimationFrame(function () {
             state.applyScheduled = false;
-            if (!state.container || !state.container.isConnected) {
+            if (!state.container || !state.container.isConnected || !checkSession()) {
                 return;
             }
             if (!state.response) {
-                ensureLoaded().then(scheduleApply).catch(function () { /* logged already */ });
+                if (canLoad()) {
+                    ensureLoaded().then(scheduleApply).catch(function () { /* logged already */ });
+                }
                 return;
             }
             if (state.ctxStale) {
                 state.ctxStale = false;
+                const epoch = state.epoch;
                 loadJfSections().then(function (sections) {
+                    if (epoch !== state.epoch || !state.ctx) {
+                        return;
+                    }
                     if (sections) {
                         state.ctx.jfSections = sections;
                     }
@@ -2000,6 +2646,8 @@
         if (!container) {
             return;
         }
+        // Grace period of the empty home safety net (applyLayout).
+        startSettling(container);
         state.containerObserver = new MutationObserver(function (mutations) {
             let relevant = false;
             for (let i = 0; i < mutations.length; i++) {
@@ -2010,8 +2658,10 @@
                         for (let j = 0; j < mutation.addedNodes.length; j++) {
                             const node = mutation.addedNodes[j];
                             if (node.nodeType === 1 && sectionIndexClass(node) >= 0 && node.dataset.page === undefined) {
-                                // The built-in home was re-rendered: the user may have changed their home settings.
+                                // The built-in home was re-rendered: the user may have changed their home settings,
+                                // and the page is filling up again.
                                 state.ctxStale = true;
+                                startSettling(container);
                             }
                         }
                     }
@@ -2031,13 +2681,18 @@
     }
 
     function scan() {
+        const loggedIn = checkSession();
         const container = findHomeContainer();
         if (container !== state.container) {
             attachContainer(container);
         }
-        if (!state.response && !state.loadPromise && currentUserId()) {
-            // Logged in on another page: load the options so the user menu entry is available everywhere.
-            ensureLoaded().then(injectMenuEntries).catch(function () { /* logged already */ });
+        if (loggedIn && !state.response && !state.loadPromise && canLoad()) {
+            // Also logged in on another page (the user menu entry is available everywhere), a new session on the
+            // same home page, or a failed load whose retry is due.
+            ensureLoaded().then(function () {
+                injectMenuEntries();
+                scheduleApply();
+            }).catch(function () { /* logged already */ });
         }
         injectMenuEntries();
     }
@@ -2113,6 +2768,10 @@
     /* ------------------------------------------------------------------ */
 
     let editor = null;
+
+    function isLibrarySection(key) {
+        return String(key || '').toLowerCase().indexOf('jf:latestmedia:') === 0;
+    }
 
     function cloneLayout(layout) {
         return JSON.parse(JSON.stringify(layout || { Items: [] }));
@@ -2200,18 +2859,27 @@
             }
         }
         const mode = options.mode === 'default' ? 'default' : 'user';
+        const epoch = state.epoch;
         ensureLoaded().then(function () {
+            if (epoch !== state.epoch) {
+                return null;
+            }
             if (mode === 'user' && !state.response.CanCustomize) {
                 toast(t('notAllowed'));
                 return null;
             }
             const layoutPromise = mode === 'default' ? apiGet('DefaultLayout') : Promise.resolve(state.layout);
             return Promise.all([loadCatalog(), loadUserViews(), layoutPromise]).then(function (results) {
-                buildEditor(mode, results[0] || [], results[1] || [], results[2] || { Items: [] }, options);
+                // Requested by someone who is gone: never open their layout in the next session.
+                if (epoch === state.epoch) {
+                    buildEditor(mode, results[0] || [], results[1] || [], results[2] || { Items: [] }, options);
+                }
             });
         }).catch(function (error) {
-            console.error('[CustomizedHome] editor error', error);
-            toast(t('loadError'));
+            if (epoch === state.epoch) {
+                console.error('[CustomizedHome] editor error', error);
+                toast(t('loadError'));
+            }
         });
     }
 
@@ -2240,7 +2908,9 @@
                     const definition = info.byKey[item.Key];
                     info.known[item.Key] = {
                         key: item.Key,
-                        label: (definition ? familyLabel(catalogLabel(definition, lang)) : null) || item.Label || item.Key,
+                        // A library section that is not among the user's libraries: removed or no longer accessible.
+                        label: (definition ? familyLabel(catalogLabel(definition, lang)) : null)
+                            || (isLibrarySection(item.Key) ? t('latestUnavailable') : (item.Label || item.Key)),
                         origin: definition ? definition.Origin : 'other',
                         present: false,
                         family: !!(definition && definition.IsFamily)
@@ -3334,7 +4004,8 @@
             return {
                 Type: 'section',
                 Key: item.Key,
-                Label: (editor.known[item.Key] && editor.known[item.Key].label) || item.Label || null,
+                // Never for a library section: the name of a library is not for everyone (default layout).
+                Label: isLibrarySection(item.Key) ? null : ((editor.known[item.Key] && editor.known[item.Key].label) || item.Label || null),
                 Visible: item.Visible !== false,
                 Shape: item.Shape || 'auto',
                 Size: item.Size || 'normal',
@@ -3375,10 +4046,16 @@
         const current = editor;
         const payload = serializeModel(current.model);
         const path = current.mode === 'default' ? 'DefaultLayout' : 'Layout';
-        const saveButton = current.overlay.querySelector('.ch-save');
-        saveButton.disabled = true;
+        const saveButtons = current.overlay.querySelectorAll('.ch-save');
+        function setSaving(saving) {
+            Array.prototype.forEach.call(saveButtons, function (button) {
+                button.disabled = saving;
+            });
+        }
+        setSaving(true);
+        const epoch = state.epoch;
         apiSend('POST', path, payload).then(function (saved) {
-            if (current.mode === 'user') {
+            if (current.mode === 'user' && epoch === state.epoch) {
                 state.layout = saved || payload;
                 if (state.response) {
                     state.response.HasUserLayout = true;
@@ -3390,13 +4067,15 @@
                 current.options.onSaved(saved || payload);
             }
             toast(t('saved'));
-            closeEditor();
-            if (current.embedded) {
-                openEditor(current.options);
+            if (editor === current) {
+                closeEditor();
+                if (current.embedded) {
+                    openEditor(current.options);
+                }
             }
         }).catch(function (error) {
             console.error('[CustomizedHome] save failed', error);
-            saveButton.disabled = false;
+            setSaving(false);
             toast(t('saveError'));
         });
     }
@@ -3420,9 +4099,23 @@
     /* Bootstrap                                                           */
     /* ------------------------------------------------------------------ */
 
+    const NAVIGATION_SETTLE_MS = 300;
+
     function bootstrap() {
         const observer = new MutationObserver(scheduleScan);
         observer.observe(document.body, { childList: true, subtree: true });
+        // jellyfin-web restores the cached home view without rendering it again: these are the moments to catch up.
+        document.addEventListener('viewshow', function () {
+            scheduleScan();
+            requestRefresh();
+        });
+        document.addEventListener('visibilitychange', requestRefresh);
+        window.addEventListener('hashchange', function () {
+            setTimeout(function () {
+                scheduleScan();
+                requestRefresh();
+            }, NAVIGATION_SETTLE_MS);
+        });
         scheduleScan();
     }
 

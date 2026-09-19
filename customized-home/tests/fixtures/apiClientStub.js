@@ -6,6 +6,15 @@
     'use strict';
 
     const mock = window.__mock = Object.assign({
+        // The logged in user; null while logged out. layoutResponses overrides layoutResponse per user id.
+        userId: 'user-1',
+        layoutResponses: {},
+        // "<METHOD> <path>" -> number of failures left (-1: always fails).
+        failures: {},
+        // "<METHOD> <path>" -> milliseconds before the answer.
+        delays: {},
+        resumeItems: [],
+        nextUpItems: [],
         layoutResponse: null,
         defaultLayout: { Version: 1, HideUnlisted: false, Items: [] },
         catalog: [],
@@ -25,18 +34,26 @@
 
     function route(method, url, body) {
         const path = url.split('?')[0];
-        mock.requests.push({ method: method, path: path, url: url, body: body === undefined ? null : body });
+        mock.requests.push({ method: method, path: path, url: url, body: body === undefined ? null : body, ts: Date.now() });
         if (path === 'CustomizedHome/Layout' && method === 'GET') {
-            return mock.layoutResponse;
+            return mock.layoutResponses[mock.userId] || mock.layoutResponse;
         }
         if (path === 'CustomizedHome/Layout' && method === 'POST') {
-            mock.layoutResponse.Layout = body;
-            mock.layoutResponse.HasUserLayout = true;
+            const own = mock.layoutResponses[mock.userId] || mock.layoutResponse;
+            own.Layout = body;
+            own.HasUserLayout = true;
             return body;
         }
+        if (path === 'UserItems/Resume') {
+            return { Items: mock.resumeItems };
+        }
+        if (path === 'Shows/NextUp') {
+            return { Items: mock.nextUpItems };
+        }
         if (path === 'CustomizedHome/Layout' && method === 'DELETE') {
-            mock.layoutResponse.Layout = { Version: 1, HideUnlisted: false, Items: [] };
-            mock.layoutResponse.HasUserLayout = false;
+            const own = mock.layoutResponses[mock.userId] || mock.layoutResponse;
+            own.Layout = { Version: 1, HideUnlisted: false, Items: [] };
+            own.HasUserLayout = false;
             return null;
         }
         if (path === 'CustomizedHome/DefaultLayout') {
@@ -74,8 +91,26 @@
             }
             return mock.genreImages;
         }
+        if (path === 'UserData') {
+            return writeUserData(body.itemId, body.action === 'favorite' ? 'IsFavorite' : 'Played', body.value);
+        }
         if (path === 'Genres') {
             return { Items: mock.genres };
+        }
+        if (path === 'Items' && /[?&]ids=/.test(url)) {
+            // Reload of the media already shown by the hero: same ids, current state.
+            const ids = decodeURIComponent(/[?&]ids=([^&]*)/.exec(url)[1]).split(',');
+            const known = {};
+            Object.keys(mock.heroItems).forEach(function (source) {
+                mock.heroItems[source].forEach(function (item) {
+                    known[item.Id] = item;
+                });
+            });
+            return {
+                Items: ids.map(function (id) {
+                    return known[id];
+                }).filter(Boolean)
+            };
         }
         if (path === 'Items' && /[?&]fields=Overview/.test(url)) {
             // Hero query: one list per source, recognized by its sort order and item type.
@@ -117,9 +152,58 @@
         return { Items: [] };
     }
 
+    // Same shape as jellyfin-web: a rejected promise carrying the HTTP status.
+    function respond(method, url, body) {
+        const key = method + ' ' + url.split('?')[0];
+        const delay = mock.delays[key];
+        if (delay) {
+            return new Promise(function (resolve) {
+                setTimeout(resolve, delay);
+            }).then(function () {
+                return answer(method, url, body, key);
+            });
+        }
+        return answer(method, url, body, key);
+    }
+
+    function answer(method, url, body, key) {
+        const left = mock.failures[key];
+        if (left) {
+            if (left > 0) {
+                mock.failures[key] = left - 1;
+            }
+            mock.requests.push({ method: method, path: url.split('?')[0], url: url, body: body === undefined ? null : body, failed: true, ts: Date.now() });
+            return Promise.reject({ status: 500 });
+        }
+        // Like a real server: every answer is a fresh object, never the state of the mock itself.
+        const result = route(method, url, body);
+        return Promise.resolve(result === null || result === undefined ? result : JSON.parse(JSON.stringify(result)));
+    }
+
+    // User data writes change what the mock serves afterwards, and answer with the new user data.
+    function writeUserData(itemId, field, value) {
+        let userData = {};
+        const lists = Object.keys(mock.heroItems).map(function (source) {
+            return mock.heroItems[source];
+        }).concat([mock.resumeItems, mock.nextUpItems]);
+        lists.forEach(function (list) {
+            list.forEach(function (item) {
+                if (item.Id === itemId) {
+                    item.UserData = item.UserData || {};
+                    item.UserData[field] = value;
+                    if (field === 'Played' && value) {
+                        item.UserData.PlaybackPositionTicks = 0;
+                    }
+                    userData = item.UserData;
+                }
+            });
+        });
+        return userData;
+    }
+
     window.ApiClient = {
         getCurrentUserId: function () {
-            return 'user-1';
+            return mock.userId;
         },
         serverId: function () {
             return 'server-1';
@@ -131,21 +215,38 @@
             return path + (query ? '?' + query : '');
         },
         getJSON: function (url) {
-            return Promise.resolve(route('GET', url));
+            return respond('GET', url);
         },
         ajax: function (request) {
-            return Promise.resolve(route(request.type, request.url, request.data ? JSON.parse(request.data) : undefined));
+            return respond(request.type, request.url, request.data ? JSON.parse(request.data) : undefined);
         },
         getDisplayPreferences: function () {
-            return Promise.resolve({ CustomPrefs: {} });
+            // failures['GET DisplayPreferences']: the home settings cannot be read.
+            return mock.failures['GET DisplayPreferences'] ? Promise.reject({ status: 500 }) : Promise.resolve({ CustomPrefs: {} });
         },
         getUserViews: function () {
-            return Promise.resolve({
+            const views = {
                 Items: [
                     { Id: 'lib-movies', Name: 'Movies', CollectionType: 'movies' },
                     { Id: 'lib-shows', Name: 'Shows', CollectionType: 'tvshows' }
                 ]
+            };
+            // delays['GET UserViews'] makes the editor slow to open.
+            return new Promise(function (resolve) {
+                setTimeout(function () {
+                    resolve(views);
+                }, mock.delays['GET UserViews'] || 0);
             });
+        },
+        // User data writes: recorded like the other requests, and able to fail ("POST UserData").
+        updateFavoriteStatus: function (userId, itemId, isFavorite) {
+            return respond('POST', 'UserData', { action: 'favorite', userId: userId, itemId: itemId, value: isFavorite });
+        },
+        markPlayed: function (userId, itemId) {
+            return respond('POST', 'UserData', { action: 'played', userId: userId, itemId: itemId, value: true });
+        },
+        markUnplayed: function (userId, itemId) {
+            return respond('POST', 'UserData', { action: 'played', userId: userId, itemId: itemId, value: false });
         },
         getImageUrl: function (id) {
             return 'about:blank#' + id;

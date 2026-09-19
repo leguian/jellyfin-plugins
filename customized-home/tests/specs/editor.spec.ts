@@ -192,3 +192,26 @@ test('drag and drop reorders sections and dropping on the right column removes t
     expect(await rowTitles(page, LIST)).not.toContain('My Media');
     expect(await rowTitles(page, UNLISTED)).toContain('My Media');
 });
+
+test('a library name is never stored with the layout, and an unknown library shows no leftover name', async ({ page }) => {
+    await openHome(page, {
+        layout: {
+            Version: 1,
+            HideUnlisted: true,
+            Items: [
+                { Type: 'section', Key: 'jf:latestmedia:lib-movies', Visible: true, Label: 'Recently Added in Movies' },
+                // Stored by an administrator, or before the user lost access to that library.
+                { Type: 'section', Key: 'jf:latestmedia:lib-private', Visible: true, Label: 'Recently Added in Private Library' },
+                { Type: 'section', Key: 'jf:nextup', Visible: true, Label: 'Next Up' }
+            ]
+        }
+    });
+    await openEditor(page);
+    expect(await rowTitles(page, LIST)).toEqual(['Recently Added in Movies', 'Recently added (library not available)', 'Next Up']);
+    await expect(page.getByText('Private Library')).toHaveCount(0);
+
+    await page.locator('.ch-dialog-footer .ch-save').click();
+    const saved = (await recordedRequests(page)).find((request) => request.method === 'POST' && request.path === 'CustomizedHome/Layout');
+    const labels = (saved?.body as Layout).Items.map((item) => item.Label);
+    expect(labels).toEqual([null, null, 'Next Up']);
+});
