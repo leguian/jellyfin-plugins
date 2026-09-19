@@ -656,11 +656,20 @@
 
     function loadUserViews() {
         const client = apiClient();
-        return client.getUserViews({}, currentUserId()).then(function (result) {
-            state.userViews = (result && result.Items) || [];
-            return state.userViews;
-        }).catch(function () {
-            return state.userViews || [];
+        const epoch = state.epoch;
+        // Hidden from "My Media" is a display choice: those libraries still have their "recently added" row.
+        return client.getUserViews({ includeHidden: true }, currentUserId()).then(function (result) {
+            const views = (result && result.Items) || [];
+            if (epoch === state.epoch) {
+                state.userViews = views;
+            }
+            return views;
+        }).catch(function (error) {
+            // Without the libraries every library row would read "not available": better no editor than a wrong one.
+            if (epoch === state.epoch && state.userViews) {
+                return state.userViews;
+            }
+            throw error;
         });
     }
 
@@ -1642,7 +1651,8 @@
         const slide = button.closest('.ch-hero-slide');
         const client = apiClient();
         const userId = currentUserId();
-        if (!slide || !userId || button.disabled) {
+        // Busy flag, not "disabled": a disabled button drops the keyboard / remote focus to the page.
+        if (!slide || !userId || button.getAttribute('aria-busy') === 'true') {
             return;
         }
         const itemId = slide.getAttribute('data-id');
@@ -1654,32 +1664,40 @@
             button.setAttribute('aria-pressed', on ? 'true' : 'false');
         }
         show(value);
-        button.disabled = true;
+        button.setAttribute('aria-busy', 'true');
+        const container = node.parentNode;
+        const entryAtClick = container && container._chHeroEntry;
         let request;
         if (favorite) {
             request = client.updateFavoriteStatus(userId, itemId, value);
         } else {
             request = value ? client.markPlayed(userId, itemId, new Date()) : client.markUnplayed(userId, itemId);
         }
-        Promise.resolve(request).then(function () {
-            const container = node.parentNode;
+        Promise.resolve(request).then(function (userData) {
             const entry = container && container._chHeroEntry;
             if (epoch !== state.epoch || !entry || !entry.items) {
                 return;
             }
+            // The server answers with the whole user data (a watched series also loses its unplayed count...).
             entry.items.forEach(function (item) {
                 if (item.Id === itemId) {
-                    item.UserData = item.UserData || {};
+                    item.UserData = Object.assign(item.UserData || {}, userData && typeof userData === 'object' ? userData : {});
                     item.UserData[favorite ? 'IsFavorite' : 'Played'] = value;
                 }
             });
-            entry.rendered = JSON.stringify(entry.items.map(itemState));
+            if (entry !== entryAtClick || entry.loading || !node.isConnected) {
+                // A reload crossed this change: what it fetched may be older than the write. Load once more.
+                entry.refresh = true;
+                scheduleApply();
+            } else {
+                entry.rendered = JSON.stringify(entry.items.map(itemState));
+            }
         }).catch(function (error) {
             console.warn('[CustomizedHome] hero action failed', error);
             show(!value);
             toast(t('heroActionError'));
         }).then(function () {
-            button.disabled = false;
+            button.removeAttribute('aria-busy');
         });
     }
 
@@ -1727,6 +1745,15 @@
                 } else {
                     slides[i].setAttribute('aria-hidden', 'true');
                 }
+                // The spatial navigation of the TV layout only skips elements with tabindex="-1": a hidden slide keeps
+                // its size, and its buttons would otherwise catch the remote.
+                Array.prototype.forEach.call(slides[i].querySelectorAll('a, button'), function (control) {
+                    if (active) {
+                        control.removeAttribute('tabindex');
+                    } else {
+                        control.setAttribute('tabindex', '-1');
+                    }
+                });
                 if (dots[i]) {
                     setClass(dots[i], 'ch-active', active);
                     dots[i].setAttribute('aria-current', active ? 'true' : 'false');
@@ -1962,8 +1989,16 @@
             // A selection that is still young only gets its user data reloaded; past the cache lifetime the sources run again.
             const keep = fresh && entry.items && entry.items.length && Date.now() - entry.selectedAt < INTEGRATED_CACHE_MS;
             const selectedAt = keep ? entry.selectedAt : Date.now();
+            const expected = keep ? entry.items.length : 0;
             dataPromise = (keep ? refreshHeroItems(hero, entry.items) : fetchHeroItems(hero)).then(function (items) {
-                const record = { ts: Date.now(), selectedAt: selectedAt, data: items };
+                // Media watched or removed since: a smaller hero (or none) is not an answer, the sources are.
+                if (keep && items.length < expected) {
+                    return fetchHeroItems(hero).then(function (selection) {
+                        return { ts: Date.now(), selectedAt: Date.now(), data: selection };
+                    });
+                }
+                return { ts: Date.now(), selectedAt: selectedAt, data: items };
+            }).then(function (record) {
                 if (epoch === state.epoch) {
                     state.integratedCache[cacheKey] = record;
                 }
@@ -2045,6 +2080,28 @@
         return match ? decodeURIComponent(match[1]) : null;
     }
 
+    // TV layout: the row titles are not links. The library is then the one whose name the title ends with;
+    // the user's views are fetched once for that, and the next pass uses them.
+    function libraryIdFromTitle(title, ctx) {
+        if (!ctx || !title) {
+            return null;
+        }
+        if (!state.userViews) {
+            if (!ctx.viewsRequested) {
+                ctx.viewsRequested = true;
+                loadUserViews().then(scheduleApply).catch(function () { /* the title based key stays */ });
+            }
+            return null;
+        }
+        let best = null;
+        state.userViews.forEach(function (view) {
+            if (view.Name && title.indexOf(view.Name) >= 0 && (!best || view.Name.length > best.Name.length)) {
+                best = view;
+            }
+        });
+        return best ? best.Id : null;
+    }
+
     function catalogLabels(ctx, key) {
         const catalog = (ctx && ctx.catalog) || [];
         for (let i = 0; i < catalog.length; i++) {
@@ -2122,8 +2179,10 @@
         if (!type) {
             type = typeFromTitle(node, info.label, ctx);
         }
-        if (type === 'latestmedia') {
-            const libraryId = libraryIdFromSection(node);
+        // A title that links to a library is a "recently added" row, whatever the language and even when the home
+        // settings could not be read: its key must be the library id, never its name.
+        const libraryId = libraryIdFromSection(node) || (type === 'latestmedia' ? libraryIdFromTitle(info.label, ctx) : null);
+        if (type === 'latestmedia' || (!type && libraryId)) {
             info.key = 'jf:latestmedia:' + (libraryId || slug(info.label));
             info.origin = 'jellyfin';
             return info;

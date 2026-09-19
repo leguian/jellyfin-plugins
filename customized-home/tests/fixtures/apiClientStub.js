@@ -91,6 +91,9 @@
             }
             return mock.genreImages;
         }
+        if (path === 'UserData') {
+            return writeUserData(body.itemId, body.action === 'favorite' ? 'IsFavorite' : 'Played', body.value);
+        }
         if (path === 'Genres') {
             return { Items: mock.genres };
         }
@@ -172,7 +175,30 @@
             mock.requests.push({ method: method, path: url.split('?')[0], url: url, body: body === undefined ? null : body, failed: true, ts: Date.now() });
             return Promise.reject({ status: 500 });
         }
-        return Promise.resolve(route(method, url, body));
+        // Like a real server: every answer is a fresh object, never the state of the mock itself.
+        const result = route(method, url, body);
+        return Promise.resolve(result === null || result === undefined ? result : JSON.parse(JSON.stringify(result)));
+    }
+
+    // User data writes change what the mock serves afterwards, and answer with the new user data.
+    function writeUserData(itemId, field, value) {
+        let userData = {};
+        const lists = Object.keys(mock.heroItems).map(function (source) {
+            return mock.heroItems[source];
+        }).concat([mock.resumeItems, mock.nextUpItems]);
+        lists.forEach(function (list) {
+            list.forEach(function (item) {
+                if (item.Id === itemId) {
+                    item.UserData = item.UserData || {};
+                    item.UserData[field] = value;
+                    if (field === 'Played' && value) {
+                        item.UserData.PlaybackPositionTicks = 0;
+                    }
+                    userData = item.UserData;
+                }
+            });
+        });
+        return userData;
     }
 
     window.ApiClient = {
@@ -195,7 +221,8 @@
             return respond(request.type, request.url, request.data ? JSON.parse(request.data) : undefined);
         },
         getDisplayPreferences: function () {
-            return Promise.resolve({ CustomPrefs: {} });
+            // failures['GET DisplayPreferences']: the home settings cannot be read.
+            return mock.failures['GET DisplayPreferences'] ? Promise.reject({ status: 500 }) : Promise.resolve({ CustomPrefs: {} });
         },
         getUserViews: function () {
             const views = {

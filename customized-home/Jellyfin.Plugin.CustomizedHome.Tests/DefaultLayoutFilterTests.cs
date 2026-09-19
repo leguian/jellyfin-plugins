@@ -54,7 +54,7 @@ public class DefaultLayoutFilterTests
     [Fact]
     public void Libraries_the_user_cannot_access_are_removed_everywhere_and_no_library_name_is_sent()
     {
-        HomeLayout result = DefaultLayoutFilter.ForUser(DefaultLayout(), new HashSet<Guid> { Movies });
+        HomeLayout result = DefaultLayoutFilter.ForUser(DefaultLayout(), new HashSet<Guid> { Movies }, writtenBySomeoneElse: true);
 
         Assert.Equal(["jf:resume", Latest(Movies)], result.Items.Where(item => item.Type == LayoutItemTypes.Section).Select(item => item.Key));
         LayoutItem folder = Assert.Single(result.Items, item => item.Type == LayoutItemTypes.Folder);
@@ -71,7 +71,7 @@ public class DefaultLayoutFilterTests
     {
         HomeLayout source = DefaultLayout();
 
-        HomeLayout result = DefaultLayoutFilter.ForUser(source, new HashSet<Guid> { Movies, Adult });
+        HomeLayout result = DefaultLayoutFilter.ForUser(source, new HashSet<Guid> { Movies, Adult }, writtenBySomeoneElse: true);
 
         Assert.True(result.HideUnlisted);
         Assert.True(result.Hero.Enabled);
@@ -87,9 +87,51 @@ public class DefaultLayoutFilterTests
     {
         HomeLayout layout = new() { Items = [Section("jf:latestmedia:not-a-guid", "Secret"), Section(Latest(Movies), "Movies"), Section("jf:resume")] };
 
-        HomeLayout result = DefaultLayoutFilter.ForUser(layout, new HashSet<Guid>());
+        HomeLayout result = DefaultLayoutFilter.ForUser(layout, new HashSet<Guid>(), writtenBySomeoneElse: true);
 
         Assert.Equal(["jf:resume"], result.Items.Select(item => item.Key));
+    }
+
+    [Fact]
+    public void A_folder_emptied_by_the_filter_goes_with_its_name_an_empty_folder_of_the_author_stays()
+    {
+        HomeLayout layout = new()
+        {
+            Items =
+            [
+                new LayoutItem { Type = LayoutItemTypes.Folder, Id = "private", Name = "Family videos", Items = [Section(Latest(Adult), "Recently Added in Family videos")] },
+                new LayoutItem { Type = LayoutItemTypes.Folder, Id = "empty", Name = "Later" },
+                Section("jf:resume")
+            ]
+        };
+
+        HomeLayout result = DefaultLayoutFilter.ForUser(layout, new HashSet<Guid> { Movies }, writtenBySomeoneElse: true);
+
+        Assert.Equal(["Later", string.Empty], result.Items.Select(item => item.Name ?? string.Empty));
+        Assert.DoesNotContain("Family", System.Text.Json.JsonSerializer.Serialize(result), StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Titles_chosen_by_the_author_are_not_sent_with_a_default_layout_but_a_user_keeps_their_own()
+    {
+        HomeLayout layout = new() { Items = [Section("title:my-requests", "My Requests"), Section(Latest(Adult), "Recently Added in Private")] };
+
+        HomeLayout forOthers = DefaultLayoutFilter.ForUser(layout, new HashSet<Guid>(), writtenBySomeoneElse: true);
+        HomeLayout own = DefaultLayoutFilter.ForUser(layout, new HashSet<Guid>(), writtenBySomeoneElse: false);
+
+        Assert.Null(Assert.Single(forOthers.Items).Label);
+        Assert.Equal("My Requests", Assert.Single(own.Items).Label);
+    }
+
+    [Fact]
+    public void Only_layouts_with_library_or_title_sections_need_the_user_views()
+    {
+        Assert.False(DefaultLayoutFilter.NeedsFiltering(new HomeLayout { Items = [Section("jf:resume"), Section("ch:combined")] }));
+        Assert.True(DefaultLayoutFilter.NeedsFiltering(new HomeLayout { Items = [Section(Latest(Movies))] }));
+        Assert.True(DefaultLayoutFilter.NeedsFiltering(new HomeLayout
+        {
+            Items = [new LayoutItem { Type = LayoutItemTypes.Folder, Id = "f", Items = [Section("title:anything")] }]
+        }));
     }
 
     [Theory]

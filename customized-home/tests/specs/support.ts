@@ -174,7 +174,8 @@ function mockState(options: MockOptions): Record<string, unknown> {
     };
 }
 
-async function injectPlugin(page: Page, options: MockOptions): Promise<void> {
+/** Seeds the mock, then loads the stub, the stylesheet and the plugin script into the current page. */
+export async function injectPlugin(page: Page, options: MockOptions): Promise<void> {
     await page.evaluate((state) => {
         (window as unknown as { __mock: Record<string, unknown> }).__mock = state;
     }, mockState(options));

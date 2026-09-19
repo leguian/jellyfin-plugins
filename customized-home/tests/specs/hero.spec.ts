@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test';
-import { openEditor, openHome, recordedRequests, type HeroItem, type HeroSettings, type HeroSource, type Layout } from './support';
+import { openEditor, openHome, recordedRequests, showHomeAgain, updateMock, type HeroItem, type HeroSettings, type HeroSource, type Layout } from './support';
 
 const TICKS_PER_MINUTE = 600_000_000;
 
@@ -189,6 +189,63 @@ test('favorite and watched are sent by the plugin itself, without any web client
         { action: 'played', userId: 'user-1', itemId: 'movie-1', value: true },
         { action: 'played', userId: 'user-1', itemId: 'movie-1', value: false }
     ]);
+});
+
+test('a change keeps the keyboard focus on its button, and the next reload finds nothing to replace', async ({ page }) => {
+    await page.clock.install();
+    await openHome(page, { layout: layout(hero()), enableIntegratedSections: true, heroItems: HERO_ITEMS, delays: { 'POST UserData': 300 } });
+    const favorite = page.locator('.ch-hero-slide[data-id="movie-1"] .ch-hero-favorite');
+    await page.evaluate(() => document.querySelector('.ch-hero')?.setAttribute('data-probe', 'same-node'));
+
+    await favorite.focus();
+    await page.keyboard.press('Enter');
+    // A disabled button would hand the focus to the page: with a remote the hero would be lost.
+    await expect(favorite).toHaveAttribute('aria-busy', 'true');
+    await expect(favorite).toBeFocused();
+    await page.clock.runFor(400);
+    await expect(favorite).not.toHaveAttribute('aria-busy', /.*/);
+    await expect(favorite).toBeFocused();
+    await page.keyboard.press('Enter');
+    await page.clock.runFor(400);
+    await expect(favorite).toHaveAttribute('aria-pressed', 'true');
+    expect((await recordedRequests(page)).filter((request) => request.path === 'UserData')).toHaveLength(2);
+
+    // Back on the home page later: the server says what the hero already shows.
+    await page.clock.fastForward(20_000);
+    await showHomeAgain(page);
+    await expect.poll(async () => (await recordedRequests(page)).filter((request) => (request.url ?? '').includes('ids=')).length).toBe(1);
+    await page.clock.runFor(300);
+    await expect(page.locator('.ch-hero')).toHaveAttribute('data-probe', 'same-node');
+    await expect(favorite).toHaveAttribute('aria-pressed', 'true');
+});
+
+test('the controls of hidden slides are out of reach of the keyboard and of the TV remote', async ({ page }) => {
+    await openHome(page, { layout: layout(hero()), enableIntegratedSections: true, heroItems: HERO_ITEMS });
+    const tabStops = (id: string): Promise<(string | null)[]> => page.locator(`.ch-hero-slide[data-id="${id}"]`).locator('a, button')
+        .evaluateAll((nodes) => nodes.map((node) => node.getAttribute('tabindex')));
+    // The spatial navigation of jellyfin-web only skips tabindex="-1": hidden slides keep their size.
+    expect((await tabStops('movie-1')).every((value) => value === null)).toBe(true);
+    expect((await tabStops('show-1')).every((value) => value === '-1')).toBe(true);
+
+    await page.locator('.ch-hero-dot').nth(1).click();
+    expect((await tabStops('show-1')).every((value) => value === null)).toBe(true);
+    expect((await tabStops('movie-1')).every((value) => value === '-1')).toBe(true);
+});
+
+test('an "unwatched only" hero deals a new selection when one of its media got watched', async ({ page }) => {
+    await page.clock.install();
+    const movies = HERO_ITEMS.recentMovies ?? [];
+    await openHome(page, { layout: layout(hero({ Sources: ['recentMovies'], Count: 2 })), enableIntegratedSections: true, heroItems: { recentMovies: movies } });
+    await expect(page.locator('.ch-hero-slide')).toHaveCount(2);
+    await page.locator('.ch-hero-slide[data-id="movie-1"] .ch-hero-played').click();
+
+    // The server no longer offers it (isPlayed=false): the next return must not leave a hero of one media.
+    await updateMock(page, { heroItems: { recentMovies: movies.slice(1) } });
+    await page.clock.fastForward(20_000);
+    await showHomeAgain(page);
+    await expect(page.locator('.ch-hero-slide[data-id="movie-1"]')).toHaveCount(0);
+    await expect(page.locator('.ch-hero-slide')).toHaveCount(2);
+    expect((await recordedRequests(page)).filter((request) => (request.url ?? '').includes('sortBy=DateCreated'))).toHaveLength(2);
 });
 
 test('a refused favorite or watched change is reverted and reported', async ({ page }) => {

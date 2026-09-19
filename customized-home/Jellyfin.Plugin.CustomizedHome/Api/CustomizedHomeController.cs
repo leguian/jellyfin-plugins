@@ -35,8 +35,8 @@ public class CustomizedHomeController : ControllerBase
     // 5 MB image, base64 encoded, plus the JSON envelope.
     private const long GenreImageRequestLimit = 8 * 1024 * 1024;
 
-    // A layout at every validation limit (500 sections, 20 genres each) stays under it. Without a limit the body
-    // is fully deserialized before the validator can reject it.
+    // About three times the largest layout the client can send (500 sections with long non-ASCII labels, genres on
+    // the genre section only). Without a limit the body is fully deserialized before the validator can reject it.
     private const long LayoutRequestLimit = 2 * 1024 * 1024;
 
     private static readonly ConcurrentDictionary<string, CachedAsset> AssetCache = new(StringComparer.Ordinal);
@@ -113,14 +113,15 @@ public class CustomizedHomeController : ControllerBase
         string source;
         if (effectiveUserLayout is not null)
         {
-            layout = effectiveUserLayout;
+            // Saved before the user lost access to a library, or seeded from a default layout: same care.
+            layout = ForUser(effectiveUserLayout, userId, writtenBySomeoneElse: false);
             source = "user";
         }
         else if (config.DefaultLayout.Items.Count > 0 || config.DefaultLayout.Hero.Enabled)
         {
             // A default layout may consist of the hero alone, above the regular home page.
             // Written by an administrator: it may list libraries this user must not know about.
-            layout = DefaultLayoutFilter.ForUser(config.DefaultLayout, GetAccessibleViews(userId));
+            layout = ForUser(config.DefaultLayout, userId, writtenBySomeoneElse: true);
             source = "default";
         }
         else
@@ -471,6 +472,14 @@ public class CustomizedHomeController : ControllerBase
         }
 
         return isAdmin || config.AllowUserCustomization;
+    }
+
+    private HomeLayout ForUser(HomeLayout layout, Guid userId, bool writtenBySomeoneElse)
+    {
+        // Most layouts list no library: the user's views are only looked up when one does.
+        return DefaultLayoutFilter.NeedsFiltering(layout)
+            ? DefaultLayoutFilter.ForUser(layout, GetAccessibleViews(userId), writtenBySomeoneElse)
+            : layout;
     }
 
     private HashSet<Guid> GetAccessibleViews(Guid userId)
