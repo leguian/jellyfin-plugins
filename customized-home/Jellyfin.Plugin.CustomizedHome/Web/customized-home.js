@@ -54,11 +54,13 @@
             legendJellyfin: 'Jellyfin default section',
             legendOther: 'Section from another plugin',
             dragHandle: 'Drag to reorder, or to move to the other column',
+            reorderHandle: 'Reorder: drag, press the up and down arrow keys, or activate for a menu',
+            movedPosition: '{0}: row {1} of {2}',
             showSectionTitle: 'Show the section title',
             noSectionTitle: 'no section title',
             cardOptions: 'Cards',
             sectionOptions: 'Section',
-            hint: 'The left column is your home page: as soon as it holds one section, it replaces the default home page. Add sections from the right column, drag the handles to reorder.',
+            hint: 'The left column is your home page: as soon as it holds one section, it replaces the default home page. Add sections from the right column, drag the handles to reorder (keyboard: focus a handle, then use the up and down arrow keys).',
             addToLayout: 'Add to the customized home page',
             removeAction: 'Remove from the customized home page',
             layoutEmpty: 'Empty: the default home page is displayed. Add sections from the right column to build your own.',
@@ -187,11 +189,13 @@
             legendJellyfin: 'Section Jellyfin par défaut',
             legendOther: "Section d'un autre plugin",
             dragHandle: "Glisser pour réordonner, ou pour changer de colonne",
+            reorderHandle: 'Réordonner : glisser, flèches haut et bas du clavier, ou activer pour un menu',
+            movedPosition: '{0} : ligne {1} sur {2}',
             showSectionTitle: 'Afficher le titre de la section',
             noSectionTitle: 'sans titre de section',
             cardOptions: 'Cartes',
             sectionOptions: 'Section',
-            hint: "La colonne de gauche est votre page d'accueil : dès qu'elle contient une section, elle remplace la page d'accueil par défaut. Ajoutez des sections depuis la colonne de droite, glissez les poignées pour réordonner.",
+            hint: "La colonne de gauche est votre page d'accueil : dès qu'elle contient une section, elle remplace la page d'accueil par défaut. Ajoutez des sections depuis la colonne de droite, glissez les poignées pour réordonner (au clavier : focus sur une poignée, puis flèches haut et bas).",
             addToLayout: "Ajouter à la page d'accueil modifiée",
             removeAction: "Supprimer de la page d'accueil modifiée",
             layoutEmpty: "Vide : la page d'accueil par défaut est affichée. Ajoutez des sections depuis la colonne de droite pour composer la vôtre.",
@@ -3045,6 +3049,7 @@
             + '<div class="ch-col ch-col-unlisted"><h3 class="ch-col-title"></h3><div class="ch-unlisted"></div></div>'
             + '</div>'
             + '</div>'
+            + '<div class="ch-live" role="status" aria-live="polite"></div>'
             + '<div class="ch-dialog-footer">'
             + '<button type="button" class="ch-btn ch-btn-danger ch-reset"></button>'
             + '<span style="flex:1"></span>'
@@ -3062,6 +3067,7 @@
         editor.unlisted = dialog.querySelector('.ch-unlisted');
         editor.heroSlot = dialog.querySelector('.ch-hero-slot');
         editor.columns = dialog.querySelector('.ch-columns');
+        editor.live = dialog.querySelector('.ch-live');
         dialog.querySelector('.ch-legend-customized').textContent = t('legendCustomized');
         dialog.querySelector('.ch-legend-jellyfin').textContent = t('legendJellyfin');
         dialog.querySelector('.ch-col-layout .ch-col-title').textContent = t('colLayout');
@@ -3121,6 +3127,7 @@
             });
         }
         editor.columns.addEventListener('click', onListClick);
+        editor.list.addEventListener('keydown', onListKeyDown);
         editor.list.addEventListener('input', onListInput);
         initDrag(editor.columns, editor.list, editor.unlisted);
         initTooltips(overlay);
@@ -3199,7 +3206,7 @@
             subtitle.push(t('absent'));
         }
         const badge = formatBadge(item);
-        row.innerHTML = '<span class="material-icons ch-handle" data-ch-tip="' + escapeHtml(t('dragHandle')) + '" aria-hidden="true">drag_indicator</span>'
+        row.innerHTML = handleHtml(item)
             + originIconHtml(entry.origin)
             + '<div class="ch-row-text"><div class="ch-row-title"></div><div class="ch-row-sub"></div></div>'
             + (badge ? '<span class="ch-row-format"></span>' : '')
@@ -3231,6 +3238,17 @@
         }
         return '<span class="material-icons ch-row-icon ch-origin-' + (origin === 'customized' ? 'customized' : 'other') + '"' + tip + ' aria-hidden="true">'
             + (origin === 'customized' ? 'house' : 'extension') + '</span>';
+    }
+
+    // Left column: a real button, because dragging needs a pointer. It takes the focus, moves its row with the
+    // up and down arrow keys, and opens a "move up / move down" menu when activated (touch, screen reader).
+    // Right column: "add" is the alternative to dragging, the handle stays out of the tab order.
+    function handleHtml(item) {
+        if (item._unlisted) {
+            return '<span class="material-icons ch-handle" data-ch-tip="' + escapeHtml(t('dragHandle')) + '" aria-hidden="true">drag_indicator</span>';
+        }
+        return '<button type="button" class="ch-handle" aria-haspopup="menu" data-ch-tip="' + escapeHtml(t('reorderHandle')) + '" aria-label="' + escapeHtml(t('reorderHandle')) + '">'
+            + '<span class="material-icons" aria-hidden="true">drag_indicator</span></button>';
     }
 
     function actionButton(className, title, icon) {
@@ -3560,7 +3578,7 @@
         const row = el('div', 'ch-row ch-row-folder' + (item.Visible === false ? ' ch-row-hidden' : ''));
         row._item = item;
         row._parent = null;
-        row.innerHTML = '<span class="material-icons ch-handle" aria-hidden="true">drag_indicator</span>'
+        row.innerHTML = handleHtml(item)
             + '<button type="button" class="ch-icon-btn ch-act-icon" data-ch-tip="' + escapeHtml(t('chooseIcon')) + '" aria-label="' + escapeHtml(t('chooseIcon')) + '"><span class="material-icons" aria-hidden="true">' + escapeHtml(item.Icon || 'folder') + '</span></button>'
             + '<input type="text" class="ch-folder-name" maxlength="100" placeholder="' + escapeHtml(t('folderName')) + '" />'
             + '<div class="ch-row-actions">'
@@ -3674,6 +3692,120 @@
         renderEditor();
     }
 
+    /* ---- reordering without a pointer (keyboard, remote, screen reader) ---- */
+
+    function folderOf(item) {
+        return editor.model.Items.filter(function (candidate) {
+            return candidate.Type === 'folder' && (candidate.Items || []).indexOf(item) >= 0;
+        })[0] || null;
+    }
+
+    // One step up (-1) or down (+1) in the order of the rows, across folder borders like a drag would: a section
+    // leaves its folder at either end, and enters the folder it meets. Null when there is nowhere to go.
+    function stepTarget(item, parent, delta) {
+        const top = editor.model.Items;
+        if (parent) {
+            const members = parent.Items;
+            const index = members.indexOf(item);
+            if (index < 0) {
+                return null;
+            }
+            if (members[index + delta]) {
+                return { folder: parent, before: delta < 0 ? members[index - 1] : (members[index + 2] || null) };
+            }
+            return { folder: null, before: delta < 0 ? parent : (top[top.indexOf(parent) + 1] || null) };
+        }
+        const index = top.indexOf(item);
+        const neighbour = index < 0 ? null : top[index + delta];
+        if (!neighbour) {
+            return null;
+        }
+        if (neighbour.Type === 'folder' && item.Type !== 'folder') {
+            return { folder: neighbour, before: delta < 0 ? null : (neighbour.Items[0] || null) };
+        }
+        return { folder: null, before: delta < 0 ? neighbour : (top[index + 2] || null) };
+    }
+
+    function rowOf(item) {
+        return Array.prototype.filter.call(editor.columns.querySelectorAll('.ch-row'), function (row) {
+            return row._item === item || (!!item.Key && !!row._item && row._item.Key === item.Key);
+        })[0] || null;
+    }
+
+    // The rows are rebuilt by every change: the focus goes back to the same control of the same row.
+    function focusRowControl(item, selector) {
+        const row = rowOf(item);
+        const control = row ? (row.querySelector(selector) || row.querySelector('button:not([disabled])')) : null;
+        if (control) {
+            control.focus();
+        }
+        return control;
+    }
+
+    function announceRow(item) {
+        const row = rowOf(item);
+        if (!row || !editor.live) {
+            return;
+        }
+        const rows = editor.list.querySelectorAll('.ch-row');
+        const label = item.Type === 'folder' ? (item.Name || t('folder')) : row.querySelector('.ch-row-title').textContent;
+        editor.live.textContent = t('movedPosition', label, Array.prototype.indexOf.call(rows, row) + 1, rows.length);
+    }
+
+    // Not while a search filters the rows, like drag and drop: a step would jump over rows that are not shown.
+    function stepItem(item, parent, delta) {
+        const target = editor.query ? null : stepTarget(item, parent, delta);
+        if (target) {
+            moveItem(item, target);
+            announceRow(item);
+        }
+        return focusRowControl(item, '.ch-handle');
+    }
+
+    // Opened by activating a handle. It stays open, like the format menu: a row often moves by several steps.
+    function openMoveMenu(anchor, item, parent, focusDelta) {
+        const menu = el('div', 'ch-move-menu');
+        const buttons = [[-1, 'moveUp', 'arrow_upward'], [1, 'moveDown', 'arrow_downward']].map(function (choice) {
+            const button = el('button', choice[0] < 0 ? 'ch-move-up' : 'ch-move-down', '<span class="material-icons" aria-hidden="true">' + choice[2] + '</span><span></span>');
+            button.type = 'button';
+            button.setAttribute('role', 'menuitem');
+            button.disabled = !stepTarget(item, parent, choice[0]);
+            button.querySelector('span:last-child').textContent = t(choice[1]);
+            button.addEventListener('click', function () {
+                const handle = stepItem(item, parent, choice[0]);
+                if (handle) {
+                    openMoveMenu(handle, item, folderOf(item), choice[0]);
+                }
+            });
+            menu.appendChild(button);
+            return button;
+        });
+        if (buttons[0].disabled && buttons[1].disabled) {
+            // A single row: nothing to offer.
+            closePopup();
+            return;
+        }
+        showPopup(anchor, menu);
+        const wanted = buttons[focusDelta > 0 ? 1 : 0];
+        (wanted.disabled ? buttons[focusDelta > 0 ? 0 : 1] : wanted).focus();
+    }
+
+    function onListKeyDown(e) {
+        if ((e.key !== 'ArrowUp' && e.key !== 'ArrowDown') || e.altKey || e.ctrlKey || e.metaKey || e.shiftKey) {
+            return;
+        }
+        const handle = e.target.closest ? e.target.closest('button.ch-handle') : null;
+        const row = handle ? handle.closest('.ch-row') : null;
+        if (!row || !row._item) {
+            return;
+        }
+        // The arrows belong to the handle: neither the page scroll nor the spatial navigation of the TV layout.
+        e.preventDefault();
+        e.stopPropagation();
+        closePopup();
+        stepItem(row._item, row._parent, e.key === 'ArrowUp' ? -1 : 1);
+    }
+
     function onListInput(e) {
         const input = e.target.closest('.ch-folder-name');
         if (!input) {
@@ -3697,7 +3829,11 @@
         const item = row._item;
         const parent = row._parent;
 
-        if (button.classList.contains('ch-act-visibility')) {
+        if (button.classList.contains('ch-handle')) {
+            if (!editor.query) {
+                openMoveMenu(button, item, parent, -1);
+            }
+        } else if (button.classList.contains('ch-act-visibility')) {
             materialize(item);
             item.Visible = item.Visible === false;
             renderEditor();
@@ -3893,6 +4029,7 @@
 
     function initDrag(root, list, side) {
         let drag = null;
+        let dragJustEnded = false;
 
         function isInside(node, e) {
             const rect = node.getBoundingClientRect();
@@ -4015,6 +4152,13 @@
             }
             const current = drag;
             drag = null;
+            if (current.active) {
+                // The click that ends a drag is not an activation of the handle (which opens the move menu).
+                dragJustEnded = true;
+                setTimeout(function () {
+                    dragJustEnded = false;
+                }, 0);
+            }
             if (current.ghost) {
                 current.ghost.remove();
             }
@@ -4079,6 +4223,13 @@
         root.addEventListener('pointercancel', function () {
             finish(false);
         });
+        root.addEventListener('click', function (e) {
+            if (dragJustEnded) {
+                dragJustEnded = false;
+                e.stopPropagation();
+                e.preventDefault();
+            }
+        }, true);
     }
 
     /* ---- save / reset ---- */
