@@ -102,8 +102,8 @@ public sealed class UserDeletedConsumerTests : IDisposable
             await new UserDeletedConsumer(store, NullLogger<UserDeletedConsumer>.Instance).OnEvent(new UserDeletedEventArgs(alice));
         }
 
-        // Still on disk or not, the layout no longer applies.
-        Assert.Null(store.Get(alice.Id));
+        // A file left behind belongs to nobody: it is not listed, and an administrator can still remove it.
+        Assert.Equal(File.Exists(file), store.Get(alice.Id) is not null);
     }
 
     [Fact]

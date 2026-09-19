@@ -137,15 +137,17 @@ public sealed partial class LayoutStore
     {
         lock (_lock)
         {
-            _cache[userId] = null;
             string path = GetPath(userId);
-            if (!File.Exists(path))
+            bool existed = File.Exists(path);
+            if (existed)
             {
-                return false;
+                File.Delete(path);
             }
 
-            File.Delete(path);
-            return true;
+            // Forgotten once the file is gone: after a deletion that failed, the instance keeps answering what is
+            // on disk instead of "no layout" until the next restart brings the layout back.
+            _cache[userId] = null;
+            return existed;
         }
     }
 

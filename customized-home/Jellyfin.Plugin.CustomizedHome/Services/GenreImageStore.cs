@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Globalization;
 using System.IO;
 using System.Linq;
 using System.Security.Cryptography;
@@ -137,21 +138,20 @@ public sealed partial class GenreImageStore
             Directory.CreateDirectory(_directory);
             index.TryGetValue(key, out GenreImageEntry? previous);
 
-            // Both parts come from this class: a hash and a known shape name.
-            string fileName = HashOf(name) + "-" + normalizedShape + format.Extension;
-            string path = Path.Combine(_directory, fileName);
-
-            // Same format as before: the new file takes the place of the previous one in a single move.
-            bool takesThePlaceOfThePrevious = previous is not null && string.Equals(previous.FileName, fileName, StringComparison.OrdinalIgnoreCase);
-
             // Strictly increasing: the version is part of the image URL, which clients cache for good.
+            long version = Math.Max(DateTime.UtcNow.Ticks, (previous?.Version ?? 0) + 1);
+
+            // Every part comes from this class: a hash, a known shape name and the version. The version makes each
+            // upload a new file: a replacement never writes over the image the saved index still names.
+            string fileName = HashOf(name) + "-" + normalizedShape + "-" + version.ToString(CultureInfo.InvariantCulture) + format.Extension;
+            string path = Path.Combine(_directory, fileName);
             GenreImageEntry entry = new()
             {
                 Name = name,
                 Shape = normalizedShape,
                 FileName = fileName,
                 ContentType = format.ContentType,
-                Version = Math.Max(DateTime.UtcNow.Ticks, (previous?.Version ?? 0) + 1)
+                Version = version
             };
             Dictionary<string, GenreImageEntry> updated = new(index, StringComparer.Ordinal) { [key] = entry };
 
@@ -164,16 +164,12 @@ public sealed partial class GenreImageStore
             }
             catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
             {
-                if (!takesThePlaceOfThePrevious)
-                {
-                    TryDeleteFile(path);
-                }
-
+                TryDeleteFile(path);
                 throw;
             }
 
             _index = updated;
-            if (!takesThePlaceOfThePrevious && previous is not null && !string.IsNullOrEmpty(previous.FileName))
+            if (previous is not null && !string.IsNullOrEmpty(previous.FileName))
             {
                 TryDeleteFile(PathOf(previous));
             }

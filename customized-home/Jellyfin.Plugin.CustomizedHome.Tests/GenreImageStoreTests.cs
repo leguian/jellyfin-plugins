@@ -124,7 +124,7 @@ public sealed class GenreImageStoreTests : IDisposable
         string[] files = Directory.GetFiles(_root, "*", SearchOption.AllDirectories);
         Assert.All(files, file => Assert.StartsWith(GenresDirectory, file, StringComparison.Ordinal));
         string image = files.Single(file => !file.EndsWith("index.json", StringComparison.Ordinal));
-        Assert.Matches("^[0-9A-F]{32}-portrait\\.png$", Path.GetFileName(image));
+        Assert.Matches("^[0-9A-F]{32}-portrait-[0-9]+\\.png$", Path.GetFileName(image));
         Assert.Equal(Png, store.Read(hostileName, "portrait")!.Value.Data);
     }
 
@@ -180,7 +180,7 @@ public sealed class GenreImageStoreTests : IDisposable
         GenreImageEntry entry = store.Save("Action", shape, Png, out _)!;
 
         Assert.Equal("portrait", entry.Shape);
-        Assert.EndsWith("-portrait.png", entry.FileName, StringComparison.Ordinal);
+        Assert.Matches("-portrait-[0-9]+\\.png$", entry.FileName);
         Assert.NotNull(store.Read("Action", "portrait"));
     }
 
@@ -318,11 +318,31 @@ public sealed class GenreImageStoreTests : IDisposable
 
         GenreImageEntry second = store.Save("Comedy", "portrait", otherPng, out _)!;
 
-        Assert.Equal(first.FileName, second.FileName);
+        Assert.NotEqual(first.FileName, second.FileName);
         Assert.True(second.Version > first.Version);
         Assert.Equal(otherPng, store.Read("Comedy", "portrait")!.Value.Data);
         Assert.Equal([second.FileName], ImageFiles());
         Assert.DoesNotContain(Directory.GetFiles(GenresDirectory), file => file.EndsWith(".tmp", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void A_same_format_replacement_that_cannot_be_recorded_does_not_change_the_image_either()
+    {
+        byte[] otherPng = [.. Png, 0x01, 0x02, 0x03];
+        GenreImageStore store = CreateStore();
+        GenreImageEntry original = store.Save("Comedy", "portrait", Png, out _)!;
+        BlockIndexWrites();
+
+        Assert.ThrowsAny<Exception>(() => store.Save("Comedy", "portrait", otherPng, out _));
+
+        // The version is in the image URL, cached for good: new bytes under the old version would split the clients.
+        foreach (GenreImageStore reader in new[] { store, CreateStore() })
+        {
+            Assert.Equal(Png, reader.Read("Comedy", "portrait")!.Value.Data);
+            Assert.Equal(original.Version, Assert.Single(reader.List()).Version);
+        }
+
+        Assert.Equal([original.FileName], ImageFiles());
     }
 
     [Fact]

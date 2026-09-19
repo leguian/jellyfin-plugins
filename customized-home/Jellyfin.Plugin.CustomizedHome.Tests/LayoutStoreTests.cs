@@ -175,6 +175,34 @@ public sealed class LayoutStoreTests : IDisposable
     }
 
     [Fact]
+    public void A_deletion_that_fails_leaves_the_layout_in_place_for_the_running_instance_too()
+    {
+        LayoutStore store = CreateStore();
+        store.Save(Alice, SampleLayout());
+        Assert.NotNull(store.Get(Alice));
+        bool deleted;
+
+        using (new FileStream(FileOf(Alice), FileMode.Open, FileAccess.Read, FileShare.None))
+        {
+            // Windows refuses to delete an open file, Linux does not mind: only Windows exercises the failure.
+            try
+            {
+                store.Delete(Alice);
+                deleted = true;
+            }
+            catch (IOException)
+            {
+                deleted = false;
+            }
+        }
+
+        // Never "no layout" for the running instance while the file waits for the next restart.
+        Assert.Equal(deleted, !File.Exists(FileOf(Alice)));
+        Assert.Equal(deleted, store.Get(Alice) is null);
+        Assert.Equal(deleted, CreateStore().Get(Alice) is null);
+    }
+
+    [Fact]
     public void A_layout_deleted_then_saved_again_is_back()
     {
         LayoutStore store = CreateStore();
