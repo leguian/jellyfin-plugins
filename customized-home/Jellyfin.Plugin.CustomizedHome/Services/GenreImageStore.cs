@@ -240,7 +240,17 @@ public sealed partial class GenreImageStore
             }
 
             string path = PathOf(entry);
-            return File.Exists(path) ? (File.ReadAllBytes(path), entry.ContentType) : null;
+            if (!File.Exists(path))
+            {
+                return null;
+            }
+
+            // Read through the same seam as the index: a file the index names but that the disk refuses is not
+            // "there is no thumbnail", and the caller has to be able to tell the two apart.
+            using Stream stream = _openRead(path);
+            using MemoryStream memory = new();
+            stream.CopyTo(memory);
+            return (memory.ToArray(), entry.ContentType);
         }
     }
 

@@ -155,7 +155,7 @@ The hero is a carousel of featured media at the top of the home page. It is set 
 | **Skip media already watched** | on / off | on |
 | **Only media with a backdrop image** | on / off | on |
 
-Each slide shows the backdrop, the logo (or the title), year, runtime, rating, community and critic scores, genres and the synopsis, with these actions: **Play** or **Resume** (plus **From the beginning**), **Trailer**, **Favorite**, **Watched**, **More info**. Unticking the last source turns the hero off. Rotation pauses while the pointer or the keyboard focus is on the hero and while the tab is hidden; a pause / play button sits next to the dots; rotation is disabled when the system asks for reduced motion.
+Each slide shows the backdrop, the logo (or the title), year, runtime, rating, community and critic scores, genres and the synopsis, with these actions: **Play** or **Resume** (plus **From the beginning**), **Trailer**, **Favorite**, **Watched**, **More info**. Unticking the last source turns the hero off. Rotation pauses while the pointer or the keyboard focus is on the hero and while the tab is hidden; a pause / play button sits next to the dots, each of which has a hit area of at least 24px; rotation is disabled when the system asks for reduced motion.
 
 The hero needs the administrator option **Offer the sections rendered by this plugin**.
 
@@ -236,7 +236,7 @@ What the plugin stores, all of it on the Jellyfin server, under `plugins/configu
 | Path | Content |
 | --- | --- |
 | `Jellyfin.Plugin.CustomizedHome.xml` | The administrator options and the default layout |
-| `Jellyfin.Plugin.CustomizedHome/users/<user id>.json` | One file per user who saved a layout: section keys, display labels (the label of a Jellyfin "recently added in a library" row is never stored; a row that could only be identified by its title keeps that title), order, visibility, formats, hero settings and chosen genres. No watch history, no media |
+| `Jellyfin.Plugin.CustomizedHome/users/<user id>.json` | One file per user who saved a layout, deleted with that user (and, at server start, for users deleted while the plugin was not running): section keys, display labels (the label of a Jellyfin "recently added in a library" row is never stored; a row that could only be identified by its title keeps that title), order, visibility, formats, hero settings and chosen genres. No watch history, no media |
 | `Jellyfin.Plugin.CustomizedHome/genres/` | The genre thumbnails uploaded by the administrator and their index (`index.json`) |
 
 In the browser, the plugin keeps the collapsed or expanded state of layout folders in `localStorage`. Nothing is sent to any third party: the script only talks to your Jellyfin server. The one outgoing link is the **Trailer** button of the hero when a media has only a remote trailer: it opens that `http(s)` address, taken from the metadata of the media, in a new tab.

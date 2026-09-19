@@ -3,13 +3,17 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Reflection;
+using Jellyfin.Plugin.CustomizedHome.Api;
 using Jellyfin.Plugin.CustomizedHome.Configuration;
 using Jellyfin.Plugin.CustomizedHome.Models;
 using Jellyfin.Plugin.CustomizedHome.Services;
 using MediaBrowser.Common.Configuration;
 using MediaBrowser.Common.Net;
 using MediaBrowser.Controller.Configuration;
+using MediaBrowser.Controller.Library;
 using MediaBrowser.Model.Serialization;
+using Microsoft.AspNetCore.Http;
+using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
@@ -28,6 +32,7 @@ public sealed class PluginDataTests : IDisposable
     private static readonly byte[] Png = [0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A, 0x00, 0x00];
 
     private readonly string _configurations = Path.Combine(Path.GetTempPath(), "ch-tests-" + Guid.NewGuid().ToString("N"));
+    private readonly WebInjectionService _injection = new(NullLogger<WebInjectionService>.Instance);
     private readonly IApplicationPaths _paths;
 
     public PluginDataTests()
@@ -41,6 +46,7 @@ public sealed class PluginDataTests : IDisposable
 
     public void Dispose()
     {
+        _injection.Dispose();
         if (Directory.Exists(_configurations))
         {
             Directory.Delete(_configurations, recursive: true);
@@ -134,6 +140,68 @@ public sealed class PluginDataTests : IDisposable
         }
     }
 
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public void A_default_layout_that_cannot_be_written_is_a_503_and_the_previous_one_still_applies(bool accessDenied)
+    {
+        Exception failure = accessDenied
+            ? new UnauthorizedAccessException("Access to the path is denied.")
+            : new IOException("The process cannot access the file because it is being used by another process.");
+        HomeLayout previous = new() { Items = [new LayoutItem { Key = "jf:resume" }] };
+        Mock<IApplicationPaths> paths = new();
+        paths.SetupGet(p => p.PluginConfigurationsPath).Returns(_configurations);
+        paths.SetupGet(p => p.PluginsPath).Returns(Path.Combine(_configurations, "plugins"));
+        Mock<IXmlSerializer> serializer = new();
+        serializer.Setup(s => s.DeserializeFromFile(It.IsAny<Type>(), It.IsAny<string>())).Returns(new PluginConfiguration { DefaultLayout = previous });
+        Mock<IServerConfigurationManager> serverConfiguration = new();
+        serverConfiguration.Setup(manager => manager.GetConfiguration(It.IsAny<string>())).Returns(new NetworkConfiguration());
+
+        // Saving the configuration writes the XML file through the serializer of the server.
+        serializer.Setup(s => s.SerializeToFile(It.IsAny<object>(), It.IsAny<string>())).Throws(failure);
+        RecordingLoggerWithException controllerLogger = new();
+        try
+        {
+            Plugin plugin = new(paths.Object, serializer.Object, serverConfiguration.Object, new RecordingLogger<Plugin>());
+            Assert.Same(previous, plugin.Configuration.DefaultLayout);
+            CustomizedHomeController controller = NewController(controllerLogger);
+
+            ActionResult<HomeLayout>? result = controller.SaveDefaultLayout(new HomeLayout { Items = [new LayoutItem { Key = "jf:nextup" }] });
+
+            ObjectResult answer = Assert.IsType<ObjectResult>(result.Result);
+            Assert.Equal(StatusCodes.Status503ServiceUnavailable, answer.StatusCode);
+            string message = Assert.IsType<string>(answer.Value);
+            Assert.Contains("could not be written", message, StringComparison.Ordinal);
+            Assert.DoesNotContain(failure.Message, message, StringComparison.Ordinal);
+            (LogLevel Level, Exception? Exception) entry = Assert.Single(controllerLogger.Entries);
+            Assert.Equal(LogLevel.Warning, entry.Level);
+            Assert.Same(failure, entry.Exception);
+
+            // Never applied in memory either: the administrator would see it work until the next restart.
+            Assert.Same(previous, plugin.Configuration.DefaultLayout);
+            Assert.Equal(["jf:resume"], controller.GetDefaultLayout().Value!.Items.Select(item => item.Key));
+
+            // Once the disk lets the file be written the new layout is saved and applies.
+            serializer.Setup(s => s.SerializeToFile(It.IsAny<object>(), It.IsAny<string>()));
+            Assert.Equal(["jf:nextup"], controller.SaveDefaultLayout(new HomeLayout { Items = [new LayoutItem { Key = "jf:nextup" }] }).Value!.Items.Select(item => item.Key));
+            Assert.Equal(["jf:nextup"], plugin.Configuration.DefaultLayout.Items.Select(item => item.Key));
+        }
+        finally
+        {
+            typeof(Plugin).GetProperty(nameof(Plugin.Instance), BindingFlags.Public | BindingFlags.Static)!.SetValue(null, null);
+        }
+    }
+
+    private CustomizedHomeController NewController(ILogger<CustomizedHomeController> logger)
+    {
+        LayoutStore store = new(_paths, NullLogger<LayoutStore>.Instance);
+        GenreImageStore genreImages = new(_paths, NullLogger<GenreImageStore>.Instance);
+        return new CustomizedHomeController(store, genreImages, _injection, Mock.Of<IUserManager>(), Mock.Of<IUserViewManager>(), logger)
+        {
+            ControllerContext = new ControllerContext { HttpContext = new DefaultHttpContext() }
+        };
+    }
+
     private List<string> EveryFile()
     {
         return Directory.Exists(_configurations)
@@ -143,6 +211,31 @@ public sealed class PluginDataTests : IDisposable
 
     private sealed class RecordingLogger<T> : RecordingLogger, ILogger<T>
     {
+    }
+
+    /// <summary>
+    /// Keeps the exception too: what the administrator needs in the server log is the cause, not the message
+    /// the client is shown.
+    /// </summary>
+    private sealed class RecordingLoggerWithException : ILogger<CustomizedHomeController>
+    {
+        public List<(LogLevel Level, Exception? Exception)> Entries { get; } = new();
+
+        public IDisposable? BeginScope<TState>(TState state)
+            where TState : notnull
+        {
+            return null;
+        }
+
+        public bool IsEnabled(LogLevel logLevel)
+        {
+            return true;
+        }
+
+        public void Log<TState>(LogLevel logLevel, EventId eventId, TState state, Exception? exception, Func<TState, Exception?, string> formatter)
+        {
+            Entries.Add((logLevel, exception));
+        }
     }
 
     private class RecordingLogger : ILogger

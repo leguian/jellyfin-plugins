@@ -1,4 +1,5 @@
 import { expect, test } from '@playwright/test';
+import type { Page } from '@playwright/test';
 import { LIGHT_DASHBOARD_STYLE, openAdminPage, recordedRequests, rowTitles, textContrast, type Layout } from './support';
 
 const EDITOR = '#chDefaultEditor';
@@ -172,8 +173,8 @@ test('genres tab shows the optimal sizes and handles one thumbnail per card shap
     expect(upload?.body).toMatchObject({ Name: 'Comedy', Shape: 'landscape', Data: png.toString('base64') });
 
     // Removing one shape leaves the others alone.
-    page.once('dialog', (dialog) => void dialog.accept());
     await landscape.locator('.chGenreRemove').click();
+    await page.locator('.cha-ask .cha-ask-yes').click();
     await expect(landscape.locator('.cha-genre-thumb')).toHaveText('16:9');
     await expect(landscape.locator('.chGenreRemove')).toHaveCount(0);
     await expect(comedy.locator('.cha-slot[data-shape="portrait"] .cha-genre-thumb')).toHaveClass(/cha-has-image/);
@@ -188,3 +189,141 @@ test('genres tab rejects files that are not PNG, JPEG or WebP before sending any
     await expect.poll(async () => (await recordedRequests(page)).some((request) => request.method === 'ALERT')).toBe(true);
     expect((await recordedRequests(page)).some((request) => request.method === 'POST' && request.path === 'CustomizedHome/GenreImages')).toBe(false);
 });
+
+/* ---- questions asked in the page, in place of window.confirm ---- */
+
+/** Records native dialogs and dismisses them: any window.confirm left in the page shows up here. */
+function nativeDialogs(page: Page): string[] {
+    const seen: string[] = [];
+    page.on('dialog', (dialog) => {
+        seen.push(`${dialog.type()}: ${dialog.message()}`);
+        void dialog.dismiss();
+    });
+    return seen;
+}
+
+const ASK = '.cha-ask';
+
+test('clearing the default layout asks in the page, and only clears it once confirmed', async ({ page }) => {
+    const dialogs = nativeDialogs(page);
+    await openAdminPage(page, { defaultLayout: DEFAULT_LAYOUT });
+    await page.click('#chTabLayouts');
+    await page.waitForSelector(`${EDITOR} .ch-list .ch-row`);
+    const question = page.locator(ASK);
+
+    await page.click('#chClearDefault');
+    await expect(question).toHaveAttribute('role', 'alertdialog');
+    await expect(question.locator('.cha-ask-title')).toHaveText('Clear the default layout?');
+    await expect(question.locator('.cha-ask-text')).toContainText('cannot be recovered');
+    await expect(question.locator('.cha-ask-yes')).toHaveText('Clear');
+    // The answer that changes nothing has the focus.
+    await expect(question.locator('.cha-ask-no')).toBeFocused();
+
+    // Cancel changes nothing and hands the focus back to the button that asked.
+    await question.locator('.cha-ask-no').click();
+    await expect(question).toHaveCount(0);
+    expect((await recordedRequests(page)).some((request) => request.method === 'POST' && request.path === 'CustomizedHome/DefaultLayout')).toBe(false);
+    await expect(page.locator('#chClearDefault')).toBeFocused();
+
+    await page.click('#chClearDefault');
+    await question.locator('.cha-ask-yes').click();
+    await expect(question).toHaveCount(0);
+    await expect.poll(async () => (await recordedRequests(page)).filter((request) => request.method === 'POST' && request.path === 'CustomizedHome/DefaultLayout').length).toBe(1);
+    await expect(page.locator('#chDefaultSummary')).toContainText('No default layout yet');
+    expect(dialogs).toEqual([]);
+});
+
+test('a pending question keeps the keyboard: Escape cancels and Tab goes round the two answers only', async ({ page }) => {
+    await openAdminPage(page, { defaultLayout: DEFAULT_LAYOUT });
+    await page.click('#chTabLayouts');
+    await page.waitForSelector(`${EDITOR} .ch-list .ch-row`);
+    const question = page.locator(ASK);
+
+    await page.click('#chClearDefault');
+    await expect(question.locator('.cha-ask-no')).toBeFocused();
+    await page.keyboard.press('Tab');
+    await expect(question.locator('.cha-ask-yes')).toBeFocused();
+    await page.keyboard.press('Tab');
+    await expect(question.locator('.cha-ask-no')).toBeFocused();
+    await page.keyboard.press('Shift+Tab');
+    await expect(question.locator('.cha-ask-yes')).toBeFocused();
+
+    // Escape means "cancel": nothing is sent, and the focus goes back to the button that asked.
+    await page.keyboard.press('Escape');
+    await expect(question).toHaveCount(0);
+    expect((await recordedRequests(page)).some((request) => request.method === 'POST' && request.path === 'CustomizedHome/DefaultLayout')).toBe(false);
+    await expect(page.locator('#chClearDefault')).toBeFocused();
+});
+
+const USER_LAYOUTS = [{ UserId: 'user-2', UserName: 'Alice', SectionCount: 3, ModifiedUtc: '2026-01-05T10:00:00Z' }];
+
+test('resetting a user asks in the page and names the user it is about', async ({ page }) => {
+    const dialogs = nativeDialogs(page);
+    await openAdminPage(page, { defaultLayout: DEFAULT_LAYOUT, userLayouts: USER_LAYOUTS });
+    await page.click('#chTabLayouts');
+    await page.waitForSelector('#chUserLayouts .cha-user');
+    const name = await page.locator('#chUserLayouts .cha-user-name').first().textContent();
+    const question = page.locator(ASK);
+
+    await page.locator('#chUserLayouts .chResetUser').first().click();
+    await expect(question.locator('.cha-ask-title')).toHaveText(`Reset ${name} to the default layout?`);
+    await expect(question.locator('.cha-ask-text')).toContainText('cannot be recovered');
+    await expect(question.locator('.cha-ask-yes')).toHaveText('Reset');
+    await expect(question.locator('.cha-ask-no')).toBeFocused();
+
+    await question.locator('.cha-ask-no').click();
+    expect((await recordedRequests(page)).some((request) => request.method === 'DELETE' && request.path === 'CustomizedHome/Layout')).toBe(false);
+
+    await page.locator('#chUserLayouts .chResetUser').first().click();
+    await question.locator('.cha-ask-yes').click();
+    await expect.poll(async () => (await recordedRequests(page)).filter((request) => request.method === 'DELETE' && request.path === 'CustomizedHome/Layout').length).toBe(1);
+    expect(dialogs).toEqual([]);
+});
+
+test('removing a genre thumbnail asks in the page, naming the genre and the card shape', async ({ page }) => {
+    const dialogs = nativeDialogs(page);
+    await openAdminPage(page, { genreImages: [{ Name: 'Comedy', Shape: 'landscape', Version: 2 }] });
+    await page.click('#chTabGenres');
+    const landscape = page.locator('#chGenres .cha-genre', { hasText: 'Comedy' }).locator('.cha-slot[data-shape="landscape"]');
+    await expect(landscape.locator('.cha-genre-thumb')).toHaveClass(/cha-has-image/);
+    const question = page.locator(ASK);
+
+    await landscape.locator('.chGenreRemove').click();
+    await expect(question).toHaveAttribute('role', 'alertdialog');
+    await expect(question.locator('.cha-ask-title')).toHaveText('Remove this thumbnail?');
+    // The wording names the card shape by its label, not by its internal id.
+    await expect(question.locator('.cha-ask-text')).toContainText('landscape thumbnail of "Comedy"');
+    await expect(question.locator('.cha-ask-yes')).toHaveText('Remove');
+    await expect(question.locator('.cha-ask-no')).toBeFocused();
+
+    await question.locator('.cha-ask-no').click();
+    expect((await recordedRequests(page)).some((request) => request.method === 'DELETE' && request.path === 'CustomizedHome/GenreImages')).toBe(false);
+    await expect(landscape.locator('.cha-genre-thumb')).toHaveClass(/cha-has-image/);
+
+    await landscape.locator('.chGenreRemove').click();
+    await question.locator('.cha-ask-yes').click();
+    await expect(landscape.locator('.cha-genre-thumb')).toHaveText('16:9');
+    expect(dialogs).toEqual([]);
+});
+
+for (const theme of ['light', 'dark'] as const) {
+    test(`the question is opaque and readable on a ${theme} dashboard`, async ({ page }) => {
+        await openAdminPage(page, { defaultLayout: DEFAULT_LAYOUT });
+        if (theme === 'light') {
+            await page.addStyleTag({ content: LIGHT_DASHBOARD_STYLE });
+        }
+        await page.click('#chTabLayouts');
+        await page.waitForSelector(`${EDITOR} .ch-list .ch-row`);
+        await page.click('#chClearDefault');
+        const question = page.locator(ASK);
+
+        // Opaque: the page must not show through the card of a question.
+        const background = await question.evaluate((node) => getComputedStyle(node).backgroundColor);
+        expect(background, `${theme} dashboard`).toBe(await page.evaluate(() => getComputedStyle(document.body).backgroundColor));
+
+        for (const selector of ['.cha-ask-title', '.cha-ask-text', '.cha-ask-no', '.cha-ask-yes']) {
+            const ratio = await textContrast(question.locator(selector));
+            expect(ratio, `${selector} on a ${theme} dashboard`).toBeGreaterThanOrEqual(MIN_CONTRAST);
+        }
+    });
+}

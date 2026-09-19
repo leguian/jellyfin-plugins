@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using Jellyfin.Plugin.CustomizedHome.Models;
@@ -256,6 +257,87 @@ public sealed class LayoutStoreTests : IDisposable
         Assert.True(File.Exists(FileOf(Alice)));
         Assert.Equal(2, store.List().Count);
         Assert.Throws<ArgumentNullException>(() => store.List(null!));
+    }
+
+    [Fact]
+    public void The_purge_deletes_the_layouts_of_users_that_no_longer_exist_and_only_those()
+    {
+        LayoutStore store = CreateStore();
+        store.Save(Alice, SampleLayout());
+        store.Save(Bob, SampleLayout());
+
+        // Not named after a user identifier: not written by this store, never deleted.
+        WriteFile("notes.json", "{ \"Items\": [] }");
+        WriteFile("readme.txt", "hello");
+
+        // Only a hand written file is named after the empty identifier; the user manager throws when asked about it.
+        WriteFile(Guid.Empty.ToString("N") + ".json", "{ \"Items\": [] }");
+        List<Guid> asked = new();
+
+        int deleted = store.PurgeOrphans(userId =>
+        {
+            asked.Add(userId);
+            return userId == Bob;
+        });
+
+        Assert.Equal(1, deleted);
+        Assert.Equal([Alice, Bob], asked.Order());
+        Assert.False(File.Exists(FileOf(Alice)));
+        Assert.Equal(
+            [Guid.Empty.ToString("N") + ".json", Bob.ToString("N") + ".json", "notes.json", "readme.txt"],
+            Directory.GetFiles(UsersDirectory).Select(file => Path.GetFileName(file)).Order(StringComparer.Ordinal));
+
+        // Forgotten by the running instance too, not only removed from disk.
+        Assert.Null(store.Get(Alice));
+        Assert.NotNull(store.Get(Bob));
+        Assert.Equal([Guid.Empty, Bob], store.List().Select(info => info.UserId).Order());
+
+        Assert.Throws<ArgumentNullException>(() => store.PurgeOrphans(null!));
+    }
+
+    [Fact]
+    public void A_purge_over_a_folder_that_is_not_there_deletes_nothing_and_does_not_throw()
+    {
+        LayoutStore store = CreateStore();
+
+        Assert.Equal(0, store.PurgeOrphans(_ => false));
+
+        store.Save(Alice, SampleLayout());
+        Directory.Delete(UsersDirectory, recursive: true);
+        Assert.Equal(0, store.PurgeOrphans(_ => false));
+    }
+
+    [Fact]
+    public void A_purge_keeps_the_file_of_a_user_the_server_could_not_be_asked_about()
+    {
+        LayoutStore store = CreateStore();
+        store.Save(Alice, SampleLayout());
+        store.Save(Bob, SampleLayout());
+
+        // What IUserManager.GetUserById throws when the database is not reachable.
+        int deleted = store.PurgeOrphans(userId => userId == Alice ? throw new InvalidOperationException("no database") : false);
+
+        Assert.Equal(1, deleted);
+        Assert.True(File.Exists(FileOf(Alice)));
+        Assert.False(File.Exists(FileOf(Bob)));
+    }
+
+    [Fact]
+    public void A_purge_that_cannot_delete_a_file_keeps_it_and_goes_on_with_the_others()
+    {
+        LayoutStore store = CreateStore();
+        store.Save(Alice, SampleLayout());
+        store.Save(Bob, SampleLayout());
+        int deleted;
+
+        using (new FileStream(FileOf(Alice), FileMode.Open, FileAccess.Read, FileShare.None))
+        {
+            // Windows refuses to delete an open file, Linux does not mind: either way the purge does not throw.
+            deleted = store.PurgeOrphans(_ => false);
+        }
+
+        Assert.False(File.Exists(FileOf(Bob)));
+        Assert.Equal(File.Exists(FileOf(Alice)) ? 1 : 2, deleted);
     }
 
     [Fact]

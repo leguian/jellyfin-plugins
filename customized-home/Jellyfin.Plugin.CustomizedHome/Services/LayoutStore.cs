@@ -231,6 +231,74 @@ public sealed partial class LayoutStore
         return result;
     }
 
+    /// <summary>
+    /// Deletes the layout files whose user no longer exists. The layout of a deleted user is removed when the
+    /// server announces the deletion, but a user deleted before that was written, or while the plugin was not
+    /// running, leaves a file holding their section labels that nothing lists and nobody can reset any more.
+    /// Never throws: a file that cannot be deleted stays where it is and is tried again at the next start.
+    /// </summary>
+    /// <param name="userExists">Tells whether a user identifier is one of a current user.</param>
+    /// <returns>The number of deleted files.</returns>
+    public int PurgeOrphans(Func<Guid, bool> userExists)
+    {
+        ArgumentNullException.ThrowIfNull(userExists);
+
+        string[] files;
+        try
+        {
+            files = Directory.GetFiles(_directory, "*.json");
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            // DirectoryNotFoundException included: nothing was saved yet, or the folder went away meanwhile.
+            return 0;
+        }
+
+        int deleted = 0;
+        foreach (string file in files)
+        {
+            // Anything that is not named after a user identifier was not written by this store: left alone.
+            string name = Path.GetFileNameWithoutExtension(file);
+            if (!Guid.TryParse(name, out Guid userId) || userId == Guid.Empty)
+            {
+                continue;
+            }
+
+            bool exists;
+            try
+            {
+                // The store is not locked while the caller is asked about a user: that question may reach the
+                // database, and whatever it throws must not stop the server from starting.
+                exists = userExists(userId);
+            }
+#pragma warning disable CA1031 // The user manager decides what it throws: an unanswered question keeps the file.
+            catch (Exception ex)
+#pragma warning restore CA1031
+            {
+                LogOrphanNotChecked(userId, ex);
+                continue;
+            }
+
+            if (exists)
+            {
+                continue;
+            }
+
+            try
+            {
+                Delete(userId);
+                deleted++;
+                LogOrphanDeleted(userId);
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+            {
+                LogOrphanNotDeleted(userId, ex);
+            }
+        }
+
+        return deleted;
+    }
+
     private string GetPath(Guid userId)
     {
         return Path.Combine(_directory, userId.ToString("N", CultureInfo.InvariantCulture) + ".json");
@@ -241,6 +309,15 @@ public sealed partial class LayoutStore
 
     [LoggerMessage(Level = LogLevel.Warning, Message = "Customized Home: layout file {Path} holds no valid layout, ignoring it: {Error}")]
     private partial void LogInvalidLayout(string path, string? error);
+
+    [LoggerMessage(Level = LogLevel.Information, Message = "Customized Home: deleted the home layout left behind by the deleted user {UserId}")]
+    private partial void LogOrphanDeleted(Guid userId);
+
+    [LoggerMessage(Level = LogLevel.Warning, Message = "Customized Home: could not delete the home layout left behind by the deleted user {UserId}, it is kept and tried again at the next start")]
+    private partial void LogOrphanNotDeleted(Guid userId, Exception exception);
+
+    [LoggerMessage(Level = LogLevel.Warning, Message = "Customized Home: could not tell whether user {UserId} still exists, their layout file is kept")]
+    private partial void LogOrphanNotChecked(Guid userId, Exception exception);
 }
 
 /// <summary>

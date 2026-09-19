@@ -536,3 +536,95 @@ test('the header gets its background back on the Favorites tab, and lets the her
     expect(box.top).toBeCloseTo(0, 0);
     expect(box.left).toBeCloseTo(0, 0);
 });
+
+// WCAG 2.2 "Target Size (Minimum)" (2.5.8): 24 CSS pixels in both directions, and hit areas that do not overlap.
+const MIN_TARGET_PX = 24;
+
+/**
+ * The real hit box of each dot, probed with elementFromPoint: the box that receives a click, whether it comes from
+ * the button itself or from an overlay it paints. Measuring a pseudo-element with getComputedStyle does not work,
+ * it answers for a pseudo-element that was never generated.
+ */
+async function dotHitBoxes(page: import('@playwright/test').Page): Promise<{ width: number; height: number; left: number; right: number; painted: { width: number; height: number } }[]> {
+    return page.locator('.ch-hero-dot').evaluateAll((nodes) => nodes.map((node) => {
+        const painted = node.getBoundingClientRect();
+        const centreX = painted.left + painted.width / 2;
+        const centreY = painted.top + painted.height / 2;
+        const hits = (x: number, y: number): boolean => {
+            const target = document.elementFromPoint(x, y);
+            return target === node || (target instanceof Element && target.closest('.ch-hero-dot') === node);
+        };
+        // Distance from the centre to the edge of the hit area, narrowed down to a hundredth of a pixel: a coarser
+        // walk would under-report the box by up to one step per side and turn an exact 24px into a failure.
+        const reach = (dx: number, dy: number): number => {
+            let inside = 0;
+            let outside = 60;
+            if (hits(centreX + dx * outside, centreY + dy * outside)) {
+                return outside;
+            }
+            while (outside - inside > 0.01) {
+                const middle = (inside + outside) / 2;
+                if (hits(centreX + dx * middle, centreY + dy * middle)) {
+                    inside = middle;
+                } else {
+                    outside = middle;
+                }
+            }
+            return outside;
+        };
+        const left = reach(-1, 0);
+        const right = reach(1, 0);
+        const height = reach(0, -1) + reach(0, 1);
+        return {
+            width: left + right,
+            height,
+            left: centreX - left,
+            right: centreX + right,
+            painted: { width: painted.width, height: painted.height }
+        };
+    }));
+}
+
+test('hero dots are hit targets of at least 24px that only touch, with the painted dots unchanged', async ({ page }) => {
+    await openHome(page, { layout: layout(hero({ IntervalSeconds: 5 })), enableIntegratedSections: true, heroItems: HERO_ITEMS });
+    await expect(page.locator('.ch-hero-dot')).toHaveCount(3);
+    const boxes = await dotHitBoxes(page);
+
+    for (const [index, box] of boxes.entries()) {
+        expect(box.width, `dot ${index} hit width`).toBeGreaterThanOrEqual(MIN_TARGET_PX);
+        expect(box.height, `dot ${index} hit height`).toBeGreaterThanOrEqual(MIN_TARGET_PX);
+    }
+    // The hit areas touch without overlapping: no dot steals a click from its neighbour.
+    for (let index = 1; index < boxes.length; index++) {
+        const previous = boxes[index - 1];
+        const current = boxes[index];
+        if (!previous || !current) {
+            throw new Error('missing dot box');
+        }
+        expect(current.left, `dot ${index} against dot ${index - 1}`).toBeGreaterThanOrEqual(previous.right - 1);
+    }
+
+    // The dots still look the same: 0.6em painted, and 1.6em once active.
+    const em = await page.locator('.ch-hero-dot').nth(1).evaluate((node) => parseFloat(getComputedStyle(node).fontSize));
+    const inactive = boxes[1];
+    const active = boxes[0];
+    if (!inactive || !active) {
+        throw new Error('missing dot box');
+    }
+    expect(inactive.painted.width).toBeCloseTo(0.6 * em, 1);
+    expect(inactive.painted.height).toBeCloseTo(0.6 * em, 1);
+    await expect(page.locator('.ch-hero-dot').first()).toHaveClass(/ch-active/);
+    expect(active.painted.width).toBeCloseTo(1.6 * em, 1);
+});
+
+test('a click lands on the dot whose hit area it falls in, including on the transparent part', async ({ page }) => {
+    await openHome(page, { layout: layout(hero({ IntervalSeconds: 5 })), enableIntegratedSections: true, heroItems: HERO_ITEMS });
+    const third = page.locator('.ch-hero-dot').nth(2);
+    const box = await third.boundingBox();
+    if (!box) {
+        throw new Error('no dot box');
+    }
+    // Just outside the painted dot, inside the 24px hit area: the overlay must take the click.
+    await page.mouse.click(box.x + box.width / 2, box.y + box.height / 2 + (MIN_TARGET_PX / 2 - 2));
+    await expect(third).toHaveClass(/ch-active/);
+});

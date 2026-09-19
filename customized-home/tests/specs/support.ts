@@ -111,6 +111,8 @@ export interface MockOptions {
     canCustomize?: boolean;
     enableIntegratedSections?: boolean;
     genreImages?: { Name: string; Shape?: 'portrait' | 'landscape' | 'square'; Version: number }[];
+    /** Users that saved a layout, as the administration page lists them. */
+    userLayouts?: { UserId: string; UserName: string; SectionCount: number; ModifiedUtc: string }[];
     heroItems?: Partial<Record<HeroSource, HeroItem[]>>;
     /** Replaces the three default genres. */
     genres?: { Id: string; Name: string; Type: string }[];
@@ -183,6 +185,7 @@ function mockState(options: MockOptions): Record<string, unknown> {
         catalog: CATALOG,
         genres: options.genres ?? GENRES,
         genreImages: options.genreImages ?? [],
+        userLayouts: options.userLayouts ?? [],
         heroItems: options.heroItems ?? {},
         defaultLayout: options.defaultLayout ?? EMPTY_LAYOUT,
         // The administration page reads the default layout summary from the plugin configuration.

@@ -13,7 +13,7 @@
         return;
     }
 
-    const VERSION = '1.8.4';
+    const VERSION = '1.8.4.1';
     const API = 'CustomizedHome';
     const ORDER_STEP = 1000;
     const ORDER_UNLISTED_BASE = 1000000000;

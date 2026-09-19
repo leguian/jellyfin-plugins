@@ -20,6 +20,9 @@ public class PluginServiceRegistrator : IPluginServiceRegistrator
         serviceCollection.AddSingleton<WebInjectionService>();
         serviceCollection.AddHostedService(provider => provider.GetRequiredService<WebInjectionService>());
 
+        // Runs once per server start: removes the layouts of users deleted while the plugin was not running.
+        serviceCollection.AddHostedService<OrphanLayoutCleanupService>();
+
         // Resolved by the event manager of the server each time a user is deleted.
         serviceCollection.AddScoped<IEventConsumer<UserDeletedEventArgs>, UserDeletedConsumer>();
     }

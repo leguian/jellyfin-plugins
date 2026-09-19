@@ -1570,7 +1570,9 @@ html.ch-hero-shown .skinHeader {
     z-index: 2;
     display: flex;
     align-items: center;
-    gap: 0.45em;
+    /* The dots carry their own transparent padding to reach the 24px minimum hit area (WCAG 2.5.8), so the gap
+       between two boxes is 0: any gap would push the hit areas apart and widen the painted spacing further. */
+    gap: 0;
 }
 
 /* Stops and resumes the rotation: large enough for a finger (28px at the default font size). */
@@ -1601,9 +1603,17 @@ html.ch-hero-shown .skinHeader {
     font-size: 1.15em;
 }
 
+/* The dot keeps its painted size; an ::after overlay centred on it extends the clickable and hittable box to the
+   24px minimum (WCAG 2.5.8) without an outer padding, which border-radius would have squared off. The dots box has
+   gap: 0, so two overlays only touch: at the old 0.45em gap they would have overlapped by the same 0.45em. */
 .ch-hero-dot {
+    position: relative;
+    box-sizing: content-box;
     width: 0.6em;
     height: 0.6em;
+    /* Half of the old 0.45em gap on each side, grown to whatever reaches 24px with the painted dot in the middle. */
+    margin: 0 0.225em;
+    margin: 0 max(0.225em, (24px - 0.6em) / 2);
     padding: 0;
     border: 0;
     border-radius: 50%;
@@ -1612,10 +1622,27 @@ html.ch-hero-shown .skinHeader {
     transition: background 0.15s ease, width 0.2s ease;
 }
 
+/* The overlay is what the pointer hits: at least 24px around the centre of the dot, in both directions. */
+.ch-hero-dot::after {
+    content: "";
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    width: 24px;
+    height: 24px;
+    transform: translate(-50%, -50%);
+}
+
 .ch-hero-dot.ch-active {
     width: 1.6em;
     border-radius: 0.3em;
     background: #fff;
+}
+
+/* The active dot is already wider than 24px: the overlay must not shrink its hit area. */
+.ch-hero-dot.ch-active::after {
+    width: 100%;
+    min-width: 24px;
 }
 
 @media (max-width: 50em) {
