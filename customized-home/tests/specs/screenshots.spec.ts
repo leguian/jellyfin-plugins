@@ -52,6 +52,14 @@ test('user editor', async ({ page }) => {
     await page.fill('.ch-overlay .ch-search', 'continue');
     await page.locator('.ch-overlay .ch-list .ch-row').first().hover();
     await page.screenshot({ path: `${OUTPUT_DIR}/editor-search.png` });
+    // Unsaved changes: the question takes the place of the footer.
+    await page.fill('.ch-overlay .ch-search', '');
+    await page.locator('.ch-overlay .ch-list .ch-row').first().locator('.ch-handle').focus();
+    await page.keyboard.press('ArrowDown');
+    await page.screenshot({ path: `${OUTPUT_DIR}/editor-keyboard-move.png` });
+    await page.keyboard.press('Escape');
+    await page.locator('.ch-overlay .ch-confirm').waitFor();
+    await page.screenshot({ path: `${OUTPUT_DIR}/editor-unsaved-changes.png` });
 });
 
 test('administration page', async ({ page }) => {

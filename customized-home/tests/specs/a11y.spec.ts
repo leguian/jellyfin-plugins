@@ -1,5 +1,5 @@
 import { expect, test, type Page } from '@playwright/test';
-import { openHome, recordedRequests, rowTitles, type FolderLayout, type Layout, type LayoutFolder, type LayoutSection } from './support';
+import { openAdminPage, openHome, recordedRequests, rowTitles, type FolderLayout, type Layout, type LayoutFolder, type LayoutSection } from './support';
 
 // The editor without a pointer: these specs only use the keyboard once the home page is loaded.
 
@@ -226,4 +226,258 @@ test('pointer: the click that ends a drag does not open the move menu, a plain c
 
     await handle.click();
     await expect(page.locator('.ch-popup .ch-move-up')).toBeVisible();
+});
+
+/* ---- the modal: name, focus, Escape, menus, questions ---- */
+
+/** The editor never falls back on the dialogs of the browser: the ones that show up are listed. */
+function nativeDialogs(page: Page): string[] {
+    const seen: string[] = [];
+    page.on('dialog', (dialog) => {
+        seen.push(`${dialog.type()}: ${dialog.message()}`);
+        void dialog.dismiss();
+    });
+    return seen;
+}
+
+async function layoutPosts(page: Page): Promise<number> {
+    return (await recordedRequests(page)).filter((request) => request.method !== 'GET' && request.path === 'CustomizedHome/Layout').length;
+}
+
+test('modal: the dialog is named by its title, and Tab never leaves it in either direction', async ({ page }) => {
+    await openHome(page, { layout: LAYOUT });
+    await openEditorWithKeyboard(page);
+    const dialog = page.locator('.ch-overlay .ch-dialog');
+    await expect(dialog).toHaveAttribute('role', 'dialog');
+    await expect(dialog).toHaveAttribute('aria-modal', 'true');
+    const titleId = await dialog.getAttribute('aria-labelledby');
+    expect(titleId).toBeTruthy();
+    await expect(page.locator(`#${titleId}`)).toHaveText('Customize the home screen');
+
+    // Backwards from the dialog itself: the last control, not the page behind the overlay.
+    await page.keyboard.press('Shift+Tab');
+    expect(await focusInfo(page)).toMatchObject({ inOverlay: true, tag: 'BUTTON' });
+    expect((await focusInfo(page)).classes).toContain('ch-save');
+    // Forwards from the last control: the first one.
+    await page.keyboard.press('Tab');
+    expect((await focusInfo(page)).classes).toContain('ch-close');
+    await page.keyboard.press('Shift+Tab');
+    expect((await focusInfo(page)).classes).toContain('ch-save');
+    for (let i = 0; i < 40; i++) {
+        await page.keyboard.press('Tab');
+        expect((await focusInfo(page)).inOverlay).toBe(true);
+    }
+});
+
+test('modal: a row action keeps the focus on the same button, Escape still closes, and the opener gets the focus back', async ({ page }) => {
+    await openHome(page, { layout: LAYOUT });
+    await openEditorWithKeyboard(page);
+
+    await tabTo(page, 'ch-act-visibility', 'Continue Watching');
+    await page.keyboard.press('Enter');
+    await expect(page.locator(`${LIST} .ch-row`, { hasText: 'Continue Watching' })).toHaveClass(/ch-row-hidden/);
+    expect(await focusInfo(page)).toMatchObject({ row: 'Continue Watching', tag: 'BUTTON' });
+    expect((await focusInfo(page)).classes).toContain('ch-act-visibility');
+    // Shown again: nothing left to lose, Escape closes at once even though every row was rebuilt twice.
+    await page.keyboard.press('Enter');
+    await expect(page.locator(`${LIST} .ch-row-hidden`)).toHaveCount(0);
+    // Even with the focus on the body (a click on the page zoom, a screen reader moving its own cursor...).
+    await page.evaluate(() => (document.activeElement as HTMLElement | null)?.blur());
+    expect((await focusInfo(page)).tag).toBe('BODY');
+    await page.keyboard.press('Escape');
+    await expect(page.locator('.ch-overlay')).toHaveCount(0);
+    await expect(page.locator('.ch-customize-button')).toBeFocused();
+});
+
+test('modal: removing and adding rows hands the focus to the row that takes their place', async ({ page }) => {
+    await openHome(page, { layout: LAYOUT });
+    await openEditorWithKeyboard(page);
+
+    await tabTo(page, 'ch-act-remove', 'My Media');
+    await page.keyboard.press('Enter');
+    expect(await rowTitles(page, LIST)).toEqual(['Continue Watching', 'Next Up']);
+    expect(await focusInfo(page)).toMatchObject({ row: 'Continue Watching', inOverlay: true });
+    expect((await focusInfo(page)).classes).toContain('ch-act-remove');
+
+    await page.keyboard.press('Enter');
+    await page.keyboard.press('Enter');
+    // Nothing left on the left: the focus follows the last removed section to the right column.
+    expect(await rowTitles(page, LIST)).toEqual([]);
+    expect(await focusInfo(page)).toMatchObject({ row: 'Next Up', inOverlay: true });
+    expect((await focusInfo(page)).classes).toContain('ch-act-add');
+
+    await page.keyboard.press('Enter');
+    expect(await rowTitles(page, LIST)).toEqual(['Next Up']);
+    expect((await focusInfo(page)).classes).toContain('ch-act-add');
+    expect((await focusInfo(page)).inOverlay).toBe(true);
+});
+
+test('menus: inside the dialog, role menu, first entry focused, arrow keys, focus back on the button that opened them', async ({ page }) => {
+    await openHome(page, { layout: FOLDER_LAYOUT, enableIntegratedSections: true });
+    await openEditorWithKeyboard(page);
+    const menu = page.locator('.ch-overlay .ch-dialog .ch-popup');
+
+    // Hero settings.
+    await tabTo(page, 'ch-hero-settings', '');
+    const heroButton = page.locator('.ch-overlay .ch-hero-settings');
+    await expect(heroButton).toHaveAttribute('aria-haspopup', 'menu');
+    await page.keyboard.press('Enter');
+    await expect(menu).toHaveAttribute('role', 'menu');
+    await expect(menu).toHaveAttribute('aria-label', 'Hero settings');
+    await expect(heroButton).toHaveAttribute('aria-expanded', 'true');
+    await expect(menu.locator('.ch-hero-source').first()).toBeFocused();
+    // Toggling a source rebuilds the hero row under the menu: it still says which button the menu belongs to.
+    await page.keyboard.press('Enter');
+    await expect(menu.locator('.ch-hero-source').first()).toBeFocused();
+    await expect(heroButton).toHaveAttribute('aria-expanded', 'true');
+    await page.keyboard.press('Escape');
+    await expect(menu).toHaveCount(0);
+    await expect(heroButton).toBeFocused();
+    await expect(heroButton).toHaveAttribute('aria-expanded', 'false');
+
+    // Format menu of a section.
+    await tabTo(page, 'ch-act-menu', 'My Media');
+    await page.keyboard.press('Enter');
+    await expect(menu).toHaveAttribute('role', 'menu');
+    await expect(menu.locator('button').first()).toBeFocused();
+    await page.keyboard.press('ArrowDown');
+    await expect(menu.locator('button').nth(1)).toBeFocused();
+    await page.keyboard.press('End');
+    await expect(menu.locator('button').last()).toBeFocused();
+    await page.keyboard.press('ArrowDown');
+    await expect(menu.locator('button').first()).toBeFocused();
+    // Tab stays in the menu as well.
+    await page.keyboard.press('Shift+Tab');
+    await expect(menu.locator('button').last()).toBeFocused();
+    await page.keyboard.press('Home');
+    await page.keyboard.press('ArrowDown');
+    await page.keyboard.press('Enter');
+    await expect(page.locator(`${LIST} .ch-row`, { hasText: 'My Media' }).locator('.ch-row-format')).toHaveText('Poster');
+    await page.keyboard.press('Escape');
+    await expect(menu).toHaveCount(0);
+    await expect(page.locator('.ch-overlay')).toHaveCount(1);
+    expect(await focusInfo(page)).toMatchObject({ row: 'My Media', inOverlay: true });
+    expect((await focusInfo(page)).classes).toContain('ch-act-menu');
+
+    // Icon picker of a folder: choosing an icon closes it.
+    await tabTo(page, 'ch-act-icon', 'Series');
+    await page.keyboard.press('Enter');
+    await expect(menu).toHaveAttribute('role', 'menu');
+    await expect(menu.locator('[role="menuitemradio"]').first()).toBeFocused();
+    await page.keyboard.press('ArrowRight');
+    await page.keyboard.press('ArrowRight');
+    await page.keyboard.press('Enter');
+    await expect(menu).toHaveCount(0);
+    expect(await focusInfo(page)).toMatchObject({ row: 'Series', inOverlay: true });
+    expect((await focusInfo(page)).classes).toContain('ch-act-icon');
+    await expect(page.locator(`${LIST} .ch-row-folder .ch-act-icon .material-icons`)).toHaveText('movie');
+});
+
+test('unsaved changes: Escape, the close button, Cancel and the backdrop ask inside the page before dropping them', async ({ page }) => {
+    const dialogs = nativeDialogs(page);
+    await openHome(page, { layout: LAYOUT });
+    await openEditorWithKeyboard(page);
+    await tabTo(page, 'ch-act-visibility', 'Next Up');
+    await page.keyboard.press('Enter');
+
+    const question = page.locator('.ch-overlay .ch-dialog .ch-confirm');
+    await page.keyboard.press('Escape');
+    await expect(question).toHaveAttribute('role', 'alertdialog');
+    await expect(question.locator('.ch-confirm-text')).toHaveText('Discard the changes you made to the layout?');
+    await expect(question.locator('.ch-confirm-no')).toBeFocused();
+    await expect(page.locator('.ch-overlay .ch-dialog-footer')).toBeHidden();
+    // Tab goes round the two answers only.
+    await page.keyboard.press('Tab');
+    await expect(question.locator('.ch-confirm-yes')).toBeFocused();
+    await page.keyboard.press('Tab');
+    await expect(question.locator('.ch-confirm-no')).toBeFocused();
+    // Escape means "keep editing": the editor stays, the focus goes back where it was.
+    await page.keyboard.press('Escape');
+    await expect(question).toHaveCount(0);
+    await expect(page.locator('.ch-overlay')).toHaveCount(1);
+    expect(await focusInfo(page)).toMatchObject({ row: 'Next Up', inOverlay: true });
+
+    await page.locator('.ch-overlay .ch-close').click();
+    await expect(question).toBeVisible();
+    await question.locator('.ch-confirm-no').click();
+    await expect(page.locator('.ch-overlay .ch-dialog-footer')).toBeVisible();
+
+    await page.locator('.ch-overlay .ch-cancel').click();
+    await expect(question).toBeVisible();
+    await question.locator('.ch-confirm-no').click();
+
+    await page.locator('.ch-overlay').click({ position: { x: 5, y: 5 } });
+    await expect(question).toBeVisible();
+    await question.locator('.ch-confirm-yes').click();
+    await expect(page.locator('.ch-overlay')).toHaveCount(0);
+    await expect(page.locator('.ch-customize-button')).toBeFocused();
+    expect(await layoutPosts(page)).toBe(0);
+
+    // Nothing was kept: the section is visible again in a new editor, which closes without a question.
+    await openEditorWithKeyboard(page);
+    await expect(page.locator(`${LIST} .ch-row-hidden`)).toHaveCount(0);
+    await page.locator('.ch-overlay').click({ position: { x: 5, y: 5 } });
+    await expect(page.locator('.ch-overlay')).toHaveCount(0);
+    expect(dialogs).toEqual([]);
+});
+
+test('reset asks inside the page, and only deletes the layout once confirmed', async ({ page }) => {
+    const dialogs = nativeDialogs(page);
+    await openHome(page, { layout: LAYOUT });
+    await openEditorWithKeyboard(page);
+    const question = page.locator('.ch-overlay .ch-confirm');
+
+    await page.locator('.ch-overlay .ch-reset').click();
+    await expect(question.locator('.ch-confirm-text')).toHaveText('Remove your custom layout and go back to the default one?');
+    await question.locator('.ch-confirm-no').click();
+    expect(await layoutPosts(page)).toBe(0);
+    await expect(page.locator('.ch-overlay')).toHaveCount(1);
+
+    await page.locator('.ch-overlay .ch-reset').click();
+    await question.locator('.ch-confirm-yes').click();
+    await expect(page.locator('.ch-overlay')).toHaveCount(0);
+    const deleted = (await recordedRequests(page)).filter((request) => request.method === 'DELETE' && request.path === 'CustomizedHome/Layout');
+    expect(deleted).toHaveLength(1);
+    expect(dialogs).toEqual([]);
+});
+
+test('messages are a status region, announced inside the dialog while it is open', async ({ page }) => {
+    await openHome(page, { layout: LAYOUT, failures: { 'POST CustomizedHome/Layout': 1 } });
+    await openEditorWithKeyboard(page);
+    const save = page.locator('.ch-dialog-footer .ch-save');
+
+    await save.click();
+    const failure = page.locator('.ch-overlay .ch-dialog .ch-toast');
+    await expect(failure).toHaveText('Could not save the layout');
+    await expect(failure).toHaveAttribute('role', 'status');
+
+    await save.click();
+    await expect(page.locator('.ch-overlay')).toHaveCount(0);
+    // The dialog is gone, the message is not.
+    await expect(page.locator('body > .ch-toast')).toHaveText('Home layout saved');
+    await expect(page.locator('body > .ch-toast')).toBeVisible();
+});
+
+test('embedded editor: a named group of the administration page, not a modal, and Cancel asks before reverting', async ({ page }) => {
+    const dialogs = nativeDialogs(page);
+    await openAdminPage(page, { defaultLayout: LAYOUT });
+    await page.click('#chTabLayouts');
+    await page.waitForSelector('#chDefaultEditor .ch-list .ch-row');
+    const dialog = page.locator('#chDefaultEditor .ch-dialog');
+    await expect(dialog).toHaveAttribute('role', 'group');
+    await expect(dialog).not.toHaveAttribute('aria-modal', /.*/);
+    await expect(page.locator(`#${await dialog.getAttribute('aria-labelledby')}`)).toHaveText('Default home layout (all users)');
+
+    // Not a modal: Tab is free to leave it.
+    await page.locator('#chDefaultEditor .ch-dialog-footer .ch-save').focus();
+    await page.keyboard.press('Tab');
+    expect(await page.evaluate(() => !!document.activeElement?.closest('#chDefaultEditor'))).toBe(false);
+
+    await page.locator('#chDefaultEditor .ch-row', { hasText: 'Next Up' }).locator('.ch-act-remove').click();
+    await page.locator('#chDefaultEditor .ch-cancel').click();
+    await expect(page.locator('#chDefaultEditor .ch-confirm')).toBeVisible();
+    await page.locator('#chDefaultEditor .ch-confirm-yes').click();
+    await expect(page.locator('#chDefaultEditor .ch-confirm')).toHaveCount(0);
+    await expect(page.locator('#chDefaultEditor .ch-list .ch-row')).toHaveCount(3);
+    expect(dialogs).toEqual([]);
 });

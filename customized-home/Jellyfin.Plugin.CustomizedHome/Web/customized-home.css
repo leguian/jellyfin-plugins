@@ -220,6 +220,33 @@
     flex-wrap: wrap;
 }
 
+/* A question asked in place of the footer (unsaved changes, reset): the rest of the dialog waits for the answer. */
+.ch-confirm {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 0.6em;
+    padding: 0.8em 1.1em;
+    border-top: 1px solid rgba(128, 128, 128, 0.16);
+    border-top: 1px solid color-mix(in srgb, currentColor 8%, transparent);
+}
+
+.ch-confirm-text {
+    flex: 1 1 14em;
+    margin: 0;
+}
+
+.ch-confirming .ch-dialog-footer {
+    display: none;
+}
+
+.ch-confirming .ch-dialog-header,
+.ch-confirming .ch-dialog-body {
+    opacity: 0.45;
+    pointer-events: none;
+}
+
 .ch-toolbar {
     display: flex;
     flex-wrap: wrap;

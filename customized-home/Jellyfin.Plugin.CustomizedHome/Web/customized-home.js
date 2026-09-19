@@ -45,6 +45,9 @@
             cancel: 'Cancel',
             reset: 'Reset',
             resetConfirm: 'Remove your custom layout and go back to the default one?',
+            discardConfirm: 'Discard the changes you made to the layout?',
+            discard: 'Discard',
+            keepEditing: 'Keep editing',
             saved: 'Home layout saved',
             saveError: 'Could not save the layout',
             loadError: 'Could not load the layout',
@@ -180,6 +183,9 @@
             cancel: 'Annuler',
             reset: 'Réinitialiser',
             resetConfirm: 'Supprimer votre disposition personnalisée et revenir à celle par défaut ?',
+            discardConfirm: 'Abandonner les modifications apportées à la disposition ?',
+            discard: 'Abandonner',
+            keepEditing: 'Continuer la modification',
             saved: 'Disposition enregistrée',
             saveError: "Impossible d'enregistrer la disposition",
             loadError: 'Impossible de charger la disposition',
@@ -476,11 +482,22 @@
     }
 
     let toastTimer = null;
+
+    // A modal editor declares everything outside its dialog inert (aria-modal): a message shown meanwhile lives
+    // inside the dialog, or a screen reader would never announce "could not save".
+    function toastHost() {
+        return editor && !editor.embedded && editor.dialog.isConnected ? editor.dialog : document.body;
+    }
+
     function toast(message) {
         let node = document.querySelector('.ch-toast');
         if (!node) {
             node = el('div', 'ch-toast');
-            document.body.appendChild(node);
+            node.setAttribute('role', 'status');
+            node.setAttribute('aria-live', 'polite');
+        }
+        if (node.parentNode !== toastHost()) {
+            toastHost().appendChild(node);
         }
         node.textContent = message;
         node.classList.add('ch-toast-visible');
@@ -2395,8 +2412,8 @@
         if (!bar) {
             bar = el('div', 'ch-customize-bar');
             bar.innerHTML = '<button type="button" class="ch-customize-button"><span class="material-icons" aria-hidden="true">other_houses</span><span></span></button>';
-            bar.querySelector('button').addEventListener('click', function () {
-                openEditor({ mode: 'user' });
+            bar.querySelector('button').addEventListener('click', function (e) {
+                openEditor({ mode: 'user', opener: e.currentTarget });
             });
             container.appendChild(bar);
         }
@@ -2667,8 +2684,8 @@
         });
         if (canCustomize) {
             notice.querySelector('.ch-notice-customize').textContent = t('customize');
-            notice.querySelector('.ch-notice-customize').addEventListener('click', function () {
-                openEditor({ mode: 'user' });
+            notice.querySelector('.ch-notice-customize').addEventListener('click', function (e) {
+                openEditor({ mode: 'user', opener: e.currentTarget });
             });
         }
         setOrder(notice, ORDER_NOTICE);
@@ -2844,7 +2861,8 @@
             link.querySelector('.navMenuOptionText').textContent = t('menuEntry');
             link.addEventListener('click', function (e) {
                 e.preventDefault();
-                openEditor({ mode: 'user' });
+                // The drawer slides away: giving the focus back to this link would pull it into view again.
+                openEditor({ mode: 'user', opener: null });
             });
             drawer.appendChild(link);
         }
@@ -2855,6 +2873,8 @@
     /* ------------------------------------------------------------------ */
 
     let editor = null;
+    const DIALOG_TITLE_ID = 'chDialogTitle';
+    const CONFIRM_TEXT_ID = 'chConfirmText';
 
     function isLibrarySection(key) {
         return String(key || '').toLowerCase().indexOf('jf:latestmedia:') === 0;
@@ -2947,6 +2967,9 @@
         }
         const mode = options.mode === 'default' ? 'default' : 'user';
         const epoch = state.epoch;
+        // The element that gets the focus back when the editor closes (unless the caller names one, or none).
+        const active = document.activeElement && document.activeElement !== document.body ? document.activeElement : null;
+        const opener = options.opener === undefined ? active : options.opener;
         ensureLoaded().then(function () {
             if (epoch !== state.epoch) {
                 return null;
@@ -2959,7 +2982,7 @@
             return Promise.all([loadCatalog(), loadUserViews(), layoutPromise]).then(function (results) {
                 // Requested by someone who is gone: never open their layout in the next session.
                 if (epoch === state.epoch) {
-                    buildEditor(mode, results[0] || [], results[1] || [], results[2] || { Items: [] }, options);
+                    buildEditor(mode, results[0] || [], results[1] || [], results[2] || { Items: [] }, options, opener);
                 }
             });
         }).catch(function (error) {
@@ -2970,7 +2993,7 @@
         });
     }
 
-    function buildEditor(mode, catalog, userViews, layout, options) {
+    function buildEditor(mode, catalog, userViews, layout, options, opener) {
         const info = buildKnown(catalog, userViews, mode);
         const model = cloneLayout(layout);
         model.Hero = normalizeHero(model.Hero);
@@ -3018,19 +3041,27 @@
             query: '',
             embedded: embedded,
             options: options,
+            opener: opener || null,
             overlay: null,
+            dialog: null,
             list: null,
-            body: null
+            body: null,
+            confirm: null,
+            snapshot: ''
         };
 
         const overlay = el('div', embedded ? 'ch-embedded' : 'ch-overlay');
         const dialog = el('div', 'ch-dialog');
-        dialog.setAttribute('role', 'dialog');
-        dialog.setAttribute('aria-modal', 'true');
+        // Embedded in the administration page it is a part of that page, not a modal: the rest stays reachable.
+        dialog.setAttribute('role', embedded ? 'group' : 'dialog');
+        if (!embedded) {
+            dialog.setAttribute('aria-modal', 'true');
+        }
+        dialog.setAttribute('aria-labelledby', DIALOG_TITLE_ID);
         dialog.tabIndex = -1;
         dialog.innerHTML = '<div class="ch-dialog-header">'
             + '<span class="material-icons" aria-hidden="true">other_houses</span>'
-            + '<h2 class="ch-dialog-title"></h2>'
+            + '<h2 class="ch-dialog-title" id="' + DIALOG_TITLE_ID + '"></h2>'
             + '<button type="button" class="ch-icon-btn ch-close" data-ch-tip="' + escapeHtml(t('close')) + '" aria-label="' + escapeHtml(t('close')) + '"><span class="material-icons" aria-hidden="true">close</span></button>'
             + '</div>'
             + '<div class="ch-dialog-body">'
@@ -3063,6 +3094,7 @@
         }
 
         editor.overlay = overlay;
+        editor.dialog = dialog;
         editor.list = dialog.querySelector('.ch-list');
         editor.unlisted = dialog.querySelector('.ch-unlisted');
         editor.heroSlot = dialog.querySelector('.ch-hero-slot');
@@ -3094,16 +3126,8 @@
             resetButton.style.display = 'none';
         }
 
-        dialog.querySelector('.ch-close').addEventListener('click', closeEditor);
-        dialog.querySelector('.ch-cancel').addEventListener('click', function () {
-            if (embedded) {
-                // Embedded editor: cancel reloads the stored layout.
-                closeEditor();
-                openEditor(options);
-            } else {
-                closeEditor();
-            }
-        });
+        dialog.querySelector('.ch-close').addEventListener('click', requestClose);
+        dialog.querySelector('.ch-cancel').addEventListener('click', requestClose);
         resetButton.addEventListener('click', resetEditor);
         dialog.querySelector('.ch-search').addEventListener('input', function (e) {
             editor.query = e.target.value.trim().toLowerCase();
@@ -3116,15 +3140,11 @@
         if (!embedded) {
             overlay.addEventListener('click', function (e) {
                 if (e.target === overlay) {
-                    closeEditor();
+                    requestClose();
                 }
             });
-            overlay.addEventListener('keydown', function (e) {
-                if (e.key === 'Escape') {
-                    e.stopPropagation();
-                    closeEditor();
-                }
-            });
+            // On the document, not on the overlay: Escape and Tab must work wherever the focus went.
+            document.addEventListener('keydown', onEditorKeyDown, true);
         }
         editor.columns.addEventListener('click', onListClick);
         editor.list.addEventListener('keydown', onListKeyDown);
@@ -3133,6 +3153,7 @@
         initTooltips(overlay);
 
         renderEditor();
+        editor.snapshot = JSON.stringify(serializeModel(model));
         if (!embedded) {
             dialog.focus();
         }
@@ -3146,10 +3167,133 @@
         if (!editor) {
             return;
         }
+        const current = editor;
         closePopup();
         hideTooltip();
-        editor.overlay.remove();
+        document.removeEventListener('keydown', onEditorKeyDown, true);
+        // A message on screen outlives the dialog it was announced in.
+        const message = current.dialog.querySelector('.ch-toast');
+        if (message) {
+            document.body.appendChild(message);
+        }
+        current.overlay.remove();
         editor = null;
+        if (!current.embedded) {
+            const opener = current.opener && current.opener.isConnected ? current.opener : document.querySelector('.ch-customize-button');
+            if (opener) {
+                opener.focus();
+            }
+        }
+    }
+
+    /* ---- closing, confirmations, keyboard of the modal ---- */
+
+    function isEditorDirty() {
+        return JSON.stringify(serializeModel(editor.model)) !== editor.snapshot;
+    }
+
+    // Close button, Cancel, Escape, click on the backdrop: changes are never dropped without a question.
+    function requestClose() {
+        if (!editor) {
+            return;
+        }
+        const current = editor;
+        function leave() {
+            closeEditor();
+            if (current.embedded) {
+                // Embedded editor: it never goes away, cancel reloads the stored layout.
+                openEditor(current.options);
+            }
+        }
+        if (isEditorDirty()) {
+            askInEditor(t('discardConfirm'), t('discard'), leave);
+        } else {
+            leave();
+        }
+    }
+
+    // A question asked inside the dialog, in place of its footer: window.confirm is missing or blocked in several
+    // of the shells that embed the web client, and it cannot be styled or translated.
+    function askInEditor(question, confirmLabel, onConfirm) {
+        dismissQuestion(false);
+        closePopup();
+        const dialog = editor.dialog;
+        const returnTo = dialog.contains(document.activeElement) ? document.activeElement : null;
+        const bar = el('div', 'ch-confirm', '<p class="ch-confirm-text" id="' + CONFIRM_TEXT_ID + '"></p>'
+            + '<button type="button" class="ch-btn ch-confirm-no"></button>'
+            + '<button type="button" class="ch-btn ch-btn-danger ch-confirm-yes"></button>');
+        bar.setAttribute('role', 'alertdialog');
+        bar.setAttribute('aria-labelledby', CONFIRM_TEXT_ID);
+        bar.querySelector('.ch-confirm-text').textContent = question;
+        bar.querySelector('.ch-confirm-no').textContent = t('keepEditing');
+        bar.querySelector('.ch-confirm-yes').textContent = confirmLabel;
+        bar.querySelector('.ch-confirm-no').addEventListener('click', function () {
+            dismissQuestion(true);
+        });
+        bar.querySelector('.ch-confirm-yes').addEventListener('click', function () {
+            dismissQuestion(false);
+            onConfirm();
+        });
+        dialog.insertBefore(bar, dialog.querySelector('.ch-dialog-footer'));
+        dialog.classList.add('ch-confirming');
+        editor.confirm = { bar: bar, returnTo: returnTo };
+        // The answer that loses nothing has the focus.
+        bar.querySelector('.ch-confirm-no').focus();
+    }
+
+    function dismissQuestion(restoreFocus) {
+        if (!editor || !editor.confirm) {
+            return;
+        }
+        const question = editor.confirm;
+        editor.confirm = null;
+        question.bar.remove();
+        editor.dialog.classList.remove('ch-confirming');
+        if (restoreFocus) {
+            (question.returnTo && question.returnTo.isConnected ? question.returnTo : editor.dialog).focus();
+        }
+    }
+
+    function isTabStop(node) {
+        return !node.disabled && node.tabIndex >= 0 && node.getClientRects().length > 0 && getComputedStyle(node).visibility !== 'hidden';
+    }
+
+    function tabStops(root) {
+        return Array.prototype.filter.call(root.querySelectorAll('button, input, select, textarea, a[href], [tabindex]'), isTabStop);
+    }
+
+    // Tab and Shift+Tab stay in the dialog, or in what is open on top of it (question, menu).
+    function trapFocus(e) {
+        const scope = editor.confirm ? editor.confirm.bar : (popup || editor.dialog);
+        const stops = tabStops(scope);
+        if (!stops.length) {
+            e.preventDefault();
+            return;
+        }
+        const index = stops.indexOf(document.activeElement);
+        const last = stops.length - 1;
+        if (index < 0 || (e.shiftKey && index === 0) || (!e.shiftKey && index === last)) {
+            e.preventDefault();
+            stops[e.shiftKey ? (index <= 0 ? last : index - 1) : (index < 0 || index === last ? 0 : index + 1)].focus();
+        }
+    }
+
+    function onEditorKeyDown(e) {
+        if (!editor || editor.embedded) {
+            return;
+        }
+        if (e.key === 'Tab') {
+            trapFocus(e);
+        } else if (e.key === 'Escape' && !popup) {
+            // An open menu closes first (onPopupKeyDown); then a pending question means "keep editing".
+            e.stopPropagation();
+            e.preventDefault();
+            if (editor.confirm) {
+                dismissQuestion(true);
+            } else {
+                requestClose();
+            }
+        }
     }
 
     function usedKeys(model) {
@@ -3251,8 +3395,8 @@
             + '<span class="material-icons" aria-hidden="true">drag_indicator</span></button>';
     }
 
-    function actionButton(className, title, icon) {
-        return '<button type="button" class="ch-icon-btn ' + className + '" data-ch-tip="' + escapeHtml(title) + '" aria-label="' + escapeHtml(title) + '"><span class="material-icons" aria-hidden="true">' + icon + '</span></button>';
+    function actionButton(className, title, icon, opensMenu) {
+        return '<button type="button" class="ch-icon-btn ' + className + '"' + (opensMenu ? ' aria-haspopup="menu" aria-expanded="false"' : '') + ' data-ch-tip="' + escapeHtml(title) + '" aria-label="' + escapeHtml(title) + '"><span class="material-icons" aria-hidden="true">' + icon + '</span></button>';
     }
 
     function rowActionsHtml(item) {
@@ -3262,7 +3406,7 @@
         }
         return (editor.query ? actionButton('ch-act-top', t('moveToTop'), 'vertical_align_top') : '')
             + actionButton('ch-act-visibility', item.Visible === false ? t('show') : t('hide'), item.Visible === false ? 'visibility_off' : 'visibility')
-            + actionButton('ch-act-menu', t('format'), 'aspect_ratio')
+            + actionButton('ch-act-menu', t('format'), 'aspect_ratio', true)
             + actionButton('ch-act-remove', t('removeAction'), 'close');
     }
 
@@ -3434,6 +3578,10 @@
     }
 
     function renderHeroRow() {
+        keepingFocus(editor.heroSlot, buildHeroRow);
+    }
+
+    function buildHeroRow() {
         const slot = editor.heroSlot;
         slot.innerHTML = '';
         // The hero is rendered by the plugin: nothing to configure when the administrator disabled that.
@@ -3448,7 +3596,7 @@
             + '<div class="ch-row-actions">'
             + '<button type="button" class="ch-icon-btn ch-hero-toggle" role="switch" aria-checked="' + (hero.Enabled ? 'true' : 'false') + '" data-ch-tip="' + escapeHtml(toggleLabel) + '" aria-label="' + escapeHtml(toggleLabel) + '">'
             + '<span class="material-icons" aria-hidden="true">' + (hero.Enabled ? 'toggle_on' : 'toggle_off') + '</span></button>'
-            + actionButton('ch-hero-settings', t('heroSettings'), 'tune')
+            + actionButton('ch-hero-settings', t('heroSettings'), 'tune', true)
             + '</div>';
         row.querySelector('.ch-row-title').textContent = t('heroTitle');
         row.querySelector('.ch-row-sub').textContent = hero.Enabled ? heroBadge(hero) : t('heroHint');
@@ -3467,6 +3615,7 @@
             openHeroMenu(e.currentTarget);
         });
         slot.appendChild(row);
+        markPopupAnchor();
     }
 
     // Same behavior as the format menu: it stays open while options are toggled.
@@ -3579,11 +3728,11 @@
         row._item = item;
         row._parent = null;
         row.innerHTML = handleHtml(item)
-            + '<button type="button" class="ch-icon-btn ch-act-icon" data-ch-tip="' + escapeHtml(t('chooseIcon')) + '" aria-label="' + escapeHtml(t('chooseIcon')) + '"><span class="material-icons" aria-hidden="true">' + escapeHtml(item.Icon || 'folder') + '</span></button>'
+            + '<button type="button" class="ch-icon-btn ch-act-icon" aria-haspopup="menu" aria-expanded="false" data-ch-tip="' + escapeHtml(t('chooseIcon')) + '" aria-label="' + escapeHtml(t('chooseIcon')) + '"><span class="material-icons" aria-hidden="true">' + escapeHtml(item.Icon || 'folder') + '</span></button>'
             + '<input type="text" class="ch-folder-name" maxlength="100" placeholder="' + escapeHtml(t('folderName')) + '" />'
             + '<div class="ch-row-actions">'
             + '<button type="button" class="ch-icon-btn ch-act-visibility" data-ch-tip="' + escapeHtml(item.Visible === false ? t('show') : t('hide')) + '" aria-label="' + escapeHtml(item.Visible === false ? t('show') : t('hide')) + '"><span class="material-icons" aria-hidden="true">' + (item.Visible === false ? 'visibility_off' : 'visibility') + '</span></button>'
-            + '<button type="button" class="ch-icon-btn ch-act-menu" data-ch-tip="' + escapeHtml(t('more')) + '" aria-label="' + escapeHtml(t('more')) + '"><span class="material-icons" aria-hidden="true">more_vert</span></button>'
+            + '<button type="button" class="ch-icon-btn ch-act-menu" aria-haspopup="menu" aria-expanded="false" data-ch-tip="' + escapeHtml(t('more')) + '" aria-label="' + escapeHtml(t('more')) + '"><span class="material-icons" aria-hidden="true">more_vert</span></button>'
             + '</div>';
         row.querySelector('.ch-folder-name').value = item.Name || '';
         return row;
@@ -3599,9 +3748,12 @@
     }
 
     function renderEditor() {
-        if (!editor) {
-            return;
+        if (editor) {
+            keepingFocus(editor.columns, buildRows);
         }
+    }
+
+    function buildRows() {
         const list = editor.list;
         const side = editor.unlisted;
         const scrollTop = editor.body.scrollTop;
@@ -3609,7 +3761,7 @@
         side.innerHTML = '';
         const model = editor.model;
         setClass(editor.columns, 'ch-filtered', !!editor.query);
-        renderHeroRow();
+        buildHeroRow();
 
         model.Items.forEach(function (item, index) {
             if (item.Type === 'folder') {
@@ -3643,6 +3795,7 @@
             side.appendChild(el('div', 'ch-empty', escapeHtml(editor.query ? t('searchNoResult') : t('dropToRemove'))));
         }
         editor.body.scrollTop = scrollTop;
+        markPopupAnchor();
     }
 
     function materialize(item) {
@@ -3730,6 +3883,52 @@
         return Array.prototype.filter.call(editor.columns.querySelectorAll('.ch-row'), function (row) {
             return row._item === item || (!!item.Key && !!row._item && row._item.Key === item.Key);
         })[0] || null;
+    }
+
+    const CONTROL_CLASS = /^ch-(act-[a-z]+|handle|folder-name|hero-toggle|hero-settings)$/;
+
+    // What a control of the two columns is, in terms that survive the rebuild of its row.
+    function describeControl(node) {
+        const row = node.closest('.ch-row');
+        return {
+            node: node,
+            name: Array.prototype.filter.call(node.classList, function (name) {
+                return CONTROL_CLASS.test(name);
+            })[0] || null,
+            hero: !!node.closest('.ch-hero-slot'),
+            item: row ? row._item : null,
+            column: row && row.parentNode === editor.unlisted ? editor.unlisted : editor.list,
+            index: row ? Array.prototype.indexOf.call(row.parentNode.querySelectorAll('.ch-row'), row) : -1
+        };
+    }
+
+    function resolveControl(control) {
+        if (control.node.isConnected) {
+            return control.node;
+        }
+        if (control.hero) {
+            return control.name ? editor.heroSlot.querySelector('.' + control.name) : null;
+        }
+        let row = control.item ? rowOf(control.item) : null;
+        if (!row || row.parentNode !== control.column) {
+            // Added, removed or filtered out: the row that took its place keeps the keyboard where it was.
+            const rows = control.column.querySelectorAll('.ch-row');
+            row = rows[Math.min(control.index, rows.length - 1)] || row;
+        }
+        if (!row) {
+            return null;
+        }
+        return (control.name ? row.querySelector('.' + control.name + ':not([disabled])') : null)
+            || row.querySelector('.ch-row-actions button:not([disabled])');
+    }
+
+    // Rebuilding rows drops the focus on the body, where Escape and the arrow keys mean nothing any more.
+    function keepingFocus(root, render) {
+        const control = root.contains(document.activeElement) ? describeControl(document.activeElement) : null;
+        render();
+        if (control) {
+            (resolveControl(control) || editor.dialog).focus();
+        }
     }
 
     // The rows are rebuilt by every change: the focus goes back to the same control of the same row.
@@ -3905,8 +4104,19 @@
                 showTooltip(target);
             }
         }
+        function onFocus(e) {
+            let fromKeyboard = true;
+            try {
+                fromKeyboard = e.target.matches(':focus-visible');
+            } catch (err) {
+                /* older engine: no such selector, every focus counts */
+            }
+            if (fromKeyboard) {
+                onEnter(e);
+            }
+        }
         root.addEventListener('mouseover', onEnter);
-        root.addEventListener('focusin', onEnter);
+        root.addEventListener('focusin', onFocus);
         root.addEventListener('mouseout', hideTooltip);
         root.addEventListener('focusout', hideTooltip);
         root.addEventListener('pointerdown', hideTooltip);
@@ -3915,38 +4125,82 @@
     /* ---- popup menus ---- */
 
     let popup = null;
+    let popupAnchor = null;
+    const MENU_KEYS = { ArrowDown: 1, ArrowRight: 1, ArrowUp: -1, ArrowLeft: -1, Home: 0, End: 0 };
 
-    function closePopup() {
-        if (popup) {
-            popup.remove();
-            popup = null;
-            document.removeEventListener('pointerdown', onDocumentPointerDown, true);
-            document.removeEventListener('keydown', onPopupKeyDown, true);
+    // returnFocus: the menu was left from the keyboard or by choosing an entry, the focus goes back to the button
+    // that opened it (rebuilt meanwhile, more often than not). Not after a click elsewhere.
+    function closePopup(returnFocus) {
+        if (!popup) {
+            return;
+        }
+        const anchor = popupAnchor;
+        popup.remove();
+        popup = null;
+        popupAnchor = null;
+        document.removeEventListener('pointerdown', onDocumentPointerDown, true);
+        document.removeEventListener('keydown', onPopupKeyDown, true);
+        if (!editor || !anchor) {
+            return;
+        }
+        const button = resolveControl(anchor);
+        if (button && button.hasAttribute('aria-haspopup')) {
+            button.setAttribute('aria-expanded', 'false');
+        }
+        if (returnFocus) {
+            (button || editor.dialog).focus();
+        }
+    }
+
+    // The button a menu belongs to is rebuilt while the menu stays open: it still says "expanded".
+    function markPopupAnchor() {
+        const button = popup && popupAnchor ? resolveControl(popupAnchor) : null;
+        if (button && button.hasAttribute('aria-haspopup')) {
+            button.setAttribute('aria-expanded', 'true');
         }
     }
 
     function onDocumentPointerDown(e) {
         if (popup && !popup.contains(e.target)) {
-            closePopup();
+            closePopup(false);
         }
     }
 
     function onPopupKeyDown(e) {
-        if (popup && e.key === 'Escape') {
+        if (!popup) {
+            return;
+        }
+        if (e.key === 'Escape') {
             // Close the menu only, not the editor behind it.
             e.stopPropagation();
             e.preventDefault();
-            closePopup();
+            closePopup(true);
+        } else if (MENU_KEYS[e.key] !== undefined && popup.contains(e.target) && !e.altKey && !e.ctrlKey && !e.metaKey) {
+            // A menu is walked with the arrow keys; Tab works too (see trapFocus).
+            const entries = tabStops(popup);
+            const index = entries.indexOf(document.activeElement);
+            const step = MENU_KEYS[e.key];
+            const next = step === 0 ? (e.key === 'Home' ? 0 : entries.length - 1) : (index + step + entries.length) % entries.length;
+            if (entries[next]) {
+                e.stopPropagation();
+                e.preventDefault();
+                entries[next].focus();
+            }
         }
     }
 
     function showPopup(anchor, node) {
-        closePopup();
+        closePopup(false);
         // The tooltip of the button that opens the menu would sit on top of it.
         hideTooltip();
         popup = node;
+        popupAnchor = describeControl(anchor);
         popup.classList.add('ch-popup');
-        document.body.appendChild(popup);
+        popup.setAttribute('role', 'menu');
+        popup.setAttribute('aria-label', anchor.getAttribute('aria-label') || '');
+        anchor.setAttribute('aria-expanded', 'true');
+        // Inside the modal dialog: everything outside it is inert for assistive technologies (aria-modal).
+        (editor.embedded ? document.body : editor.dialog).appendChild(popup);
         const rect = anchor.getBoundingClientRect();
         const width = popup.offsetWidth;
         const height = popup.offsetHeight;
@@ -3964,6 +4218,10 @@
         setTimeout(function () {
             document.addEventListener('pointerdown', onDocumentPointerDown, true);
         }, 0);
+        const first = tabStops(popup)[0];
+        if (first) {
+            first.focus();
+        }
     }
 
     function openRowMenu(anchor, item, parent) {
@@ -3972,13 +4230,17 @@
             return candidate.Type === 'folder';
         });
 
-        function addAction(icon, label, handler) {
+        function addAction(icon, label, handler, checked) {
             const button = el('button', '', '<span class="material-icons" aria-hidden="true">' + icon + '</span><span></span>');
             button.type = 'button';
+            button.setAttribute('role', checked === undefined ? 'menuitem' : 'menuitemcheckbox');
+            if (checked !== undefined) {
+                button.setAttribute('aria-checked', checked ? 'true' : 'false');
+            }
             button.querySelector('span:last-child').textContent = label;
             button.addEventListener('click', function () {
-                closePopup();
                 handler();
+                closePopup(true);
             });
             menu.appendChild(button);
         }
@@ -3987,7 +4249,7 @@
             addAction(item.Collapsed ? 'check_box' : 'check_box_outline_blank', t('collapsedByDefault'), function () {
                 item.Collapsed = !item.Collapsed;
                 renderEditor();
-            });
+            }, !!item.Collapsed);
             addAction('delete', t('deleteFolder'), function () {
                 const index = editor.model.Items.indexOf(item);
                 if (index >= 0) {
@@ -4013,10 +4275,13 @@
             const button = el('button', icon === item.Icon ? 'ch-selected' : '', '<span class="material-icons" aria-hidden="true">' + icon + '</span>');
             button.type = 'button';
             button.title = icon;
+            button.setAttribute('role', 'menuitemradio');
+            button.setAttribute('aria-checked', icon === item.Icon ? 'true' : 'false');
+            button.setAttribute('aria-label', icon);
             button.addEventListener('click', function () {
                 item.Icon = icon;
-                closePopup();
                 renderEditor();
+                closePopup(true);
             });
             inner.appendChild(button);
         });
@@ -4316,9 +4581,12 @@
     }
 
     function resetEditor() {
-        if (!editor || !window.confirm(t('resetConfirm'))) {
-            return;
+        if (editor) {
+            askInEditor(t('resetConfirm'), t('reset'), deleteUserLayout);
         }
+    }
+
+    function deleteUserLayout() {
         apiSend('DELETE', 'Layout').then(function () {
             closeEditor();
             return reloadLayout();
