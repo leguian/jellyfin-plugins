@@ -6,6 +6,15 @@
     'use strict';
 
     const mock = window.__mock = Object.assign({
+        // The logged in user; null while logged out. layoutResponses overrides layoutResponse per user id.
+        userId: 'user-1',
+        layoutResponses: {},
+        // "<METHOD> <path>" -> number of failures left (-1: always fails).
+        failures: {},
+        // "<METHOD> <path>" -> milliseconds before the answer.
+        delays: {},
+        resumeItems: [],
+        nextUpItems: [],
         layoutResponse: null,
         defaultLayout: { Version: 1, HideUnlisted: false, Items: [] },
         catalog: [],
@@ -27,12 +36,19 @@
         const path = url.split('?')[0];
         mock.requests.push({ method: method, path: path, url: url, body: body === undefined ? null : body });
         if (path === 'CustomizedHome/Layout' && method === 'GET') {
-            return mock.layoutResponse;
+            return mock.layoutResponses[mock.userId] || mock.layoutResponse;
         }
         if (path === 'CustomizedHome/Layout' && method === 'POST') {
-            mock.layoutResponse.Layout = body;
-            mock.layoutResponse.HasUserLayout = true;
+            const own = mock.layoutResponses[mock.userId] || mock.layoutResponse;
+            own.Layout = body;
+            own.HasUserLayout = true;
             return body;
+        }
+        if (path === 'UserItems/Resume') {
+            return { Items: mock.resumeItems };
+        }
+        if (path === 'Shows/NextUp') {
+            return { Items: mock.nextUpItems };
         }
         if (path === 'CustomizedHome/Layout' && method === 'DELETE') {
             mock.layoutResponse.Layout = { Version: 1, HideUnlisted: false, Items: [] };
@@ -117,9 +133,35 @@
         return { Items: [] };
     }
 
+    // Same shape as jellyfin-web: a rejected promise carrying the HTTP status.
+    function respond(method, url, body) {
+        const key = method + ' ' + url.split('?')[0];
+        const delay = mock.delays[key];
+        if (delay) {
+            return new Promise(function (resolve) {
+                setTimeout(resolve, delay);
+            }).then(function () {
+                return answer(method, url, body, key);
+            });
+        }
+        return answer(method, url, body, key);
+    }
+
+    function answer(method, url, body, key) {
+        const left = mock.failures[key];
+        if (left) {
+            if (left > 0) {
+                mock.failures[key] = left - 1;
+            }
+            mock.requests.push({ method: method, path: url.split('?')[0], url: url, body: body === undefined ? null : body, failed: true });
+            return Promise.reject({ status: 500 });
+        }
+        return Promise.resolve(route(method, url, body));
+    }
+
     window.ApiClient = {
         getCurrentUserId: function () {
-            return 'user-1';
+            return mock.userId;
         },
         serverId: function () {
             return 'server-1';
@@ -131,10 +173,10 @@
             return path + (query ? '?' + query : '');
         },
         getJSON: function (url) {
-            return Promise.resolve(route('GET', url));
+            return respond('GET', url);
         },
         ajax: function (request) {
-            return Promise.resolve(route(request.type, request.url, request.data ? JSON.parse(request.data) : undefined));
+            return respond(request.type, request.url, request.data ? JSON.parse(request.data) : undefined);
         },
         getDisplayPreferences: function () {
             return Promise.resolve({ CustomPrefs: {} });

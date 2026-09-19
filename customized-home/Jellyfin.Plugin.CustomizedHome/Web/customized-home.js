@@ -13,7 +13,7 @@
         return;
     }
 
-    const VERSION = '1.8.2.1';
+    const VERSION = '1.8.3';
     const API = 'CustomizedHome';
     const ORDER_STEP = 1000;
     const ORDER_UNLISTED_BASE = 1000000000;
@@ -287,7 +287,14 @@
         catalog: null,
         genreNames: null,
         userViews: null,
-        integratedCache: {}
+        integratedCache: {},
+        // Everything above belongs to one user on one server (see checkSession).
+        identity: null,
+        epoch: 0,
+        loadFailures: 0,
+        retryAt: 0,
+        retryTimer: null,
+        warnedEmptyHome: false
     };
 
     /* ------------------------------------------------------------------ */
@@ -441,30 +448,130 @@
     /* Data loading                                                        */
     /* ------------------------------------------------------------------ */
 
+    const LOAD_RETRY_BASE_MS = 2000;
+    const LOAD_RETRY_MAX_MS = 5 * 60 * 1000;
+    const RETRY_TIMER_MARGIN_MS = 50;
+
+    function sessionIdentity() {
+        const userId = currentUserId();
+        if (!userId) {
+            return null;
+        }
+        let serverId = '';
+        try {
+            serverId = apiClient().serverId() || '';
+        } catch (e) {
+            serverId = '';
+        }
+        return userId + '@' + serverId;
+    }
+
+    // Gives the home sections back their native look and removes what the plugin rendered.
+    function restoreContainer(container) {
+        removeHero(container);
+        Array.prototype.forEach.call(container.querySelectorAll(':scope > .ch-section, :scope > .ch-folder, :scope > .ch-customize-bar'), function (node) {
+            node.remove();
+        });
+        container._chIntegrated = null;
+        container._chHeroEntry = null;
+        Array.prototype.forEach.call(container.querySelectorAll('.verticalSection'), function (node) {
+            ['ch-hidden', 'ch-in-folder', 'ch-notitle', 'ch-nosectiontitle', 'ch-shape-portrait', 'ch-shape-landscape', 'ch-shape-square', 'ch-size-small', 'ch-size-large'].forEach(function (name) {
+                setClass(node, name, false);
+            });
+            if (node.style.order) {
+                node.style.order = '';
+            }
+            if (node.dataset.chFolder !== undefined) {
+                delete node.dataset.chFolder;
+            }
+        });
+    }
+
+    // Logout, login as someone else, other server: nothing loaded or rendered for the previous session may survive.
+    function resetSession() {
+        state.epoch++;
+        closeEditor();
+        if (state.container && state.container.isConnected) {
+            restoreContainer(state.container);
+        }
+        Array.prototype.forEach.call(document.querySelectorAll('.ch-menu-entry'), function (node) {
+            node.remove();
+        });
+        clearTimeout(state.retryTimer);
+        state.response = null;
+        state.layout = null;
+        state.ctx = null;
+        state.ctxStale = false;
+        state.loadPromise = null;
+        state.catalog = null;
+        state.genreNames = null;
+        state.userViews = null;
+        state.integratedCache = {};
+        state.discovered = [];
+        state.loadFailures = 0;
+        state.retryAt = 0;
+        state.retryTimer = null;
+        state.warnedEmptyHome = false;
+    }
+
+    // Returns false while nobody is logged in.
+    function checkSession() {
+        const identity = sessionIdentity();
+        if (identity !== state.identity) {
+            if (state.identity !== null) {
+                resetSession();
+            }
+            state.identity = identity;
+        }
+        return identity !== null;
+    }
+
+    // After a failed load the next attempts are spaced out (2 s, 4 s ... 5 min) instead of following every DOM change.
+    function canLoad() {
+        return !!state.loadPromise || Date.now() >= state.retryAt;
+    }
+
     function ensureLoaded() {
         if (state.loadPromise) {
             return state.loadPromise;
         }
+        const epoch = state.epoch;
         state.loadPromise = waitForApiClient()
             .then(function () {
                 return Promise.all([apiGet('Layout'), loadContext()]);
             })
             .then(function (results) {
+                if (epoch !== state.epoch) {
+                    throw new Error('session changed while loading');
+                }
                 state.response = results[0];
                 state.layout = results[0].Layout || { Items: [] };
                 state.ctx = results[1];
+                state.loadFailures = 0;
+                state.retryAt = 0;
                 return state.response;
             })
             .catch(function (error) {
-                console.warn('[CustomizedHome] could not load the layout', error);
-                state.loadPromise = null;
+                if (epoch === state.epoch) {
+                    console.warn('[CustomizedHome] could not load the layout', error);
+                    state.loadPromise = null;
+                    state.loadFailures++;
+                    const delay = Math.min(LOAD_RETRY_MAX_MS, LOAD_RETRY_BASE_MS * Math.pow(2, state.loadFailures - 1));
+                    state.retryAt = Date.now() + delay;
+                    clearTimeout(state.retryTimer);
+                    state.retryTimer = setTimeout(scheduleScan, delay + RETRY_TIMER_MARGIN_MS);
+                }
                 throw error;
             });
         return state.loadPromise;
     }
 
     function reloadLayout() {
+        const epoch = state.epoch;
         return apiGet('Layout').then(function (response) {
+            if (epoch !== state.epoch) {
+                return response;
+            }
             state.response = response;
             state.layout = response.Layout || { Items: [] };
             scheduleApply();
@@ -803,7 +910,8 @@
     }
 
     const INTEGRATED = {
-        'ch:combined': { titleKey: 'int_combined', shape: 'landscape', fetch: fetchCombined },
+        // volatile: depends on what the user just watched, reloaded when the home page is shown again.
+        'ch:combined': { titleKey: 'int_combined', shape: 'landscape', volatile: true, fetch: fetchCombined },
         'ch:latestMovies': { titleKey: 'int_latestMovies', shape: 'portrait', fetch: function () {
             return itemsQuery({ includeItemTypes: 'Movie', recursive: true, sortBy: 'PremiereDate,SortName', sortOrder: 'Descending', limit: 16 });
         } },
@@ -813,10 +921,10 @@
         'ch:collections': { titleKey: 'int_collections', shape: 'portrait', fetch: function () {
             return itemsQuery({ includeItemTypes: 'BoxSet', recursive: true, sortBy: 'DateCreated,SortName', sortOrder: 'Descending', limit: 16 });
         } },
-        'ch:watchAgain': { titleKey: 'int_watchAgain', shape: 'portrait', fetch: function () {
+        'ch:watchAgain': { titleKey: 'int_watchAgain', shape: 'portrait', volatile: true, fetch: function () {
             return itemsQuery({ includeItemTypes: 'Movie,Series', recursive: true, isPlayed: true, sortBy: 'DatePlayed', sortOrder: 'Descending', limit: 16 });
         } },
-        'ch:becauseYouWatched': { titleKey: 'becauseYouWatched', shape: 'portrait', family: true, fetchInstances: fetchBecauseYouWatched },
+        'ch:becauseYouWatched': { titleKey: 'becauseYouWatched', shape: 'portrait', family: true, volatile: true, fetchInstances: fetchBecauseYouWatched },
         'ch:genre': { titleKey: 'genreTitle', shape: 'portrait', family: true, fetchInstances: fetchGenre },
         'ch:allGenres': { titleKey: 'int_allGenres', shape: 'portrait', fetch: fetchGenreCards }
     };
@@ -1011,56 +1119,93 @@
         Object.keys(wanted).forEach(function (key) {
             const known = registry[key];
             const signature = dataSignature(wanted[key]);
+            let fresh = false;
             if (known) {
                 // The web client may have wiped the container (settings change, navigation): render again.
                 const missing = !known.loading && known.count > 0 && !container.querySelector('[data-ch-key="' + key + '"]');
                 const changed = known.signature !== signature;
-                if (!missing && !changed) {
+                fresh = !known.loading && !!known.refresh;
+                if (!missing && !changed && !fresh) {
                     return;
                 }
-                if (changed) {
-                    Array.prototype.forEach.call(container.querySelectorAll(':scope > [data-ch-key="' + key + '"]'), function (node) {
-                        node.remove();
-                    });
-                }
-                delete registry[key];
             }
-            const definition = INTEGRATED[key];
-            const entry = { loading: true, count: 0, signature: signature };
-            registry[key] = entry;
-            const cacheKey = key + '#' + signature;
-            const cached = state.integratedCache[cacheKey];
-            let dataPromise;
-            if (cached && Date.now() - cached.ts < INTEGRATED_CACHE_MS) {
-                dataPromise = Promise.resolve(cached.data);
-            } else {
-                const load = definition.family
-                    ? definition.fetchInstances(wanted[key])
-                    : definition.fetch(wanted[key]).then(function (items) {
-                        return [{ title: t(definition.titleKey), items: items }];
-                    });
-                dataPromise = load.then(function (data) {
-                    state.integratedCache[cacheKey] = { ts: Date.now(), data: data };
-                    return data;
-                });
-            }
-            dataPromise.then(function (instances) {
-                entry.loading = false;
-                entry.count = instances.length;
-                if (!container.isConnected || container._chIntegrated !== registry || registry[key] !== entry) {
-                    return;
-                }
-                instances.forEach(function (instance, index) {
-                    const node = createIntegratedSection(container, key, index);
-                    const format = formatFor(wanted[key], definition);
-                    renderIntegratedSection(node, instance.title, instance.items, format.shape, format.showTitle);
-                });
-                scheduleApply();
-            }).catch(function (error) {
-                entry.loading = false;
-                console.warn('[CustomizedHome] section ' + key + ' failed', error);
-            });
+            loadIntegratedSection(container, registry, key, wanted[key], signature, fresh);
         });
+    }
+
+    // The rows on screen stay until the new data is there: no flicker, and a failed reload keeps them.
+    function loadIntegratedSection(container, registry, key, item, signature, fresh) {
+        const definition = INTEGRATED[key];
+        const previous = registry[key];
+        const entry = { loading: true, count: previous ? previous.count : 0, signature: signature, ts: Date.now(), refresh: false };
+        registry[key] = entry;
+        const epoch = state.epoch;
+        const cacheKey = state.identity + '|' + key + '#' + signature;
+        const cached = state.integratedCache[cacheKey];
+        let dataPromise;
+        if (!fresh && cached && Date.now() - cached.ts < INTEGRATED_CACHE_MS) {
+            dataPromise = Promise.resolve(cached.data);
+        } else {
+            const load = definition.family
+                ? definition.fetchInstances(item)
+                : definition.fetch(item).then(function (items) {
+                    return [{ title: t(definition.titleKey), items: items }];
+                });
+            dataPromise = load.then(function (data) {
+                if (epoch === state.epoch) {
+                    state.integratedCache[cacheKey] = { ts: Date.now(), data: data };
+                }
+                return data;
+            });
+        }
+        dataPromise.then(function (instances) {
+            entry.loading = false;
+            if (epoch !== state.epoch || !container.isConnected || container._chIntegrated !== registry || registry[key] !== entry) {
+                return;
+            }
+            entry.count = instances.length;
+            entry.ts = Date.now();
+            Array.prototype.forEach.call(container.querySelectorAll(':scope > [data-ch-key="' + key + '"]'), function (node) {
+                node.remove();
+            });
+            instances.forEach(function (instance, index) {
+                const node = createIntegratedSection(container, key, index);
+                const format = formatFor(item, definition);
+                renderIntegratedSection(node, instance.title, instance.items, format.shape, format.showTitle);
+            });
+            scheduleApply();
+        }).catch(function (error) {
+            entry.loading = false;
+            console.warn('[CustomizedHome] section ' + key + ' failed', error);
+        });
+    }
+
+    // Home page shown again (back navigation, end of playback, tab back to front): reload what got old.
+    // Rows that depend on what was just watched go first; the others follow the cache lifetime.
+    const VOLATILE_REFRESH_MS = 15 * 1000;
+
+    function requestRefresh() {
+        const container = state.container;
+        if (!container || !container.isConnected || container.offsetParent === null || document.hidden) {
+            return;
+        }
+        const now = Date.now();
+        let needed = false;
+        function flag(entry, maxAge) {
+            if (entry && !entry.loading && !entry.refresh && now - entry.ts > maxAge) {
+                entry.refresh = true;
+                needed = true;
+            }
+        }
+        const registry = container._chIntegrated || {};
+        Object.keys(registry).forEach(function (key) {
+            flag(registry[key], INTEGRATED[key] && INTEGRATED[key].volatile ? VOLATILE_REFRESH_MS : INTEGRATED_CACHE_MS);
+        });
+        // The hero carries the resume position and the favorite / watched states.
+        flag(container._chHeroEntry, VOLATILE_REFRESH_MS);
+        if (needed) {
+            scheduleApply();
+        }
     }
 
     function applyFormat(node, item) {
@@ -1231,7 +1376,7 @@
             + '<span class="material-icons" aria-hidden="true">' + icon + '</span><span>' + escapeHtml(label) + '</span></button>';
     }
 
-    function heroSlideHtml(item, index, total) {
+    function heroSlideHtml(item, index, total, active) {
         const serverId = item.ServerId || apiClient().serverId();
         const userData = item.UserData || {};
         const title = item.Name || '';
@@ -1242,8 +1387,8 @@
         const ids = ' data-id="' + escapeHtml(item.Id) + '" data-serverid="' + escapeHtml(serverId) + '"';
 
         // The native click handler of the items container reads the item from these attributes.
-        let html = '<div class="ch-hero-slide' + (index === 0 ? ' ch-active' : '') + '" role="group" aria-roledescription="slide" aria-label="' + escapeHtml(t('heroPosition', index + 1, total)) + '"'
-            + (index === 0 ? '' : ' aria-hidden="true"') + ids
+        let html = '<div class="ch-hero-slide' + (active ? ' ch-active' : '') + '" role="group" aria-roledescription="slide" aria-label="' + escapeHtml(t('heroPosition', index + 1, total)) + '"'
+            + (active ? '' : ' aria-hidden="true"') + ids
             + ' data-type="' + escapeHtml(item.Type || '') + '" data-isfolder="' + (item.IsFolder ? 'true' : 'false') + '"'
             + (item.MediaType ? ' data-mediatype="' + escapeHtml(item.MediaType) + '"' : '')
             + ' data-positionticks="' + escapeHtml(userData.PlaybackPositionTicks || 0) + '">';
@@ -1289,7 +1434,7 @@
         }
     }
 
-    function startHero(node, intervalSeconds) {
+    function startHero(node, intervalSeconds, startIndex) {
         const slides = node.querySelectorAll('.ch-hero-slide');
         const dots = node.querySelectorAll('.ch-hero-dot');
         const reducedMotion = !!(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches);
@@ -1361,7 +1506,7 @@
             if (e.target.closest('.ch-hero-favorite, .ch-hero-played')) {
                 // The cached items no longer reflect the user data: fetch them again next time.
                 Object.keys(state.integratedCache).forEach(function (key) {
-                    if (key.indexOf('hero#') === 0) {
+                    if (key.indexOf('|hero#') >= 0) {
                         delete state.integratedCache[key];
                     }
                 });
@@ -1404,7 +1549,7 @@
             swipeStart = null;
         });
 
-        show(0);
+        show(startIndex || 0);
     }
 
     const HERO_UNDER_HEADER_CLASS = 'ch-hero-under-header';
@@ -1476,12 +1621,22 @@
     }
 
     function renderHero(container, hero, items) {
+        // A reload keeps the media the user is looking at in front, when it is still part of the selection.
+        const shown = container.querySelector(':scope > .ch-hero .ch-hero-slide.ch-active');
+        const shownId = shown ? shown.getAttribute('data-id') : null;
+        let startIndex = 0;
+        items.forEach(function (item, index) {
+            if (item.Id === shownId) {
+                startIndex = index;
+            }
+        });
+        removeHero(container);
         const node = el('div', 'ch-hero');
         node.setAttribute('role', 'region');
         node.setAttribute('aria-roledescription', 'carousel');
         node.setAttribute('aria-label', t('heroTitle'));
         let html = '<div is="emby-itemscontainer" class="ch-hero-slides" data-multiselect="false">' + items.map(function (item, index) {
-            return heroSlideHtml(item, index, items.length);
+            return heroSlideHtml(item, index, items.length, index === startIndex);
         }).join('') + '</div>';
         if (items.length > 1) {
             html += '<button type="button" class="ch-hero-nav ch-hero-prev" aria-label="' + escapeHtml(t('heroPrev')) + '"><span class="material-icons" aria-hidden="true">chevron_left</span></button>'
@@ -1492,7 +1647,7 @@
         }
         node.innerHTML = html;
         container.appendChild(node);
-        startHero(node, hero.IntervalSeconds);
+        startHero(node, hero.IntervalSeconds, startIndex);
         initHeroChrome();
         updateHeroChrome(true);
         return node;
@@ -1516,31 +1671,41 @@
         }
         const signature = heroDataSignature(hero) + '#' + hero.IntervalSeconds;
         const known = container._chHeroEntry;
+        let fresh = false;
         if (known && known.signature === signature) {
             // The web client may have wiped the container: render again.
             const missing = !known.loading && known.count > 0 && !container.querySelector(':scope > .ch-hero');
-            if (!missing) {
+            fresh = !known.loading && !!known.refresh;
+            if (!missing && !fresh) {
                 return;
             }
         }
-        removeHero(container);
-        const entry = { loading: true, count: 0, signature: signature };
+        // The hero on screen stays until the new selection is there.
+        const entry = { loading: true, count: known ? known.count : 0, signature: signature, ts: Date.now(), refresh: false };
         container._chHeroEntry = entry;
-        const cacheKey = 'hero#' + heroDataSignature(hero);
+        const epoch = state.epoch;
+        const cacheKey = state.identity + '|hero#' + heroDataSignature(hero);
         const cached = state.integratedCache[cacheKey];
-        const dataPromise = cached && Date.now() - cached.ts < INTEGRATED_CACHE_MS
+        const dataPromise = !fresh && cached && Date.now() - cached.ts < INTEGRATED_CACHE_MS
             ? Promise.resolve(cached.data)
             : fetchHeroItems(hero).then(function (items) {
-                state.integratedCache[cacheKey] = { ts: Date.now(), data: items };
+                if (epoch === state.epoch) {
+                    state.integratedCache[cacheKey] = { ts: Date.now(), data: items };
+                }
                 return items;
             });
         dataPromise.then(function (items) {
             entry.loading = false;
-            entry.count = items.length;
-            if (!container.isConnected || container._chHeroEntry !== entry || !items.length) {
+            if (epoch !== state.epoch || !container.isConnected || container._chHeroEntry !== entry) {
                 return;
             }
-            renderHero(container, hero, items);
+            entry.count = items.length;
+            entry.ts = Date.now();
+            if (items.length) {
+                renderHero(container, hero, items);
+            } else {
+                removeHero(container);
+            }
         }).catch(function (error) {
             entry.loading = false;
             console.warn('[CustomizedHome] hero failed', error);
@@ -1873,6 +2038,7 @@
         });
 
         const items = layout.Items || [];
+        const replacesHome = layoutReplacesHome(layout);
         const existingFolders = {};
         const folderNodes = container.querySelectorAll(':scope > .ch-folder');
         for (let i = 0; i < folderNodes.length; i++) {
@@ -1880,6 +2046,7 @@
         }
 
         let order = ORDER_STEP;
+        let shownTotal = 0;
         const used = {};
 
         function place(item, visible, folder, collapsed) {
@@ -1908,6 +2075,7 @@
                 }
             });
             order += ORDER_STEP;
+            shownTotal += shown;
             return shown;
         }
 
@@ -1942,13 +2110,26 @@
             }
         });
 
+        // Safety net: a layout whose sections all went missing (renamed by an update, plugin removed...) would leave
+        // an empty page. While plugin sections are still loading, wait for them instead.
+        const pending = Object.keys(container._chIntegrated || {}).some(function (key) {
+            return container._chIntegrated[key].loading;
+        });
+        // The native sections arrive one by one: the verdict only falls once the page had time to fill.
+        const settling = Date.now() - (container._chAttachedAt || 0) < EMPTY_HOME_GRACE_MS;
+        const hideUnlisted = replacesHome && (shownTotal > 0 || pending || settling);
+        if (replacesHome && !hideUnlisted && !state.warnedEmptyHome) {
+            state.warnedEmptyHome = true;
+            console.warn('[CustomizedHome] no section of the layout is displayed: showing the default home page instead');
+        }
+
         sections.forEach(function (section) {
             if (used[section.key]) {
                 return;
             }
             setOrder(section.el, ORDER_UNLISTED_BASE + section.origOrder);
             applyFormat(section.el, null);
-            setClass(section.el, 'ch-hidden', items.length > 0);
+            setClass(section.el, 'ch-hidden', hideUnlisted);
             setClass(section.el, 'ch-in-folder', false);
             if (section.el.dataset.chFolder !== undefined) {
                 delete section.el.dataset.chFolder;
@@ -1958,6 +2139,20 @@
         ensureCustomizeBar(container);
     }
 
+    // A layout replaces the default home page as soon as it lists one section that can exist: sections rendered
+    // by the plugin do not count while the administrator keeps them disabled.
+    const EMPTY_HOME_GRACE_MS = 5000;
+
+    function layoutReplacesHome(layout) {
+        const integratedAllowed = !!(state.response && state.response.EnableIntegratedSections);
+        function counts(item) {
+            return !!item.Key && (integratedAllowed || !INTEGRATED[item.Key]);
+        }
+        return (layout.Items || []).some(function (item) {
+            return item.Type === 'folder' ? (item.Items || []).some(counts) : counts(item);
+        });
+    }
+
     function scheduleApply() {
         if (state.applyScheduled) {
             return;
@@ -1965,11 +2160,13 @@
         state.applyScheduled = true;
         requestAnimationFrame(function () {
             state.applyScheduled = false;
-            if (!state.container || !state.container.isConnected) {
+            if (!state.container || !state.container.isConnected || !checkSession()) {
                 return;
             }
             if (!state.response) {
-                ensureLoaded().then(scheduleApply).catch(function () { /* logged already */ });
+                if (canLoad()) {
+                    ensureLoaded().then(scheduleApply).catch(function () { /* logged already */ });
+                }
                 return;
             }
             if (state.ctxStale) {
@@ -2000,6 +2197,9 @@
         if (!container) {
             return;
         }
+        // Start of the grace period of the empty home safety net (applyLayout).
+        container._chAttachedAt = Date.now();
+        setTimeout(scheduleApply, EMPTY_HOME_GRACE_MS + RETRY_TIMER_MARGIN_MS);
         state.containerObserver = new MutationObserver(function (mutations) {
             let relevant = false;
             for (let i = 0; i < mutations.length; i++) {
@@ -2031,13 +2231,18 @@
     }
 
     function scan() {
+        const loggedIn = checkSession();
         const container = findHomeContainer();
         if (container !== state.container) {
             attachContainer(container);
         }
-        if (!state.response && !state.loadPromise && currentUserId()) {
-            // Logged in on another page: load the options so the user menu entry is available everywhere.
-            ensureLoaded().then(injectMenuEntries).catch(function () { /* logged already */ });
+        if (loggedIn && !state.response && !state.loadPromise && canLoad()) {
+            // Also logged in on another page (the user menu entry is available everywhere), a new session on the
+            // same home page, or a failed load whose retry is due.
+            ensureLoaded().then(function () {
+                injectMenuEntries();
+                scheduleApply();
+            }).catch(function () { /* logged already */ });
         }
         injectMenuEntries();
     }
@@ -3375,10 +3580,16 @@
         const current = editor;
         const payload = serializeModel(current.model);
         const path = current.mode === 'default' ? 'DefaultLayout' : 'Layout';
-        const saveButton = current.overlay.querySelector('.ch-save');
-        saveButton.disabled = true;
+        const saveButtons = current.overlay.querySelectorAll('.ch-save');
+        function setSaving(saving) {
+            Array.prototype.forEach.call(saveButtons, function (button) {
+                button.disabled = saving;
+            });
+        }
+        setSaving(true);
+        const epoch = state.epoch;
         apiSend('POST', path, payload).then(function (saved) {
-            if (current.mode === 'user') {
+            if (current.mode === 'user' && epoch === state.epoch) {
                 state.layout = saved || payload;
                 if (state.response) {
                     state.response.HasUserLayout = true;
@@ -3396,7 +3607,7 @@
             }
         }).catch(function (error) {
             console.error('[CustomizedHome] save failed', error);
-            saveButton.disabled = false;
+            setSaving(false);
             toast(t('saveError'));
         });
     }
@@ -3420,9 +3631,23 @@
     /* Bootstrap                                                           */
     /* ------------------------------------------------------------------ */
 
+    const NAVIGATION_SETTLE_MS = 300;
+
     function bootstrap() {
         const observer = new MutationObserver(scheduleScan);
         observer.observe(document.body, { childList: true, subtree: true });
+        // jellyfin-web restores the cached home view without rendering it again: these are the moments to catch up.
+        document.addEventListener('viewshow', function () {
+            scheduleScan();
+            requestRefresh();
+        });
+        document.addEventListener('visibilitychange', requestRefresh);
+        window.addEventListener('hashchange', function () {
+            setTimeout(function () {
+                scheduleScan();
+                requestRefresh();
+            }, NAVIGATION_SETTLE_MS);
+        });
         scheduleScan();
     }
 

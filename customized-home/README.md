@@ -45,7 +45,7 @@ Installation manuelle : dézipper `customized-home_<version>_jellyfin-<abi>.zip`
 
 - Ouvrir via le bouton en bas de l'accueil ou le menu utilisateur → **Personnaliser l'accueil**.
 - Deux colonnes : **Page d'accueil modifiée** (la disposition) et **Sections hors disposition** (tout le reste).
-- **Règle** : dès que la colonne de gauche contient au moins une section, elle remplace la page d'accueil par défaut (les sections hors disposition ne sont plus affichées). Colonne vide = page d'accueil Jellyfin inchangée.
+- **Règle** : dès que la colonne de gauche contient au moins une section, elle remplace la page d'accueil par défaut (les sections hors disposition ne sont plus affichées). Colonne vide = page d'accueil Jellyfin inchangée. Filet de sécurité : les sections rendues par le plugin ne comptent pas tant que l'administrateur les a désactivées, et si aucune section de la disposition n'est affichée 5 s après l'ouverture (sections disparues après une mise à jour, plugin tiers retiré), la page d'accueil par défaut est réaffichée (avertissement dans la console).
 - Colonne de droite : bouton `+` **Ajouter à la page d'accueil modifiée**, la section arrive tout en haut. Pas d'autre action.
 - Colonne de gauche : `👁` afficher / masquer, bouton format, `✕` supprimer de la page d'accueil modifiée. Le menu format (forme, taille, titre de la section, titres des cartes, genres) reste ouvert pendant les choix ; clic extérieur ou Échap pour le fermer.
 - Pictos : maison = section rendue par Customized Home, logo Jellyfin = section par défaut du client web, puzzle = autre plugin. Légende en haut de l'éditeur, info-bulle sur chaque icône. Pendant une recherche, bouton au survol **Remonter cette section tout en haut**.
@@ -54,7 +54,7 @@ Installation manuelle : dézipper `customized-home_<version>_jellyfin-<abi>.zip`
 - Sous-titre d'une ligne : origine de la section (Jellyfin, Home Screen Sections, Customized Home) et « non affichée actuellement » quand la section est connue mais pas rendue sur l'accueil en ce moment (désactivée dans les réglages d'accueil Jellyfin, vide, plugin absent).
 - **Afficher toutes les sections connues** : liste aussi les sections du catalogue non présentes actuellement (utile pour préparer une disposition).
 - Menu `⋮` → **Format d'affichage** : forme, taille et titres de la section. Sur les sections natives ou HSS le changement de forme est appliqué en CSS (recadrage de l'image existante) ; sur les sections intégrées l'image adaptée est chargée (affiche pour portrait, vignette / fond pour paysage).
-- Les sections intégrées (badge « Intégrée à Customized Home ») apparaissent dans la liste, masquées : `👁` pour les activer. Données chargées côté client via l'API Jellyfin, cache 5 minutes.
+- Les sections intégrées (badge « Intégrée à Customized Home ») apparaissent dans la liste, masquées : `👁` pour les activer. Données chargées côté client via l'API Jellyfin, cache 5 minutes par utilisateur. Au retour sur l'accueil (navigation arrière, fin de lecture, onglet remis au premier plan), les rangées liées au visionnage (Continuer à regarder / À suivre, Regarder à nouveau, Parce que vous avez regardé) sont rechargées dès qu'elles ont plus de 15 s, les autres après 5 min ; l'ancien contenu reste affiché jusqu'à l'arrivée du nouveau.
 - **Réinitialiser** : supprime la disposition personnelle → retour à la disposition par défaut.
 - L'état replié / déplié d'un dossier est mémorisé par appareil (localStorage).
 
@@ -76,7 +76,7 @@ Carrousel de médias en tête de l'accueil, configuré dans l'éditeur : ligne �
 - Bande-annonce : locale → lue dans Jellyfin ; distante uniquement → ouverte dans un nouvel onglet (liens `http(s)` seulement).
 - Rotation en pause au survol, au focus clavier, onglet masqué ; désactivée si le système demande de réduire les animations. Flèches, points, touches gauche / droite (hors mode TV), balayage tactile.
 - Affichage : pleine largeur, départ sous le menu du haut, fondu dans la page en bas (masque CSS, donc quel que soit le fond du thème). Tant que le menu survole le hero, il devient transparent avec un léger dégradé sombre (classe `ch-hero-under-header` sur `<html>`) ; il retrouve son fond une fois le hero dépassé ou en quittant l'accueil. Les marges négatives sont mesurées par le script (hauteur du menu, marges du thème), pas codées en dur.
-- Nécessite l'option **sections intégrées** (le hero est rendu par le plugin). Cache 5 minutes, comme les sections intégrées : la source aléatoire ne change donc pas à chaque retour sur l'accueil.
+- Nécessite l'option **sections intégrées** (le hero est rendu par le plugin). Rechargé au retour sur l'accueil comme les rangées liées au visionnage (position de reprise, favori, vu) : le média affiché reste au premier plan s'il fait encore partie de la sélection, la source aléatoire peut changer le reste.
 
 ### Page de configuration (administrateur)
 
@@ -215,9 +215,11 @@ Limite : ces tests valident le script contre un DOM simulé. Ils ne détectent p
 - HSS en mode chargement paresseux (pagination) ajoute des sections au défilement : elles sont réordonnées à l'arrivée ; une section listée en haut de la disposition peut donc apparaître après un chargement.
 - Les apps natives n'exécutent pas le script : leur accueil n'est pas modifié.
 - Forme forcée sur une section native/HSS : l'image reste celle choisie par le rendu d'origine (vignette 16:9 recadrée en affiche, par exemple). Les sections intégrées chargent l'image adaptée.
-- Les sections intégrées ne se rafraîchissent pas en temps réel après un visionnage (cache 5 min, rechargement à la prochaine ouverture de l'accueil).
+- Session : tout ce que le script charge ou affiche appartient à un utilisateur sur un serveur. Déconnexion, autre compte ou autre serveur dans le même onglet (jellyfin-web ne recharge pas la page) : état et cache vidés, éditeur fermé, sections du plugin retirées, accueil natif rétabli, puis chargement pour le nouvel utilisateur.
+- Serveur en erreur : un chargement de disposition en échec laisse l'accueil natif intact et n'est retenté qu'après 2 s, 4 s, 8 s… jusqu'à 5 min, pas à chaque modification du DOM.
+- Les sections intégrées ne suivent pas les évènements de lecture de jellyfin-web : elles se rechargent quand l'accueil est réaffiché (évènement `viewshow`), pas pendant qu'il reste à l'écran.
 - Miniatures de genres : type détecté sur les octets (le type déclaré n'est jamais cru), SVG refusé, 5 Mo max, fichier nommé par hash du genre (jamais par l'entrée utilisateur), servi avec `nosniff`.
-- Hero : une requête `Items` par source à l'ouverture de l'accueil (puis cache 5 min) ; la source aléatoire (`sortBy=Random`) coûte un tri complet côté serveur sur les très grosses bibliothèques. Les boutons d'action reposent sur le gestionnaire de clics de `emby-itemscontainer` du client web : à revérifier après une mise à jour majeure de Jellyfin.
+- Hero : une requête `Items` par source à l'ouverture de l'accueil et à chaque retour après 15 s ; la source aléatoire (`sortBy=Random`) coûte un tri complet côté serveur sur les très grosses bibliothèques. Les boutons d'action reposent sur le gestionnaire de clics de `emby-itemscontainer` du client web : à revérifier après une mise à jour majeure de Jellyfin.
 - Hero sous le menu : repose sur `.skinHeader` (menu fixe) et `.page` de jellyfin-web ; un thème CSS personnalisé qui restyle le menu peut entrer en conflit avec la transparence.
 - Les assets client sont servis sans authentification (comme HSS / Plugin Pages) : ils ne contiennent aucune donnée sensible.
 
