@@ -18,7 +18,7 @@ using Xunit;
 namespace Jellyfin.Plugin.CustomizedHome.Tests;
 
 /// <summary>
-/// What an uninstallation deletes: the data folders of the plugin, never anything next to them.
+/// Where the data of the plugin lives, and what an uninstallation does to it: nothing, the log says where it is.
 /// One test creates a <see cref="Plugin"/>, which becomes the process wide instance the other classes read:
 /// this class runs alone, once every parallel test is over.
 /// </summary>
@@ -66,93 +66,46 @@ public sealed class PluginDataTests : IDisposable
     }
 
     [Fact]
-    public void Uninstalling_deletes_the_layouts_and_the_thumbnails_and_nothing_else()
+    public void Uninstalling_keeps_every_file_and_the_log_says_where_they_are()
     {
         WriteDataWithTheRealStores();
-        string configuration = Path.Combine(_configurations, "Jellyfin.Plugin.CustomizedHome.xml");
-        string otherPlugin = Path.Combine(_configurations, "Jellyfin.Plugin.Other", "users", "data.json");
-        File.WriteAllText(configuration, "<PluginConfiguration />");
-        Directory.CreateDirectory(Path.GetDirectoryName(otherPlugin)!);
-        File.WriteAllText(otherPlugin, "{}");
+        File.WriteAllText(Path.Combine(_configurations, "Jellyfin.Plugin.CustomizedHome.xml"), "<PluginConfiguration />");
+        List<string> before = EveryFile();
         RecordingLogger logger = new();
 
-        Plugin.DeleteData(_paths, logger);
+        Plugin.ReportKeptData(_paths, logger);
 
-        Assert.False(Directory.Exists(Root));
-        Assert.True(File.Exists(configuration));
-        Assert.True(File.Exists(otherPlugin));
-
-        // users, genres and the folder holding them: the administrator reads in the log what was removed.
-        Assert.Equal(3, logger.Entries.Count);
-        Assert.All(logger.Entries, entry => Assert.Equal(LogLevel.Information, entry.Level));
+        // A layout, the thumbnail index, a thumbnail and the configuration: reinstalling finds them all again.
+        Assert.Equal(4, before.Count);
+        Assert.Equal(before, EveryFile());
+        (LogLevel Level, string Message) entry = Assert.Single(logger.Entries);
+        Assert.Equal(LogLevel.Information, entry.Level);
+        Assert.Contains(Root, entry.Message, StringComparison.Ordinal);
+        Assert.Contains("kept", entry.Message, StringComparison.Ordinal);
     }
 
     [Fact]
-    public void Something_else_found_in_the_data_root_is_left_alone_with_the_root()
+    public void Uninstalling_a_plugin_that_never_stored_anything_says_nothing_and_does_not_fail()
     {
-        WriteDataWithTheRealStores();
-        string foreignFile = Path.Combine(Root, "notes.txt");
-        string foreignFolder = Path.Combine(Root, "backup", "users");
-        File.WriteAllText(foreignFile, "mine");
-        Directory.CreateDirectory(foreignFolder);
+        RecordingLogger logger = new();
 
-        DataCleanupResult result = PluginData.DeleteAll(Root);
+        Plugin.ReportKeptData(_paths, logger);
 
-        Assert.Equal(
-            [Path.Combine(Root, PluginData.GenresFolder), Path.Combine(Root, PluginData.UsersFolder)],
-            result.Deleted.Order(StringComparer.Ordinal));
-        Assert.Empty(result.Failed);
-        Assert.True(File.Exists(foreignFile));
-        Assert.True(Directory.Exists(foreignFolder));
-        Assert.False(Directory.Exists(Path.Combine(Root, PluginData.UsersFolder)));
-        Assert.False(Directory.Exists(Path.Combine(Root, PluginData.GenresFolder)));
+        Assert.Empty(logger.Entries);
+        Assert.False(Directory.Exists(_configurations));
     }
 
     [Theory]
-    [InlineData(null)]
-    [InlineData("")]
-    [InlineData("   ")]
-    [InlineData("MISSING")]
-    public void Nothing_to_delete_is_not_an_error_and_a_blank_root_deletes_nothing(string? root)
+    [InlineData(true)]
+    [InlineData(false)]
+    public void The_plugin_keeps_its_data_when_the_server_uninstalls_it(bool hasData)
     {
-        WriteDataWithTheRealStores();
-
-        DataCleanupResult result = PluginData.DeleteAll(root == "MISSING" ? Path.Combine(_configurations, "never-created") : root!);
-
-        Assert.Empty(result.Deleted);
-        Assert.Empty(result.Failed);
-        Assert.True(Directory.Exists(Path.Combine(Root, PluginData.UsersFolder)));
-    }
-
-    [Fact]
-    public void A_file_in_use_never_makes_the_uninstallation_fail()
-    {
-        WriteDataWithTheRealStores();
-        string layoutFile = Directory.GetFiles(Path.Combine(Root, PluginData.UsersFolder)).Single();
-        RecordingLogger logger = new();
-
-        using (new FileStream(layoutFile, FileMode.Open, FileAccess.Read, FileShare.None))
+        if (hasData)
         {
-            // Windows refuses to delete an open file, Linux does not mind: either way nothing is thrown.
-            Plugin.DeleteData(_paths, logger);
+            WriteDataWithTheRealStores();
         }
 
-        Assert.False(Directory.Exists(Path.Combine(Root, PluginData.GenresFolder)));
-        if (Directory.Exists(Path.Combine(Root, PluginData.UsersFolder)))
-        {
-            (LogLevel Level, Exception? Exception) warning = Assert.Single(logger.Entries, entry => entry.Level == LogLevel.Warning);
-            Assert.NotNull(warning.Exception);
-        }
-        else
-        {
-            Assert.DoesNotContain(logger.Entries, entry => entry.Level == LogLevel.Warning);
-        }
-    }
-
-    [Fact]
-    public void The_plugin_cleans_up_when_the_server_uninstalls_it()
-    {
-        WriteDataWithTheRealStores();
+        List<string> before = EveryFile();
         Mock<IApplicationPaths> paths = new();
         paths.SetupGet(p => p.PluginConfigurationsPath).Returns(_configurations);
         paths.SetupGet(p => p.PluginsPath).Returns(Path.Combine(_configurations, "plugins"));
@@ -164,13 +117,16 @@ public sealed class PluginDataTests : IDisposable
         serializer.Setup(s => s.DeserializeFromFile(It.IsAny<Type>(), It.IsAny<string>())).Returns(new PluginConfiguration());
         Mock<IServerConfigurationManager> serverConfiguration = new();
         serverConfiguration.Setup(manager => manager.GetConfiguration(It.IsAny<string>())).Returns(new NetworkConfiguration());
+        RecordingLogger<Plugin> logger = new();
         try
         {
-            Plugin plugin = new(paths.Object, serializer.Object, serverConfiguration.Object, NullLogger<Plugin>.Instance);
+            Plugin plugin = new(paths.Object, serializer.Object, serverConfiguration.Object, logger);
 
             plugin.OnUninstalling();
 
-            Assert.False(Directory.Exists(Root));
+            Assert.Equal(before, EveryFile());
+            Assert.Equal(hasData ? 3 : 0, before.Count);
+            Assert.Equal(hasData ? 1 : 0, logger.Entries.Count(entry => entry.Message.Contains(Root, StringComparison.Ordinal)));
         }
         finally
         {
@@ -178,9 +134,20 @@ public sealed class PluginDataTests : IDisposable
         }
     }
 
-    private sealed class RecordingLogger : ILogger
+    private List<string> EveryFile()
     {
-        public List<(LogLevel Level, Exception? Exception)> Entries { get; } = new();
+        return Directory.Exists(_configurations)
+            ? Directory.GetFiles(_configurations, "*", SearchOption.AllDirectories).Order(StringComparer.Ordinal).ToList()
+            : [];
+    }
+
+    private sealed class RecordingLogger<T> : RecordingLogger, ILogger<T>
+    {
+    }
+
+    private class RecordingLogger : ILogger
+    {
+        public List<(LogLevel Level, string Message)> Entries { get; } = new();
 
         public IDisposable? BeginScope<TState>(TState state)
             where TState : notnull
@@ -195,7 +162,7 @@ public sealed class PluginDataTests : IDisposable
 
         public void Log<TState>(LogLevel logLevel, EventId eventId, TState state, Exception? exception, Func<TState, Exception?, string> formatter)
         {
-            Entries.Add((logLevel, exception));
+            Entries.Add((logLevel, formatter(state, exception)));
         }
     }
 }

@@ -259,6 +259,22 @@ public sealed class LayoutStoreTests : IDisposable
     }
 
     [Fact]
+    public void Listing_a_folder_that_is_not_there_is_an_empty_list_not_an_error()
+    {
+        // Never created, then removed by hand while the server runs: the listing finds out when it reads the
+        // folder, which is also what happens when the folder goes away right before that read.
+        LayoutStore store = CreateStore();
+        Assert.Empty(store.List());
+        Assert.Empty(store.List(_ => true));
+
+        store.Save(Alice, SampleLayout());
+        Assert.Single(store.List());
+        Directory.Delete(UsersDirectory, recursive: true);
+
+        Assert.Empty(store.List());
+    }
+
+    [Fact]
     public void A_layout_written_by_the_first_version_loads_with_todays_defaults()
     {
         WriteFile(Alice.ToString("N") + ".json", FirstVersionLayout);

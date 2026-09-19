@@ -27,7 +27,7 @@ Do not use the captures produced by "npm run screenshots": they show the simulat
 
 | It does | It does not |
 | --- | --- |
-| Reorder the home sections by drag and drop (mouse and touch) | Change anything in clients that do not run the Jellyfin web client (see below) |
+| Reorder the home sections by drag and drop (mouse and touch) or from the keyboard | Change anything in clients that do not run the Jellyfin web client (see below) |
 | Hide a section without losing its place, or remove it from the page | Modify files on disk: the script is injected on the fly by the File Transformation plugin |
 | Set a format per section: card shape (default, poster, landscape, square), card size (small, normal, large), section title and card titles on or off | Replace the Jellyfin home settings (Settings, Home): both can be used, see [Known limits](#known-limits) |
 | Add sections rendered by the plugin, with no other plugin: Continue Watching / Next Up (combined), Latest Movies and Latest Shows by release date, Collections, Watch Again, Because You Watched, Genre, All genres | Play media itself: playback always goes through the web client |
@@ -101,13 +101,13 @@ The editor has two columns (stacked on a narrow screen):
 | To do this | Do that |
 | --- | --- |
 | Add a section | In the right column, press **Add to the customized home page** (icon `add_circle_outline`): the section lands at the top of the layout. Or drag it to the left column |
-| Reorder | Drag the handle (icon `drag_indicator`) of a row |
+| Reorder | Drag the handle (icon `drag_indicator`) of a row. Without a pointer: focus the handle and press the up / down arrows, or activate it (Enter, tap, screen reader) for a **Move up** / **Move down** menu. The new position is announced to screen readers |
 | Hide or show a section while keeping its place | **Hide** / **Show** (icons `visibility` / `visibility_off`) |
 | Remove a section from the home page | **Remove from the customized home page** (icon `close`), or drag the row to the right column |
 | Change the format | **Display format (shape, size, titles)** (icon `aspect_ratio`). The menu stays open while you choose; click outside or press Escape to close it |
 | Find a section | **Search a section** filters both columns. While searching, drag and drop is off and a **Move this section to the very top** button appears on the rows of the layout |
 | See sections that are not on the page right now | Tick **Also list the Jellyfin sections that are not displayed right now** (sections turned off in the Jellyfin home settings, for example) |
-| Save | **Save**. **Cancel**, the close button, Escape or a click outside the dialog discard the changes |
+| Save | **Save**. **Cancel**, the close button, Escape or a click outside the dialog discard the changes; when there are any, the editor first asks whether to keep editing or drop them. **Reset** asks the same way |
 | Go back to the default layout | **Reset** (shown once you saved a layout of your own) |
 
 The icon at the start of a row tells where the section comes from: a house for a section rendered by Customized Home, the Jellyfin logo for a default section of the web client, a puzzle piece for a section added by another plugin. The line under the title repeats the origin and says **not displayed right now** when the section is known but not currently on the home page.
@@ -155,7 +155,7 @@ The hero is a carousel of featured media at the top of the home page. It is set 
 | **Skip media already watched** | on / off | on |
 | **Only media with a backdrop image** | on / off | on |
 
-Each slide shows the backdrop, the logo (or the title), year, runtime, rating, community and critic scores, genres and the synopsis, with these actions: **Play** or **Resume** (plus **From the beginning**), **Trailer**, **Favorite**, **Watched**, **More info**. Unticking the last source turns the hero off. Rotation pauses while the pointer or the keyboard focus is on the hero and while the tab is hidden; it is disabled when the system asks for reduced motion.
+Each slide shows the backdrop, the logo (or the title), year, runtime, rating, community and critic scores, genres and the synopsis, with these actions: **Play** or **Resume** (plus **From the beginning**), **Trailer**, **Favorite**, **Watched**, **More info**. Unticking the last source turns the hero off. Rotation pauses while the pointer or the keyboard focus is on the hero and while the tab is hidden; a pause / play button sits next to the dots; rotation is disabled when the system asks for reduced motion.
 
 The hero needs the administrator option **Offer the sections rendered by this plugin**.
 
@@ -257,7 +257,7 @@ To report a vulnerability, see [SECURITY.md](../SECURITY.md).
 ## Uninstalling
 
 1. Dashboard, Plugins, Customized Home, **Uninstall**, then restart Jellyfin. The home page is back to the Jellyfin default after a hard refresh. Nothing else has to be undone: no file of the web client was modified.
-2. Jellyfin removes the plugin folder only. To remove the leftover data, delete `Jellyfin.Plugin.CustomizedHome.xml` and the `Jellyfin.Plugin.CustomizedHome/` folder (user layouts and genre thumbnails) from `plugins/configurations/` (see [Privacy and security](#privacy-and-security) for the location). Keep them if you plan to reinstall: layouts are picked up again.
+2. Jellyfin removes the plugin folder only. To remove the leftover data, delete `Jellyfin.Plugin.CustomizedHome.xml` and the `Jellyfin.Plugin.CustomizedHome/` folder (user layouts and genre thumbnails) from `plugins/configurations/` (see [Privacy and security](#privacy-and-security) for the location). Keep them if you plan to reinstall: layouts are picked up again. This is on purpose: uninstalling and reinstalling is a common troubleshooting step and must not wipe every user's layout. The layout of a user deleted from Jellyfin is deleted with that user.
 3. File Transformation can be uninstalled too if no other plugin needs it.
 
 To turn the plugin off without uninstalling it, disable it in Dashboard, Plugins and restart Jellyfin.
@@ -270,7 +270,7 @@ To turn the plugin off without uninstalling it, disable it in Dashboard, Plugins
 - **Home Screen Sections in lazy loading mode** adds sections while you scroll: they are ordered when they arrive, so a section listed first may appear after a load.
 - **Forced shape on a section that the plugin does not render**: the image stays the one chosen by the original section, cropped (a 16:9 thumbnail cropped to a poster, for example).
 - **Plugin sections reload when the home page is shown again**, not while it stays on screen.
-- **The hero has no pause button**; rotation pauses on hover, on keyboard focus and when the tab is hidden, and can be set to manual. The **Random** source costs a full sort on the server for very large libraries.
+- The **Random** source of the hero costs a full sort on the server for very large libraries.
 - **Right-to-left languages** are not specifically handled by the hero and the editor.
 - **Folders** (collapsible groups of sections) exist in the layout format and are displayed, but the editor cannot create them any more; they can only come from the API or from a layout saved with an old version.
 - **Custom CSS themes** that restyle the top bar can conflict with the transparent header over the hero.

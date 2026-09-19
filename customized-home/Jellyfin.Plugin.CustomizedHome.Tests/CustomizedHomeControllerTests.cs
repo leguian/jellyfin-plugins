@@ -19,6 +19,7 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.Routing;
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Net.Http.Headers;
 using Moq;
@@ -42,15 +43,27 @@ public sealed class CustomizedHomeControllerTests : IDisposable
     private readonly Mock<IUserManager> _userManager = new();
     private readonly Mock<IUserViewManager> _userViewManager = new();
     private readonly WebInjectionService _injection = new(NullLogger<WebInjectionService>.Instance);
+    private readonly RecordingLogger _logger = new();
     private readonly LayoutStore _store;
     private readonly GenreImageStore _genreImages;
+
+    // Set by a test to make the disk refuse: a locked file cannot be produced the same way on every platform.
+    private Exception? _diskFailure;
 
     public CustomizedHomeControllerTests()
     {
         Mock<IApplicationPaths> paths = new();
         paths.SetupGet(p => p.PluginConfigurationsPath).Returns(_root);
-        _store = new LayoutStore(paths.Object, NullLogger<LayoutStore>.Instance);
-        _genreImages = new GenreImageStore(paths.Object, NullLogger<GenreImageStore>.Instance);
+        _store = new LayoutStore(paths.Object, NullLogger<LayoutStore>.Instance, File.OpenRead, path =>
+        {
+            ThrowWhenTheDiskRefuses();
+            File.Delete(path);
+        });
+        _genreImages = new GenreImageStore(paths.Object, NullLogger<GenreImageStore>.Instance, path =>
+        {
+            ThrowWhenTheDiskRefuses();
+            return File.OpenRead(path);
+        });
 
         _userManager.Setup(manager => manager.GetUserById(Alice)).Returns(NewUser("alice", Alice));
         _userManager.Setup(manager => manager.GetUserById(Bob)).Returns(NewUser("bob", Bob));
@@ -84,7 +97,7 @@ public sealed class CustomizedHomeControllerTests : IDisposable
 
     private CustomizedHomeController ControllerFor(ClaimsPrincipal principal)
     {
-        return new CustomizedHomeController(_store, _genreImages, _injection, _userManager.Object, _userViewManager.Object, () => _config)
+        return new CustomizedHomeController(_store, _genreImages, _injection, _userManager.Object, _userViewManager.Object, _logger, () => _config)
         {
             ControllerContext = new ControllerContext { HttpContext = new DefaultHttpContext { User = principal } }
         };
@@ -93,6 +106,35 @@ public sealed class CustomizedHomeControllerTests : IDisposable
     private CustomizedHomeController ControllerFor(Guid userId, bool administrator = false)
     {
         return ControllerFor(Principal(userId.ToString("N"), administrator));
+    }
+
+    private void ThrowWhenTheDiskRefuses()
+    {
+        if (_diskFailure is not null)
+        {
+            throw _diskFailure;
+        }
+    }
+
+    private GenreImageStore NewGenreImageStore()
+    {
+        Mock<IApplicationPaths> paths = new();
+        paths.SetupGet(p => p.PluginConfigurationsPath).Returns(_root);
+        return new GenreImageStore(paths.Object, NullLogger<GenreImageStore>.Instance);
+    }
+
+    private void AssertStorageUnavailable(ActionResult? result, Exception cause)
+    {
+        ObjectResult answer = Assert.IsType<ObjectResult>(result);
+        Assert.Equal(StatusCodes.Status503ServiceUnavailable, answer.StatusCode);
+        string message = Assert.IsType<string>(answer.Value);
+        Assert.Contains("could not be written", message, StringComparison.Ordinal);
+
+        // The cause is for the administrator, in the server log, not for the client.
+        Assert.DoesNotContain(cause.Message, message, StringComparison.Ordinal);
+        (LogLevel Level, Exception? Exception) entry = Assert.Single(_logger.Entries);
+        Assert.Equal(LogLevel.Warning, entry.Level);
+        Assert.Same(cause, entry.Exception);
     }
 
     private static HomeLayout Layout(params string[] keys)
@@ -519,6 +561,100 @@ public sealed class CustomizedHomeControllerTests : IDisposable
         Assert.Empty(_genreImages.List());
     }
 
+    // ---- The disk refuses (file locked by a backup, permissions, disk full) ----
+
+    public static TheoryData<Exception> DiskFailures()
+    {
+        return new TheoryData<Exception>
+        {
+            new IOException("The process cannot access the file because it is being used by another process."),
+            new UnauthorizedAccessException("Access to the path is denied.")
+        };
+    }
+
+    [Theory]
+    [MemberData(nameof(DiskFailures))]
+    public void A_layout_that_cannot_be_deleted_is_a_503_and_the_layout_is_still_there(Exception failure)
+    {
+        _store.Save(Alice, Layout("jf:resume"));
+        _diskFailure = failure;
+
+        AssertStorageUnavailable(ControllerFor(Alice).ResetLayout(null), failure);
+
+        _diskFailure = null;
+        Assert.Equal(["jf:resume"], KeysOf(_store.Get(Alice)!));
+        Assert.IsType<NoContentResult>(ControllerFor(Alice).ResetLayout(null));
+        Assert.Null(_store.Get(Alice));
+    }
+
+    [Fact]
+    public void A_layout_that_cannot_be_written_is_a_503_and_the_previous_one_is_still_there()
+    {
+        _store.Save(Alice, Layout("jf:resume"));
+
+        // A folder where the store writes its temporary file: refused on every platform, as an IOException or
+        // an UnauthorizedAccessException depending on the platform.
+        string blocker = Directory.GetFiles(_root, "*.json", SearchOption.AllDirectories).Single() + ".tmp";
+        Directory.CreateDirectory(blocker);
+
+        ObjectResult answer = Assert.IsType<ObjectResult>(ControllerFor(Alice).SaveLayout(Layout("jf:nextup")).Result);
+
+        Assert.Equal(StatusCodes.Status503ServiceUnavailable, answer.StatusCode);
+        (LogLevel Level, Exception? Exception) entry = Assert.Single(_logger.Entries);
+        Assert.Equal(LogLevel.Warning, entry.Level);
+        Assert.True(entry.Exception is IOException or UnauthorizedAccessException);
+        Assert.Equal(["jf:resume"], KeysOf(_store.Get(Alice)!));
+
+        Directory.Delete(blocker);
+        Assert.Equal(["jf:nextup"], KeysOf(ControllerFor(Alice).SaveLayout(Layout("jf:nextup")).Value!));
+    }
+
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public void A_thumbnail_index_that_cannot_be_read_makes_uploads_and_deletions_a_503_and_nothing_changes(bool upload)
+    {
+        // Written by another instance: the store of the controller has yet to read the index.
+        NewGenreImageStore().Save("Comedy", "portrait", Png, out _);
+        _diskFailure = new IOException("The process cannot access the file because it is being used by another process.");
+        CustomizedHomeController controller = ControllerFor(Alice, administrator: true);
+
+        ActionResult? result = upload
+            ? controller.UploadGenreImage(new GenreImageUpload { Name = "Drama", Shape = "portrait", Data = Convert.ToBase64String(Png) }).Result
+            : controller.DeleteGenreImage("Comedy", "portrait");
+
+        // The store reports the unreadable index with an exception of its own: only its kind is known here.
+        ObjectResult answer = Assert.IsType<ObjectResult>(result);
+        Assert.Equal(StatusCodes.Status503ServiceUnavailable, answer.StatusCode);
+        Assert.Contains("could not be written", Assert.IsType<string>(answer.Value), StringComparison.Ordinal);
+        (LogLevel Level, Exception? Exception) entry = Assert.Single(_logger.Entries);
+        Assert.Equal(LogLevel.Warning, entry.Level);
+        Assert.IsType<IOException>(entry.Exception);
+
+        _diskFailure = null;
+        Assert.Equal(["Comedy"], NewGenreImageStore().List().Select(image => image.Name));
+        Assert.IsType<NoContentResult>(controller.DeleteGenreImage("Comedy", "portrait"));
+        Assert.Empty(NewGenreImageStore().List());
+    }
+
+    [Fact]
+    public void A_storage_failure_is_declared_by_every_action_that_writes_through_a_store()
+    {
+        string[] writers =
+        [
+            nameof(CustomizedHomeController.SaveLayout),
+            nameof(CustomizedHomeController.ResetLayout),
+            nameof(CustomizedHomeController.UploadGenreImage),
+            nameof(CustomizedHomeController.DeleteGenreImage)
+        ];
+
+        foreach (string writer in writers)
+        {
+            IEnumerable<int> declared = typeof(CustomizedHomeController).GetMethod(writer)!.GetCustomAttributes<ProducesResponseTypeAttribute>().Select(attribute => attribute.StatusCode);
+            Assert.Contains(StatusCodes.Status503ServiceUnavailable, declared);
+        }
+    }
+
     // ---- Client assets ----
 
     [Theory]
@@ -597,6 +733,27 @@ public sealed class CustomizedHomeControllerTests : IDisposable
                 Assert.True(authorizes && !allowsAnonymous, action.Name + " must require authentication.");
                 Assert.Equal(elevated.Contains(action.Name) ? Policies.RequiresElevation : null, policy);
             }
+        }
+    }
+
+    private sealed class RecordingLogger : ILogger<CustomizedHomeController>
+    {
+        public List<(LogLevel Level, Exception? Exception)> Entries { get; } = new();
+
+        public IDisposable? BeginScope<TState>(TState state)
+            where TState : notnull
+        {
+            return null;
+        }
+
+        public bool IsEnabled(LogLevel logLevel)
+        {
+            return true;
+        }
+
+        public void Log<TState>(LogLevel logLevel, EventId eventId, TState state, Exception? exception, Func<TState, Exception?, string> formatter)
+        {
+            Entries.Add((logLevel, exception));
         }
     }
 }

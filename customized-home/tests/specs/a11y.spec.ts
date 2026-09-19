@@ -481,3 +481,139 @@ test('embedded editor: a named group of the administration page, not a modal, an
     await expect(page.locator('#chDefaultEditor .ch-list .ch-row')).toHaveCount(3);
     expect(dialogs).toEqual([]);
 });
+
+/* ---- review fixes: focus restoration, question of the embedded editor, duplicated keys, lone row ---- */
+
+interface EditorApi {
+    CustomizedHome: { openEditor(options: { mode: 'user'; opener?: HTMLElement | null }): void };
+}
+
+const SHORT_VIEWPORT = { width: 1000, height: 400 };
+
+/** The customize button sits at the very bottom of the home page: below the fold of a short viewport. */
+async function expectButtonBelowTheFold(page: Page): Promise<void> {
+    const box = await page.locator('.ch-customize-button').boundingBox();
+    expect(box?.y ?? 0).toBeGreaterThan(SHORT_VIEWPORT.height);
+    expect(await page.evaluate(() => window.scrollY)).toBe(0);
+}
+
+test('closing: an editor opened without an opener restores no focus and does not scroll to the customize button', async ({ page }) => {
+    await page.setViewportSize(SHORT_VIEWPORT);
+    await openHome(page, { layout: LAYOUT });
+    await expectButtonBelowTheFold(page);
+
+    await page.evaluate(() => (window as unknown as EditorApi).CustomizedHome.openEditor({ mode: 'user', opener: null }));
+    await page.waitForSelector(`${LIST} .ch-row`);
+    await page.keyboard.press('Escape');
+    await expect(page.locator('.ch-overlay')).toHaveCount(0);
+
+    await expect(page.locator('.ch-customize-button')).not.toBeFocused();
+    expect(await page.evaluate(() => window.scrollY)).toBe(0);
+});
+
+test('closing: an opener that is gone hands the focus to the customize button without scrolling to it', async ({ page }) => {
+    await page.setViewportSize(SHORT_VIEWPORT);
+    await openHome(page, { layout: LAYOUT });
+    await expectButtonBelowTheFold(page);
+
+    await page.evaluate(() => {
+        const opener = document.createElement('button');
+        opener.id = 'temporaryOpener';
+        document.body.prepend(opener);
+        (window as unknown as EditorApi).CustomizedHome.openEditor({ mode: 'user', opener });
+    });
+    await page.waitForSelector(`${LIST} .ch-row`);
+    await page.evaluate(() => document.querySelector('#temporaryOpener')?.remove());
+    await page.keyboard.press('Escape');
+    await expect(page.locator('.ch-overlay')).toHaveCount(0);
+
+    await expect(page.locator('.ch-customize-button')).toBeFocused();
+    expect(await page.evaluate(() => window.scrollY)).toBe(0);
+});
+
+test('embedded editor: a pending question takes the keyboard, and nothing behind it can be reached or edited', async ({ page }) => {
+    await openAdminPage(page, { defaultLayout: LAYOUT });
+    await page.click('#chTabLayouts');
+    await page.waitForSelector('#chDefaultEditor .ch-list .ch-row');
+    const question = page.locator('#chDefaultEditor .ch-confirm');
+    const remove = page.locator('#chDefaultEditor .ch-row', { hasText: 'Next Up' }).locator('.ch-act-remove');
+
+    await remove.click();
+    await page.locator('#chDefaultEditor .ch-cancel').click();
+    await expect(question.locator('.ch-confirm-no')).toBeFocused();
+
+    // Tab and Shift+Tab go round the two answers, never to the page around the editor.
+    await page.keyboard.press('Shift+Tab');
+    await expect(question.locator('.ch-confirm-yes')).toBeFocused();
+    await page.keyboard.press('Tab');
+    await expect(question.locator('.ch-confirm-no')).toBeFocused();
+    await page.keyboard.press('Tab');
+    await page.keyboard.press('Tab');
+    await expect(question.locator('.ch-confirm-no')).toBeFocused();
+
+    // Behind the question: no focus, no typing, no row action.
+    const search = page.locator('#chDefaultEditor .ch-search');
+    await search.evaluate((node: HTMLElement) => node.focus());
+    await expect(search).not.toBeFocused();
+    await page.locator('#chDefaultEditor .ch-row .ch-act-remove').first().evaluate((node: HTMLElement) => node.click());
+    await expect(page.locator('#chDefaultEditor .ch-list .ch-row')).toHaveCount(2);
+
+    // Escape means "keep editing": the change is still there, and the editor is usable again.
+    await question.locator('.ch-confirm-no').focus();
+    await page.keyboard.press('Escape');
+    await expect(question).toHaveCount(0);
+    await expect(page.locator('#chDefaultEditor .ch-list .ch-row')).toHaveCount(2);
+    await expect(page.locator('#chDefaultEditor .ch-cancel')).toBeFocused();
+    await search.focus();
+    await expect(search).toBeFocused();
+
+    // Without a question the embedded editor leaves Escape alone: nothing is asked, nothing is reverted.
+    await page.keyboard.press('Escape');
+    await expect(question).toHaveCount(0);
+    await expect(page.locator('#chDefaultEditor .ch-list .ch-row')).toHaveCount(2);
+});
+
+test('keyboard: with the same key twice in a layout, the focus follows the row that moved, not its twin', async ({ page }) => {
+    const twins: Layout = { ...LAYOUT, Items: [...LAYOUT.Items, { Type: 'section', Key: 'jf:resume', Visible: true }] };
+    await openHome(page, { layout: twins });
+    await openEditorWithKeyboard(page);
+    expect(await rowTitles(page, LIST)).toEqual(['My Media', 'Continue Watching', 'Next Up', 'Continue Watching']);
+    const focusedRow = (): Promise<number> => page.evaluate((list) => {
+        const row = document.activeElement?.closest('.ch-row') ?? null;
+        return Array.from(document.querySelectorAll(`${list} .ch-row`)).indexOf(row as Element);
+    }, LIST);
+
+    await page.locator(`${LIST} .ch-row .ch-handle`).nth(3).focus();
+    await page.keyboard.press('ArrowUp');
+    expect(await rowTitles(page, LIST)).toEqual(['My Media', 'Continue Watching', 'Continue Watching', 'Next Up']);
+    expect(await focusedRow()).toBe(2);
+    await expect(page.locator('.ch-overlay .ch-live')).toHaveText('Continue Watching: row 3 of 4');
+    await page.keyboard.press('ArrowUp');
+    expect(await focusedRow()).toBe(1);
+});
+
+test('keyboard: the handle of a lone row still opens its menu, both moves disabled, and says why', async ({ page }) => {
+    const lone: Layout = { ...LAYOUT, Items: [{ Type: 'section', Key: 'jf:resume', Visible: true }] };
+    await openHome(page, { layout: lone });
+    await openEditorWithKeyboard(page);
+    await tabTo(page, 'ch-handle', 'Continue Watching');
+    const handle = page.locator(`${LIST} .ch-row .ch-handle`);
+
+    await page.keyboard.press('Enter');
+    const menu = page.locator('.ch-overlay .ch-dialog .ch-popup');
+    await expect(menu).toHaveAttribute('role', 'menu');
+    await expect(menu.locator('.ch-move-up')).toBeDisabled();
+    await expect(menu.locator('.ch-move-down')).toBeDisabled();
+    await expect(handle).toHaveAttribute('aria-expanded', 'true');
+    await expect(menu).toBeFocused();
+    await expect(page.locator('.ch-overlay .ch-live')).toHaveText('This is the only row: there is nowhere to move it');
+    // Tab has nowhere to go in this menu, and does not slip behind it.
+    await page.keyboard.press('Tab');
+    await expect(menu).toBeFocused();
+
+    await page.keyboard.press('Escape');
+    await expect(menu).toHaveCount(0);
+    await expect(page.locator('.ch-overlay')).toHaveCount(1);
+    await expect(handle).toBeFocused();
+    await expect(handle).toHaveAttribute('aria-expanded', 'false');
+});

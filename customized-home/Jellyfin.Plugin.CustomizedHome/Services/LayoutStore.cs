@@ -28,6 +28,7 @@ public sealed partial class LayoutStore
     private readonly string _directory;
     private readonly ILogger<LayoutStore> _logger;
     private readonly Func<string, Stream> _openRead;
+    private readonly Action<string> _deleteFile;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="LayoutStore"/> class.
@@ -47,12 +48,14 @@ public sealed partial class LayoutStore
     /// <param name="applicationPaths">The application paths.</param>
     /// <param name="logger">The logger.</param>
     /// <param name="openRead">Opens a file for reading.</param>
-    internal LayoutStore(IApplicationPaths applicationPaths, ILogger<LayoutStore> logger, Func<string, Stream> openRead)
+    /// <param name="deleteFile">Deletes a file; the file system does when omitted.</param>
+    internal LayoutStore(IApplicationPaths applicationPaths, ILogger<LayoutStore> logger, Func<string, Stream> openRead, Action<string>? deleteFile = null)
     {
         ArgumentNullException.ThrowIfNull(applicationPaths);
         _directory = Path.Combine(PluginData.GetRoot(applicationPaths), PluginData.UsersFolder);
         _logger = logger;
         _openRead = openRead;
+        _deleteFile = deleteFile ?? File.Delete;
     }
 
     /// <summary>
@@ -109,6 +112,7 @@ public sealed partial class LayoutStore
     /// </summary>
     /// <param name="userId">The user identifier.</param>
     /// <param name="layout">The layout to save.</param>
+    /// <exception cref="IOException">The file could not be written: the previous layout, if any, is still there.</exception>
     public void Save(Guid userId, HomeLayout layout)
     {
         ArgumentNullException.ThrowIfNull(layout);
@@ -133,6 +137,7 @@ public sealed partial class LayoutStore
     /// </summary>
     /// <param name="userId">The user identifier.</param>
     /// <returns><c>true</c> when a layout existed.</returns>
+    /// <exception cref="IOException">The file could not be deleted: the layout is still there.</exception>
     public bool Delete(Guid userId)
     {
         lock (_lock)
@@ -141,7 +146,7 @@ public sealed partial class LayoutStore
             bool existed = File.Exists(path);
             if (existed)
             {
-                File.Delete(path);
+                _deleteFile(path);
             }
 
             // Forgotten once the file is gone: after a deletion that failed, the instance keeps answering what is
@@ -172,13 +177,20 @@ public sealed partial class LayoutStore
         ArgumentNullException.ThrowIfNull(userExists);
 
         List<StoredLayoutInfo> result = new();
-        if (!Directory.Exists(_directory))
+        string[] files;
+        try
         {
+            files = Directory.GetFiles(_directory, "*.json");
+        }
+        catch (DirectoryNotFoundException)
+        {
+            // Nothing was saved yet, or the folder was removed meanwhile. Checking first that it exists would
+            // leave a moment for it to disappear before it is read.
             return result;
         }
 
         // The store is not locked while the caller is asked about a user: that question may reach the database.
-        foreach (string file in Directory.GetFiles(_directory, "*.json"))
+        foreach (string file in files)
         {
             string name = Path.GetFileNameWithoutExtension(file);
             if (!Guid.TryParse(name, out Guid userId) || !userExists(userId))

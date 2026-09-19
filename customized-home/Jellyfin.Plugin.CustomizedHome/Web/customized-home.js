@@ -13,7 +13,7 @@
         return;
     }
 
-    const VERSION = '1.8.3';
+    const VERSION = '1.8.4';
     const API = 'CustomizedHome';
     const ORDER_STEP = 1000;
     const ORDER_UNLISTED_BASE = 1000000000;
@@ -78,6 +78,7 @@
             hide: 'Hide',
             moveUp: 'Move up',
             moveDown: 'Move down',
+            moveNowhere: 'This is the only row: there is nowhere to move it',
             more: 'More',
             moveToFolder: 'Move to folder',
             removeFromFolder: 'Move out of the folder',
@@ -218,6 +219,7 @@
             hide: 'Masquer',
             moveUp: 'Monter',
             moveDown: 'Descendre',
+            moveNowhere: "C'est la seule ligne : il n'y a nulle part où la déplacer",
             more: 'Plus',
             moveToFolder: 'Déplacer dans le dossier',
             removeFromFolder: 'Sortir du dossier',
@@ -2909,6 +2911,8 @@
                         backdrop.click();
                     }
                     setTimeout(function () {
+                        // The opener is whatever the closed menu gave the focus back to; nothing (the body)
+                        // means that no focus is restored when the editor closes.
                         openEditor({ mode: 'user' });
                     }, 50);
                 });
@@ -3207,9 +3211,10 @@
                     requestClose();
                 }
             });
-            // On the document, not on the overlay: Escape and Tab must work wherever the focus went.
-            document.addEventListener('keydown', onEditorKeyDown, true);
         }
+        // On the document, not on the overlay: Escape and Tab must work wherever the focus went. The embedded
+        // editor only listens while it asks a question (see onEditorKeyDown).
+        document.addEventListener('keydown', onEditorKeyDown, true);
         editor.columns.addEventListener('click', onListClick);
         editor.list.addEventListener('keydown', onListKeyDown);
         editor.list.addEventListener('input', onListInput);
@@ -3242,10 +3247,12 @@
         }
         current.overlay.remove();
         editor = null;
-        if (!current.embedded) {
-            const opener = current.opener && current.opener.isConnected ? current.opener : document.querySelector('.ch-customize-button');
-            if (opener) {
-                opener.focus();
+        // No opener (the caller opted out, or the focus was nowhere): the focus is left alone. The button of the
+        // home page only stands in for an opener that is gone, and never pulls the page to where it sits.
+        if (!current.embedded && current.opener) {
+            const target = current.opener.isConnected ? current.opener : document.querySelector('.ch-customize-button');
+            if (target) {
+                target.focus({ preventScroll: true });
             }
         }
     }
@@ -3300,9 +3307,22 @@
         });
         dialog.insertBefore(bar, dialog.querySelector('.ch-dialog-footer'));
         dialog.classList.add('ch-confirming');
+        setBehindQuestionInert(dialog, true);
         editor.confirm = { bar: bar, returnTo: returnTo };
         // The answer that loses nothing has the focus.
         bar.querySelector('.ch-confirm-no').focus();
+    }
+
+    // While a question is pending nothing behind it takes the focus or an edit, modal or not. Engines without
+    // "inert" still have the keyboard handling of onEditorKeyDown and the pointer-events of the stylesheet.
+    function setBehindQuestionInert(dialog, inert) {
+        Array.prototype.forEach.call(dialog.querySelectorAll('.ch-dialog-header, .ch-dialog-body'), function (node) {
+            if (inert) {
+                node.setAttribute('inert', '');
+            } else {
+                node.removeAttribute('inert');
+            }
+        });
     }
 
     function dismissQuestion(restoreFocus) {
@@ -3313,6 +3333,7 @@
         editor.confirm = null;
         question.bar.remove();
         editor.dialog.classList.remove('ch-confirming');
+        setBehindQuestionInert(editor.dialog, false);
         if (restoreFocus) {
             (question.returnTo && question.returnTo.isConnected ? question.returnTo : editor.dialog).focus();
         }
@@ -3343,8 +3364,16 @@
     }
 
     function onEditorKeyDown(e) {
-        if (!editor || editor.embedded) {
+        if (!editor) {
             return;
+        }
+        if (editor.embedded) {
+            // A part of the administration page, not a modal: the keyboard is only taken while a question is
+            // pending, and only when the focus is in the editor (or nowhere), never elsewhere on the page.
+            const active = document.activeElement;
+            if (!editor.confirm || (active && active !== document.body && !editor.dialog.contains(active))) {
+                return;
+            }
         }
         if (e.key === 'Tab') {
             trapFocus(e);
@@ -3943,10 +3972,15 @@
         return { folder: null, before: delta < 0 ? neighbour : (top[index + 2] || null) };
     }
 
+    // The row of this very item first: a layout may hold the same key twice. The key is only the way back to an
+    // item that was rebuilt meanwhile (right column).
     function rowOf(item) {
-        return Array.prototype.filter.call(editor.columns.querySelectorAll('.ch-row'), function (row) {
-            return row._item === item || (!!item.Key && !!row._item && row._item.Key === item.Key);
-        })[0] || null;
+        const rows = Array.prototype.slice.call(editor.columns.querySelectorAll('.ch-row'));
+        return rows.filter(function (row) {
+            return row._item === item;
+        })[0] || (item.Key ? rows.filter(function (row) {
+            return !!row._item && row._item.Key === item.Key;
+        })[0] : null) || null;
     }
 
     const CONTROL_CLASS = /^ch-(act-[a-z]+|handle|folder-name|hero-toggle|hero-settings)$/;
@@ -4043,12 +4077,17 @@
             menu.appendChild(button);
             return button;
         });
+        showPopup(anchor, menu);
         if (buttons[0].disabled && buttons[1].disabled) {
-            // A single row: nothing to offer.
-            closePopup();
+            // A single row: the handle promises a menu, so it opens with both entries disabled, like a move at
+            // either end. No entry can take the focus: the menu itself does, and the reason is announced.
+            menu.tabIndex = -1;
+            menu.focus();
+            if (editor.live) {
+                editor.live.textContent = t('moveNowhere');
+            }
             return;
         }
-        showPopup(anchor, menu);
         const wanted = buttons[focusDelta > 0 ? 1 : 0];
         (wanted.disabled ? buttons[focusDelta > 0 ? 0 : 1] : wanted).focus();
     }
@@ -4082,7 +4121,8 @@
 
     function onListClick(e) {
         const button = e.target.closest('button');
-        if (!button) {
+        // A pending question comes first, also for an engine without "inert" or a scripted click.
+        if (!button || editor.confirm) {
             return;
         }
         const row = button.closest('.ch-row');

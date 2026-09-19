@@ -538,6 +538,12 @@ button.ch-handle:focus-visible {
     overflow-y: auto;
 }
 
+/* A menu without a single available entry takes the focus itself. */
+.ch-popup:focus {
+    outline: 2px solid #00a4dc;
+    outline-offset: -2px;
+}
+
 .ch-popup button,
 .ch-popup .ch-popup-label {
     display: flex;

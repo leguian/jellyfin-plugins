@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Globalization;
+using System.IO;
 using Jellyfin.Plugin.CustomizedHome.Configuration;
 using Jellyfin.Plugin.CustomizedHome.Services;
 using MediaBrowser.Common.Configuration;
@@ -65,32 +66,28 @@ public partial class Plugin : BasePlugin<PluginConfiguration>, IHasWebPages
 
     /// <summary>
     /// Called by the server when an administrator uninstalls the plugin (not when it is updated or disabled).
-    /// The server removes the plugin binaries and nothing else: the layouts of every user and the genre
-    /// thumbnails would stay on disk for good, and come back unannounced with a later installation.
+    /// The server removes the plugin binaries and nothing else, and so does the plugin: uninstalling then
+    /// installing again is a common way of troubleshooting, and it must not cost every user their layout.
+    /// The data folder is kept and the log says where it is.
     /// </summary>
     public override void OnUninstalling()
     {
-        DeleteData(ApplicationPaths, _logger);
+        ReportKeptData(ApplicationPaths, _logger);
         base.OnUninstalling();
     }
 
     /// <summary>
-    /// Deletes the data folders of the plugin and logs the outcome. Never throws for a file system error:
-    /// an exception here would make the server refuse the uninstallation.
+    /// Logs where the data of the plugin stays after an uninstallation, when there is any. Nothing is deleted
+    /// and nothing is thrown: an exception here would make the server refuse the uninstallation.
     /// </summary>
     /// <param name="applicationPaths">The application paths.</param>
     /// <param name="logger">The logger.</param>
-    internal static void DeleteData(IApplicationPaths applicationPaths, ILogger logger)
+    internal static void ReportKeptData(IApplicationPaths applicationPaths, ILogger logger)
     {
-        DataCleanupResult result = PluginData.DeleteAll(PluginData.GetRoot(applicationPaths));
-        foreach (string folder in result.Deleted)
+        string root = PluginData.GetRoot(applicationPaths);
+        if (Directory.Exists(root))
         {
-            LogDataDeleted(logger, folder);
-        }
-
-        foreach (DataCleanupFailure failure in result.Failed)
-        {
-            LogDataNotDeleted(logger, failure.Path, failure.Error);
+            LogDataKept(logger, root);
         }
     }
 
@@ -110,9 +107,6 @@ public partial class Plugin : BasePlugin<PluginConfiguration>, IHasWebPages
         ];
     }
 
-    [LoggerMessage(Level = LogLevel.Information, Message = "Customized Home: uninstalling, deleted the plugin data folder {Path}")]
-    private static partial void LogDataDeleted(ILogger logger, string path);
-
-    [LoggerMessage(Level = LogLevel.Warning, Message = "Customized Home: uninstalling, could not delete the plugin data folder {Path}: remove it by hand")]
-    private static partial void LogDataNotDeleted(ILogger logger, string path, Exception exception);
+    [LoggerMessage(Level = LogLevel.Information, Message = "Customized Home: uninstalling, the plugin data folder {Path} is kept so that a later installation finds the layouts and the genre thumbnails again; remove it by hand to get rid of them")]
+    private static partial void LogDataKept(ILogger logger, string path);
 }

@@ -1,7 +1,7 @@
 ---
 name: "Customized Home"
 guid: "7c99a4bf-cd3b-4bc8-b941-7ddccd816f3c"
-version: "1.8.3.0"
+version: "1.8.4.0"
 targetAbi: "12.0.0.0"
 framework: "net10.0"
 overview: "Easily edit and organize the sections on your homepage"
@@ -14,16 +14,18 @@ description: >
   any other plugin: Continue Watching / Next Up combined, latest movies and shows by release
   date, collections, watch again, because you watched, genre. Works with the built-in
   sections and with sections added by other plugins (Home Screen Sections, ...).
-  Administrators define a default layout. Requires the File Transformation plugin.
+  Administrators define a default layout. Web client only (browser, Jellyfin Desktop, the
+  Android and iOS apps): native clients such as Android TV, Swiftfin or Kodi are not affected.
+  Requires the File Transformation plugin.
 category: "General"
 owner: "leguian"
 artifacts:
 - "Jellyfin.Plugin.CustomizedHome.dll"
 changelog: >
-  Reliability and privacy. Logging out or switching user in the same tab no longer keeps the previous
-  user's layout and cached rows. Continue Watching / Next Up, Watch Again, Because You Watched and the hero
-  are reloaded when the home page is shown again, without flicker. A failing server is retried with
-  growing delays. A message explains why a layout is not applied or why the home page is empty, and how to
-  fix it. Hero: favorite and watched now work on mobile and TV, "From the beginning" really restarts. The
-  default layout no longer reveals libraries a user cannot access. "All genres" is displayed at once and
-  loads its poster collages as the cards come into view. Layout uploads are size limited.
+  Accessibility and robustness. Sections can be reordered without a pointer: arrow keys on the handle,
+  or a Move up / Move down menu for touch and screen readers. The editor dialog keeps the keyboard focus,
+  its menus follow the arrow keys, and closing it with unsaved changes asks first (in the page, no browser
+  prompt). Hero: pause / play button, visible keyboard focus, header refreshed when switching tabs.
+  Readable editor on a light dashboard, stylesheet fallbacks for older browsers and TVs, section keys
+  built from titles in any script. Server: the layout of a deleted user is deleted with them, stored
+  data survives unreadable or locked files, replaced genre thumbnails never serve stale bytes.

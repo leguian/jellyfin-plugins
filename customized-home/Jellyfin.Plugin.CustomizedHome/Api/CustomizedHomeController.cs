@@ -17,6 +17,7 @@ using MediaBrowser.Model.Library;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.Extensions.Logging;
 using Microsoft.Net.Http.Headers;
 
 namespace Jellyfin.Plugin.CustomizedHome.Api;
@@ -26,7 +27,7 @@ namespace Jellyfin.Plugin.CustomizedHome.Api;
 /// </summary>
 [ApiController]
 [Route("CustomizedHome")]
-public class CustomizedHomeController : ControllerBase
+public partial class CustomizedHomeController : ControllerBase
 {
     private const string UserIdClaim = "Jellyfin-UserId";
     private const string AdministratorRole = "Administrator";
@@ -39,6 +40,8 @@ public class CustomizedHomeController : ControllerBase
     // the genre section only). Without a limit the body is fully deserialized before the validator can reject it.
     private const long LayoutRequestLimit = 2 * 1024 * 1024;
 
+    private const string StorageUnavailableMessage = "The plugin data could not be written: nothing was changed. Try again later; the server log has the details.";
+
     private static readonly ConcurrentDictionary<string, CachedAsset> AssetCache = new(StringComparer.Ordinal);
 
     private readonly LayoutStore _store;
@@ -47,6 +50,7 @@ public class CustomizedHomeController : ControllerBase
     private readonly IUserManager _userManager;
     private readonly IUserViewManager _userViewManager;
     private readonly Func<PluginConfiguration> _configuration;
+    private readonly ILogger<CustomizedHomeController> _logger;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="CustomizedHomeController"/> class.
@@ -56,8 +60,9 @@ public class CustomizedHomeController : ControllerBase
     /// <param name="injection">The web injection service.</param>
     /// <param name="userManager">The user manager.</param>
     /// <param name="userViewManager">The user view manager.</param>
-    public CustomizedHomeController(LayoutStore store, GenreImageStore genreImages, WebInjectionService injection, IUserManager userManager, IUserViewManager userViewManager)
-        : this(store, genreImages, injection, userManager, userViewManager, () => Plugin.Instance?.Configuration ?? new PluginConfiguration())
+    /// <param name="logger">The logger.</param>
+    public CustomizedHomeController(LayoutStore store, GenreImageStore genreImages, WebInjectionService injection, IUserManager userManager, IUserViewManager userViewManager, ILogger<CustomizedHomeController> logger)
+        : this(store, genreImages, injection, userManager, userViewManager, logger, () => Plugin.Instance?.Configuration ?? new PluginConfiguration())
     {
     }
 
@@ -71,14 +76,16 @@ public class CustomizedHomeController : ControllerBase
     /// <param name="injection">The web injection service.</param>
     /// <param name="userManager">The user manager.</param>
     /// <param name="userViewManager">The user view manager.</param>
+    /// <param name="logger">The logger.</param>
     /// <param name="configuration">Gets the current plugin configuration.</param>
-    internal CustomizedHomeController(LayoutStore store, GenreImageStore genreImages, WebInjectionService injection, IUserManager userManager, IUserViewManager userViewManager, Func<PluginConfiguration> configuration)
+    internal CustomizedHomeController(LayoutStore store, GenreImageStore genreImages, WebInjectionService injection, IUserManager userManager, IUserViewManager userViewManager, ILogger<CustomizedHomeController> logger, Func<PluginConfiguration> configuration)
     {
         _store = store;
         _injection = injection;
         _userManager = userManager;
         _userViewManager = userViewManager;
         _genreImages = genreImages;
+        _logger = logger;
         _configuration = configuration;
     }
 
@@ -174,6 +181,7 @@ public class CustomizedHomeController : ControllerBase
     [ProducesResponseType(StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(StatusCodes.Status503ServiceUnavailable)]
     public ActionResult<HomeLayout> SaveLayout([FromBody] HomeLayout layout)
     {
         Guid userId = GetUserId();
@@ -193,7 +201,15 @@ public class CustomizedHomeController : ControllerBase
             return BadRequest(error);
         }
 
-        _store.Save(userId, normalized);
+        try
+        {
+            _store.Save(userId, normalized);
+        }
+        catch (Exception ex) when (IsStorageFailure(ex))
+        {
+            return StorageUnavailable("save a layout", ex);
+        }
+
         return normalized;
     }
 
@@ -206,6 +222,7 @@ public class CustomizedHomeController : ControllerBase
     [Authorize]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
     [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(StatusCodes.Status503ServiceUnavailable)]
     public ActionResult ResetLayout([FromQuery] Guid? userId)
     {
         Guid current = GetUserId();
@@ -220,7 +237,15 @@ public class CustomizedHomeController : ControllerBase
             return Forbid();
         }
 
-        _store.Delete(target);
+        try
+        {
+            _store.Delete(target);
+        }
+        catch (Exception ex) when (IsStorageFailure(ex))
+        {
+            return StorageUnavailable("delete a layout", ex);
+        }
+
         return NoContent();
     }
 
@@ -388,6 +413,7 @@ public class CustomizedHomeController : ControllerBase
     [RequestSizeLimit(GenreImageRequestLimit)]
     [ProducesResponseType(StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status503ServiceUnavailable)]
     public ActionResult<GenreImageInfo> UploadGenreImage([FromBody] GenreImageUpload upload)
     {
         if (upload is null || string.IsNullOrEmpty(upload.Data))
@@ -411,7 +437,17 @@ public class CustomizedHomeController : ControllerBase
             return BadRequest("Image data is not valid base64.");
         }
 
-        GenreImageEntry? entry = _genreImages.Save(upload.Name, upload.Shape, data, out string? error);
+        GenreImageEntry? entry;
+        string? error;
+        try
+        {
+            entry = _genreImages.Save(upload.Name, upload.Shape, data, out error);
+        }
+        catch (Exception ex) when (IsStorageFailure(ex))
+        {
+            return StorageUnavailable("save a genre thumbnail", ex);
+        }
+
         if (entry is null)
         {
             return BadRequest(error);
@@ -429,9 +465,18 @@ public class CustomizedHomeController : ControllerBase
     [HttpDelete("GenreImages")]
     [Authorize(Policy = Policies.RequiresElevation)]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType(StatusCodes.Status503ServiceUnavailable)]
     public ActionResult DeleteGenreImage([FromQuery] string? name, [FromQuery] string? shape)
     {
-        _genreImages.Delete(name, shape);
+        try
+        {
+            _genreImages.Delete(name, shape);
+        }
+        catch (Exception ex) when (IsStorageFailure(ex))
+        {
+            return StorageUnavailable("delete a genre thumbnail", ex);
+        }
+
         return NoContent();
     }
 
@@ -440,6 +485,12 @@ public class CustomizedHomeController : ControllerBase
         return AssemblyLoadContext.All
             .SelectMany(context => context.Assemblies)
             .Any(assembly => string.Equals(assembly.GetName().Name, HomeScreenSectionsAssemblyName, StringComparison.Ordinal));
+    }
+
+    // What a store throws when the disk refuses: a file locked by a backup, permissions, a full disk.
+    private static bool IsStorageFailure(Exception exception)
+    {
+        return exception is IOException or UnauthorizedAccessException;
     }
 
     private static CachedAsset LoadAsset(string suffix)
@@ -468,6 +519,16 @@ public class CustomizedHomeController : ControllerBase
             UserLayoutCount = _store.List(UserExists).Count,
             DefaultLayoutItemCount = Configuration.DefaultLayout.Items.Count
         };
+    }
+
+    /// <summary>
+    /// Answers a request the disk refused: the cause goes to the server log, the client gets a message it can show
+    /// instead of an anonymous error 500.
+    /// </summary>
+    private ObjectResult StorageUnavailable(string operation, Exception exception)
+    {
+        LogStorageFailure(operation, exception);
+        return StatusCode(StatusCodes.Status503ServiceUnavailable, StorageUnavailableMessage);
     }
 
     private ActionResult ServeAsset(string suffix, string contentType)
@@ -547,6 +608,9 @@ public class CustomizedHomeController : ControllerBase
     {
         return User.IsInRole(AdministratorRole);
     }
+
+    [LoggerMessage(Level = LogLevel.Warning, Message = "Customized Home: could not {Operation}, the request was answered with an error 503")]
+    private partial void LogStorageFailure(string operation, Exception exception);
 
     private sealed record CachedAsset(byte[] Bytes, string ETag);
 }

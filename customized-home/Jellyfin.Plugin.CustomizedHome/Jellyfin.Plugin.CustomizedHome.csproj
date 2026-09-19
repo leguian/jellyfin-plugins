@@ -20,7 +20,7 @@
     <AnalysisLevel>latest-recommended</AnalysisLevel>
     <!-- CA1812: DI-instantiated classes; CA2227: settable collections are required by XmlSerializer. -->
     <NoWarn>$(NoWarn);CA1812;CA2227</NoWarn>
-    <Version Condition="'$(Version)' == ''">1.8.3.0</Version>
+    <Version Condition="'$(Version)' == ''">1.8.4.0</Version>
     <AssemblyVersion>$(Version)</AssemblyVersion>
     <FileVersion>$(Version)</FileVersion>
     <Authors>leguian</Authors>
