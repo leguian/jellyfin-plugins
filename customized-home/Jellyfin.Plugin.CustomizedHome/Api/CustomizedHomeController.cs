@@ -42,6 +42,8 @@ public partial class CustomizedHomeController : ControllerBase
 
     private const string StorageUnavailableMessage = "The plugin data could not be written: nothing was changed. Try again later; the server log has the details.";
 
+    private const string StorageUnreadableMessage = "The plugin data could not be read. Try again later; the server log has the details.";
+
     private static readonly ConcurrentDictionary<string, CachedAsset> AssetCache = new(StringComparer.Ordinal);
 
     private readonly LayoutStore _store;
@@ -271,6 +273,7 @@ public partial class CustomizedHomeController : ControllerBase
     [RequestSizeLimit(LayoutRequestLimit)]
     [ProducesResponseType(StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status503ServiceUnavailable)]
     public ActionResult<HomeLayout> SaveDefaultLayout([FromBody] HomeLayout layout)
     {
         Plugin? plugin = Plugin.Instance;
@@ -285,8 +288,20 @@ public partial class CustomizedHomeController : ControllerBase
             return BadRequest(error);
         }
 
+        HomeLayout previous = plugin.Configuration.DefaultLayout;
         plugin.Configuration.DefaultLayout = normalized;
-        plugin.SaveConfiguration();
+        try
+        {
+            plugin.SaveConfiguration();
+        }
+        catch (Exception ex) when (IsStorageFailure(ex))
+        {
+            // The XML file was not written: keeping the new layout in memory would apply it until the next
+            // restart, then silently lose it.
+            plugin.Configuration.DefaultLayout = previous;
+            return StorageUnavailable("save the default layout", ex);
+        }
+
         return normalized;
     }
 
@@ -389,9 +404,21 @@ public partial class CustomizedHomeController : ControllerBase
     [AllowAnonymous]
     [ProducesResponseType(StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
+    [ProducesResponseType(StatusCodes.Status503ServiceUnavailable)]
     public ActionResult GetGenreImage([FromQuery] string? name, [FromQuery] string? shape)
     {
-        (byte[] Data, string ContentType)? image = _genreImages.Read(name, shape);
+        (byte[] Data, string ContentType)? image;
+        try
+        {
+            image = _genreImages.Read(name, shape);
+        }
+        catch (Exception ex) when (IsStorageFailure(ex))
+        {
+            // Not a 404: the thumbnail exists, the disk refused it this time. A 404 on a URL served as
+            // immutable would be cached by browsers and proxies long after the disk is fine again.
+            return StorageUnavailable("read a genre thumbnail", ex, StorageUnreadableMessage);
+        }
+
         if (image is null)
         {
             return NotFound();
@@ -525,10 +552,10 @@ public partial class CustomizedHomeController : ControllerBase
     /// Answers a request the disk refused: the cause goes to the server log, the client gets a message it can show
     /// instead of an anonymous error 500.
     /// </summary>
-    private ObjectResult StorageUnavailable(string operation, Exception exception)
+    private ObjectResult StorageUnavailable(string operation, Exception exception, string message = StorageUnavailableMessage)
     {
         LogStorageFailure(operation, exception);
-        return StatusCode(StatusCodes.Status503ServiceUnavailable, StorageUnavailableMessage);
+        return StatusCode(StatusCodes.Status503ServiceUnavailable, message);
     }
 
     private ActionResult ServeAsset(string suffix, string contentType)

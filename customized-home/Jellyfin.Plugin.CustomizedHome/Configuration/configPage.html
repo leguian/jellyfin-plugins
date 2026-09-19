@@ -526,6 +526,83 @@
             #CustomizedHomeConfigPage .hide {
                 display: none !important;
             }
+
+            /* A question asked in the page instead of window.confirm: it cannot be styled, several shells block it,
+               and it gives no way to put the focus on the answer that changes nothing. Surfaces derive from
+               currentColor like the rest of the page, so it reads on a light and on a dark dashboard. */
+            #CustomizedHomeConfigPage .cha-ask-backdrop {
+                position: fixed;
+                top: 0;
+                right: 0;
+                bottom: 0;
+                left: 0;
+                z-index: 1000;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                padding: 1em;
+                background: rgba(0, 0, 0, 0.5);
+            }
+
+            #CustomizedHomeConfigPage .cha-ask {
+                box-sizing: border-box;
+                width: 100%;
+                max-width: 30em;
+                /* Opaque, over a backdrop: the page background is copied onto --cha-ask-surface when the question is
+                   opened, because the dashboard paints it on <body> and a card of its own would be see-through. */
+                background: var(--cha-ask-surface, #202020);
+                color: inherit;
+                border: 1px solid var(--cha-border);
+                border-radius: 0.7em;
+                padding: 1.2em 1.3em 1.1em;
+            }
+
+            #CustomizedHomeConfigPage .cha-ask-head {
+                display: flex;
+                align-items: center;
+                gap: 0.6em;
+                margin-bottom: 0.6em;
+            }
+
+            #CustomizedHomeConfigPage .cha-ask-head .material-icons {
+                color: var(--cha-warn);
+                font-size: 1.4em;
+            }
+
+            #CustomizedHomeConfigPage .cha-ask-title {
+                margin: 0;
+                font-size: 1.05em;
+                font-weight: 600;
+            }
+
+            /* Full contrast, not --cha-muted: this text says what is about to be lost, and 62% of the text colour
+               falls just under the 4.5:1 of WCAG AA on a light dashboard. */
+            #CustomizedHomeConfigPage .cha-ask-text {
+                margin: 0 0 1.1em;
+                color: color-mix(in srgb, currentColor 85%, transparent);
+                font-size: 0.92em;
+                line-height: 1.5;
+            }
+
+            #CustomizedHomeConfigPage .cha-ask-actions {
+                display: flex;
+                flex-wrap: wrap;
+                justify-content: flex-end;
+                gap: 0.6em;
+            }
+
+            /* Filled, not the outlined .cha-btn-danger: as the destructive action of the question it has to stand
+               out, and the red of the page as a text colour only reaches 2.7:1 on a light dashboard. */
+            #CustomizedHomeConfigPage .cha-ask-yes {
+                background: #b3231c;
+                border-color: #b3231c;
+                color: #fff;
+            }
+
+            #CustomizedHomeConfigPage .cha-ask-yes:hover {
+                background: #8f1c16;
+                border-color: #8f1c16;
+            }
         </style>
 
         <div data-role="content">
@@ -684,6 +761,84 @@
                     return String(value == null ? '' : value).replace(/[&<>"']/g, function (c) {
                         return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
                     });
+                }
+
+                /* ---- questions asked in the page ---- */
+
+                // window.confirm is missing or blocked in several of the shells that embed the dashboard, it cannot
+                // be styled, and it offers no way to start on the answer that changes nothing. Same rules as the
+                // client editor: role=alertdialog, focus on "Cancel", Escape cancels, Tab stays in the question.
+                var pendingQuestion = null;
+
+                function askInPage(title, question, confirmLabel, onConfirm) {
+                    if (pendingQuestion) {
+                        return;
+                    }
+                    var opener = document.activeElement;
+                    var backdrop = document.createElement('div');
+                    backdrop.className = 'cha-ask-backdrop';
+                    backdrop.innerHTML = '<div class="cha-ask" role="alertdialog" aria-modal="true" aria-labelledby="chAskTitle" aria-describedby="chAskText">' +
+                        '<div class="cha-ask-head"><span class="material-icons" aria-hidden="true">warning</span>' +
+                        '<h2 class="cha-ask-title" id="chAskTitle"></h2></div>' +
+                        '<p class="cha-ask-text" id="chAskText"></p>' +
+                        '<div class="cha-ask-actions">' +
+                        '<button type="button" class="cha-btn cha-ask-no">Cancel</button>' +
+                        '<button type="button" class="cha-btn cha-btn-danger cha-ask-yes"></button>' +
+                        '</div></div>';
+                    backdrop.querySelector('.cha-ask-title').textContent = title;
+                    backdrop.querySelector('.cha-ask-text').textContent = question;
+                    backdrop.querySelector('.cha-ask-yes').textContent = confirmLabel;
+                    // The dashboard paints the page background on <body>: the card copies it to stay opaque.
+                    backdrop.querySelector('.cha-ask').style.setProperty('--cha-ask-surface', getComputedStyle(document.body).backgroundColor);
+
+                    function close() {
+                        if (!pendingQuestion) {
+                            return;
+                        }
+                        pendingQuestion = null;
+                        document.removeEventListener('keydown', onKeyDown, true);
+                        backdrop.remove();
+                        if (opener && opener.isConnected && typeof opener.focus === 'function') {
+                            opener.focus();
+                        }
+                    }
+
+                    function answers() {
+                        return [backdrop.querySelector('.cha-ask-no'), backdrop.querySelector('.cha-ask-yes')];
+                    }
+
+                    function onKeyDown(e) {
+                        if (e.key === 'Escape') {
+                            // Escape is the safe answer: nothing is changed.
+                            e.preventDefault();
+                            e.stopPropagation();
+                            close();
+                        } else if (e.key === 'Tab') {
+                            // The keyboard never leaves the question.
+                            e.preventDefault();
+                            var stops = answers();
+                            var index = stops.indexOf(document.activeElement);
+                            var next = e.shiftKey ? (index <= 0 ? stops.length - 1 : index - 1) : (index < 0 || index === stops.length - 1 ? 0 : index + 1);
+                            stops[next].focus();
+                        }
+                    }
+
+                    backdrop.querySelector('.cha-ask-no').addEventListener('click', close);
+                    backdrop.querySelector('.cha-ask-yes').addEventListener('click', function () {
+                        close();
+                        onConfirm();
+                    });
+                    // A click beside the card means "cancel", like the close button of the client editor.
+                    backdrop.addEventListener('mousedown', function (e) {
+                        if (e.target === backdrop) {
+                            close();
+                        }
+                    });
+                    document.addEventListener('keydown', onKeyDown, true);
+                    page.appendChild(backdrop);
+                    pendingQuestion = { backdrop: backdrop, close: close };
+                    // The answer that changes nothing has the focus.
+                    backdrop.querySelector('.cha-ask-no').focus();
                 }
 
                 function countSections(layout) {
@@ -965,13 +1120,20 @@
                         input.value = '';
                         input.click();
                     } else if (e.target.closest('.chGenreRemove')) {
-                        if (!window.confirm('Remove the ' + shape + ' thumbnail of "' + name + '"?')) {
-                            return;
-                        }
-                        ApiClient.ajax({ type: 'DELETE', url: ApiClient.getUrl('CustomizedHome/GenreImages', { name: name, shape: shape }) }).then(function () {
-                            delete genreState.images[imageKey(name, shape)];
-                            renderGenres();
-                        });
+                        var shapeLabel = (GENRE_SHAPES.filter(function (entry) {
+                            return entry.id === shape;
+                        })[0] || { label: shape }).label.toLowerCase();
+                        askInPage(
+                            'Remove this thumbnail?',
+                            'The ' + shapeLabel + ' thumbnail of "' + name + '" is deleted from the server. The "All genres" section falls back to another uploaded shape, or to the collage of four posters. You can upload it again at any time.',
+                            'Remove',
+                            function () {
+                                ApiClient.ajax({ type: 'DELETE', url: ApiClient.getUrl('CustomizedHome/GenreImages', { name: name, shape: shape }) }).then(function () {
+                                    delete genreState.images[imageKey(name, shape)];
+                                    renderGenres();
+                                });
+                            }
+                        );
                     }
                 });
 
@@ -1051,20 +1213,24 @@
                 });
 
                 page.querySelector('#chClearDefault').addEventListener('click', function () {
-                    if (!window.confirm('Clear the default layout?')) {
-                        return;
-                    }
-                    ApiClient.ajax({
-                        type: 'POST',
-                        url: ApiClient.getUrl('CustomizedHome/DefaultLayout'),
-                        data: JSON.stringify({ Version: 1, HideUnlisted: false, Items: [] }),
-                        contentType: 'application/json',
-                        dataType: 'json'
-                    }).then(function (layout) {
-                        updateDefaultSummary(layout);
-                        editorOpened = false;
-                        openDefaultEditor();
-                    });
+                    askInPage(
+                        'Clear the default layout?',
+                        'The default layout is emptied and cannot be recovered. Users without a layout of their own get the untouched home page of Jellyfin again. Layouts saved by users are not affected.',
+                        'Clear',
+                        function () {
+                            ApiClient.ajax({
+                                type: 'POST',
+                                url: ApiClient.getUrl('CustomizedHome/DefaultLayout'),
+                                data: JSON.stringify({ Version: 1, HideUnlisted: false, Items: [] }),
+                                contentType: 'application/json',
+                                dataType: 'json'
+                            }).then(function (layout) {
+                                updateDefaultSummary(layout);
+                                editorOpened = false;
+                                openDefaultEditor();
+                            });
+                        }
+                    );
                 });
 
                 page.querySelector('#chUserLayouts').addEventListener('click', function (e) {
@@ -1072,13 +1238,19 @@
                     if (!button) {
                         return;
                     }
-                    if (!window.confirm('Reset this user to the default layout?')) {
-                        return;
-                    }
-                    ApiClient.ajax({ type: 'DELETE', url: ApiClient.getUrl('CustomizedHome/Layout', { userId: button.getAttribute('data-userid') }) }).then(function () {
-                        loadUserLayouts();
-                        loadStatus();
-                    });
+                    var row = button.closest('.cha-user');
+                    var userName = (row && row.querySelector('.cha-user-name').textContent) || 'this user';
+                    askInPage(
+                        'Reset ' + userName + ' to the default layout?',
+                        'The layout saved by ' + userName + ' is deleted and cannot be recovered. Their home page falls back to the default layout, and they can customize it again.',
+                        'Reset',
+                        function () {
+                            ApiClient.ajax({ type: 'DELETE', url: ApiClient.getUrl('CustomizedHome/Layout', { userId: button.getAttribute('data-userid') }) }).then(function () {
+                                loadUserLayouts();
+                                loadStatus();
+                            });
+                        }
+                    );
                 });
             })();
         </script>

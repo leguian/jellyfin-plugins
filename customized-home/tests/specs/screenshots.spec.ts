@@ -96,6 +96,29 @@ test('administration page', async ({ page }) => {
     await page.screenshot({ path: `${OUTPUT_DIR}/admin-genres.png`, fullPage: true });
 });
 
+test('administration page: a question asked in the page', async ({ page }) => {
+    await openAdminPage(page, { defaultLayout: DEFAULT_LAYOUT, enableIntegratedSections: true });
+    await page.addStyleTag({ url: MATERIAL_ICONS });
+    await page.click('#chTabLayouts');
+    await page.waitForSelector('#chDefaultEditor .ch-row');
+    await page.click('#chClearDefault');
+    await page.locator('.cha-ask').waitFor();
+    await page.waitForTimeout(300);
+    await page.screenshot({ path: `${OUTPUT_DIR}/admin-question.png` });
+});
+
+test('administration page: a question asked on a light dashboard', async ({ page }) => {
+    await openAdminPage(page, { defaultLayout: DEFAULT_LAYOUT, enableIntegratedSections: true });
+    await page.addStyleTag({ url: MATERIAL_ICONS });
+    await page.addStyleTag({ content: LIGHT_DASHBOARD_STYLE });
+    await page.click('#chTabLayouts');
+    await page.waitForSelector('#chDefaultEditor .ch-row');
+    await page.click('#chClearDefault');
+    await page.locator('.cha-ask').waitFor();
+    await page.waitForTimeout(300);
+    await page.screenshot({ path: `${OUTPUT_DIR}/admin-question-light.png` });
+});
+
 test('administration page on a light dashboard', async ({ page }) => {
     await openAdminPage(page, { defaultLayout: DEFAULT_LAYOUT, enableIntegratedSections: true });
     await page.addStyleTag({ url: MATERIAL_ICONS });

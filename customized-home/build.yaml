@@ -1,7 +1,7 @@
 ---
 name: "Customized Home"
 guid: "7c99a4bf-cd3b-4bc8-b941-7ddccd816f3c"
-version: "1.8.4.0"
+version: "1.8.4.1"
 targetAbi: "12.0.0.0"
 framework: "net10.0"
 overview: "Easily edit and organize the sections on your homepage"
@@ -22,10 +22,8 @@ owner: "leguian"
 artifacts:
 - "Jellyfin.Plugin.CustomizedHome.dll"
 changelog: >
-  Accessibility and robustness. Sections can be reordered without a pointer: arrow keys on the handle,
-  or a Move up / Move down menu for touch and screen readers. The editor dialog keeps the keyboard focus,
-  its menus follow the arrow keys, and closing it with unsaved changes asks first (in the page, no browser
-  prompt). Hero: pause / play button, visible keyboard focus, header refreshed when switching tabs.
-  Readable editor on a light dashboard, stylesheet fallbacks for older browsers and TVs, section keys
-  built from titles in any script. Server: the layout of a deleted user is deleted with them, stored
-  data survives unreadable or locked files, replaced genre thumbnails never serve stale bytes.
+  Housekeeping. The administration page asks its questions in the page instead of a browser prompt, like the
+  editor does. The dots of the hero are easier to hit on a touch screen. At server start the layouts left behind
+  by users deleted while the plugin was not running are removed. Saving the default layout or reading a genre
+  thumbnail answers a readable error instead of a generic failure when the disk refuses, and a default layout
+  that could not be written is no longer applied until the next restart.

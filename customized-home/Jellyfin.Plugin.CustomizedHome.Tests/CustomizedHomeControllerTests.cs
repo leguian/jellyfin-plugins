@@ -637,15 +637,56 @@ public sealed class CustomizedHomeControllerTests : IDisposable
         Assert.Empty(NewGenreImageStore().List());
     }
 
+    [Theory]
+    [MemberData(nameof(DiskFailures))]
+    public void A_thumbnail_file_that_cannot_be_read_is_a_503_and_not_a_404_the_client_would_cache(Exception failure)
+    {
+        // The index names the file, the file itself refuses: not "there is no thumbnail". The image is served
+        // as immutable for a year, so a 404 here would be remembered by browsers and proxies long after the
+        // disk is well again.
+        _genreImages.Save("Comedy", "portrait", Png, out _);
+        CustomizedHomeController anonymous = ControllerFor(new ClaimsPrincipal(new ClaimsIdentity()));
+
+        // The index is already in memory: this failure can only come from reading the image file.
+        _diskFailure = failure;
+        ActionResult result = anonymous.GetGenreImage("Comedy", "portrait");
+
+        ObjectResult answer = Assert.IsType<ObjectResult>(result);
+        Assert.Equal(StatusCodes.Status503ServiceUnavailable, answer.StatusCode);
+        string message = Assert.IsType<string>(answer.Value);
+        Assert.Contains("could not be read", message, StringComparison.Ordinal);
+        Assert.DoesNotContain(failure.Message, message, StringComparison.Ordinal);
+        (LogLevel Level, Exception? Exception) entry = Assert.Single(_logger.Entries);
+        Assert.Equal(LogLevel.Warning, entry.Level);
+        Assert.Same(failure, entry.Exception);
+
+        // Nothing was cached for a year on the way out.
+        Assert.Empty(anonymous.Response.Headers[HeaderNames.CacheControl].ToString());
+
+        // Once the disk answers again the image is served as usual.
+        _diskFailure = null;
+        FileContentResult served = Assert.IsType<FileContentResult>(ControllerFor(new ClaimsPrincipal(new ClaimsIdentity())).GetGenreImage("Comedy", "portrait"));
+        Assert.Equal(Png, served.FileContents);
+    }
+
     [Fact]
-    public void A_storage_failure_is_declared_by_every_action_that_writes_through_a_store()
+    public void A_missing_thumbnail_is_still_a_404()
+    {
+        Assert.IsType<NotFoundResult>(ControllerFor(new ClaimsPrincipal(new ClaimsIdentity())).GetGenreImage("Comedy", "portrait"));
+        Assert.Empty(_logger.Entries);
+    }
+
+    [Fact]
+    public void A_storage_failure_is_declared_by_every_action_that_reaches_the_disk()
     {
         string[] writers =
         [
             nameof(CustomizedHomeController.SaveLayout),
             nameof(CustomizedHomeController.ResetLayout),
             nameof(CustomizedHomeController.UploadGenreImage),
-            nameof(CustomizedHomeController.DeleteGenreImage)
+            nameof(CustomizedHomeController.DeleteGenreImage),
+            nameof(CustomizedHomeController.SaveDefaultLayout),
+            nameof(CustomizedHomeController.GetGenreImage)
         ];
 
         foreach (string writer in writers)
