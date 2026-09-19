@@ -151,4 +151,99 @@ public class LayoutValidatorTests
         Assert.Null(LayoutValidator.Normalize(layout, out string? error));
         Assert.NotNull(error);
     }
+
+    [Fact]
+    public void The_item_limit_counts_folders_and_their_members()
+    {
+        LayoutItem Folder(int first, int count)
+        {
+            return new LayoutItem
+            {
+                Type = LayoutItemTypes.Folder,
+                Id = "f" + first,
+                Items = Enumerable.Range(first, count).Select(index => Section("key:" + index)).ToList()
+            };
+        }
+
+        // 1 folder + 499 members = 500 items: accepted. One more member: rejected.
+        Assert.NotNull(LayoutValidator.Normalize(new HomeLayout { Items = [Folder(0, 499)] }, out _));
+        Assert.Null(LayoutValidator.Normalize(new HomeLayout { Items = [Folder(0, 500)] }, out string? error));
+        Assert.NotNull(error);
+    }
+
+    [Fact]
+    public void A_null_item_list_is_an_empty_layout()
+    {
+        // MVC refuses such a request body, a layout file edited by hand gets here.
+        HomeLayout normalized = LayoutValidator.Normalize(new HomeLayout { Items = null!, Hero = null! }, out string? error)!;
+
+        Assert.Null(error);
+        Assert.Empty(normalized.Items);
+        Assert.False(normalized.Hero.Enabled);
+        Assert.Equal(HeroLimits.DefaultCount, normalized.Hero.Count);
+    }
+
+    [Fact]
+    public void A_folder_with_a_null_member_list_is_an_empty_folder()
+    {
+        LayoutItem folder = new() { Type = LayoutItemTypes.Folder, Id = "f1", Name = "Later", Items = null! };
+
+        HomeLayout normalized = LayoutValidator.Normalize(new HomeLayout { Items = [folder, null!, Section("jf:resume")] }, out _)!;
+
+        Assert.Equal(2, normalized.Items.Count);
+        Assert.Equal("Later", normalized.Items[0].Name);
+        Assert.Empty(normalized.Items[0].Items);
+        Assert.Equal("jf:resume", normalized.Items[1].Key);
+    }
+
+    [Fact]
+    public void Null_hero_sources_and_null_genres_are_empty_lists()
+    {
+        LayoutItem section = Section("ch:genre");
+        section.Genres = null!;
+        HomeLayout layout = new() { Hero = new HeroSettings { Enabled = true, Sources = null! }, Items = [section] };
+
+        HomeLayout normalized = LayoutValidator.Normalize(layout, out _)!;
+
+        Assert.Empty(normalized.Hero.Sources);
+        Assert.False(normalized.Hero.Enabled);
+        Assert.Empty(normalized.Items.Single().Genres);
+    }
+
+    [Fact]
+    public void Folder_identifiers_are_unique_and_never_empty()
+    {
+        HomeLayout layout = new()
+        {
+            Items =
+            [
+                new LayoutItem { Type = LayoutItemTypes.Folder, Id = "same" },
+                new LayoutItem { Type = "FOLDER", Id = " same " },
+                new LayoutItem { Type = LayoutItemTypes.Folder, Id = "  " },
+                new LayoutItem { Type = LayoutItemTypes.Folder }
+            ]
+        };
+
+        List<string?> ids = LayoutValidator.Normalize(layout, out _)!.Items.Select(item => item.Id).ToList();
+
+        Assert.Equal("same", ids[0]);
+        Assert.Equal(4, ids.Distinct().Count());
+        Assert.All(ids, id => Assert.False(string.IsNullOrWhiteSpace(id)));
+    }
+
+    [Fact]
+    public void Texts_are_trimmed_and_cut_to_their_maximum_length()
+    {
+        LayoutItem section = Section("  " + new string('k', 300) + "  ");
+        section.Label = new string('l', 300);
+        LayoutItem folder = new() { Type = LayoutItemTypes.Folder, Id = new string('i', 300), Name = " " + new string('n', 300), Icon = new string('a', 65) };
+
+        HomeLayout normalized = LayoutValidator.Normalize(new HomeLayout { Items = [section, folder] }, out _)!;
+
+        Assert.Equal(new string('k', 200), normalized.Items[0].Key);
+        Assert.Equal(new string('l', 200), normalized.Items[0].Label);
+        Assert.Equal(new string('i', 200), normalized.Items[1].Id);
+        Assert.Equal(new string('n', 100), normalized.Items[1].Name);
+        Assert.Equal(new string('a', 64), normalized.Items[1].Icon);
+    }
 }

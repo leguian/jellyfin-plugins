@@ -1,12 +1,15 @@
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
+using System.IO;
+using System.Linq;
 using System.Reflection;
 using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
 using Jellyfin.Plugin.CustomizedHome.Helpers;
 using Jellyfin.Plugin.CustomizedHome.Services;
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using Xunit;
 
@@ -145,6 +148,85 @@ public sealed class WebInjectionServiceTests
     }
 
     [Fact]
+    public void Two_overloads_are_not_an_error_the_first_usable_one_is_called_once()
+    {
+        WebInjectionService service = CreateService(typeof(OverloadedInterface));
+
+        Assert.Equal(RegistrationOutcome.Registered, service.TryRegister());
+
+        Assert.Single(Received);
+        Assert.Null(service.Status.Error);
+    }
+
+    [Fact]
+    public void A_generic_method_cannot_be_called_and_is_reported_as_incompatible()
+    {
+        WebInjectionService service = CreateService(typeof(GenericInterface));
+
+        Assert.Equal(RegistrationOutcome.Incompatible, service.TryRegister());
+        Assert.Contains("Unexpected RegisterTransformation signature", service.Status.Error, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void An_unexpected_exception_is_a_failed_attempt_that_names_it_instead_of_an_error_for_the_caller()
+    {
+        // What the status and retry endpoints call: an exception here would be an HTTP 500 for the administrator.
+        WebInjectionService brokenAssembly = CreateService(() => new UnloadableAssembly());
+        Assert.Equal(RegistrationOutcome.Failed, brokenAssembly.TryRegister());
+        Assert.Equal("FileLoadException: A dependency of File Transformation could not be loaded.", brokenAssembly.Status.Error);
+        Assert.True(brokenAssembly.Status.FileTransformationDetected);
+        Assert.False(brokenAssembly.Status.Registered);
+
+        WebInjectionService brokenLookup = CreateService(() => throw new InvalidOperationException("Collection was modified."));
+        Assert.Equal(RegistrationOutcome.Failed, brokenLookup.TryRegister());
+        Assert.Equal("InvalidOperationException: Collection was modified.", brokenLookup.Status.Error);
+    }
+
+    [Fact]
+    public async Task The_startup_loop_survives_an_unexpected_exception_and_registers_on_a_later_attempt()
+    {
+        int attempts = 0;
+        using WebInjectionService service = CreateService(() => Interlocked.Increment(ref attempts) switch
+        {
+            1 => throw new InvalidOperationException("Collection was modified."),
+            2 => new UnloadableAssembly(),
+            _ => new FakeAssembly(typeof(StringInterface))
+        });
+
+        await service.StartAsync(CancellationToken.None);
+        await WaitUntil(() => service.Status.Registered);
+        await service.StopAsync(CancellationToken.None);
+
+        Assert.Equal(3, attempts);
+        Assert.Null(service.Status.Error);
+        Assert.Single(Received);
+    }
+
+    [Fact]
+    public void A_failure_that_repeats_is_logged_once_with_its_exception()
+    {
+        RecordingLogger logger = new();
+        Type pluginInterface = typeof(ThrowingInterface);
+        WebInjectionService service = new(logger, () => new FakeAssembly(pluginInterface), _ => TimeSpan.Zero);
+
+        service.TryRegister();
+        service.TryRegister();
+        service.TryRegister();
+
+        (LogLevel Level, Exception? Exception) entry = Assert.Single(logger.Entries, logged => logged.Level >= LogLevel.Warning);
+        Assert.Equal(LogLevel.Warning, entry.Level);
+        Assert.IsType<InvalidOperationException>(entry.Exception);
+
+        // Registered, then failing again: the administrator is told again.
+        pluginInterface = typeof(StringInterface);
+        service.TryRegister();
+        pluginInterface = typeof(ThrowingInterface);
+        service.TryRegister();
+
+        Assert.Equal(2, logger.Entries.Count(logged => logged.Level >= LogLevel.Warning));
+    }
+
+    [Fact]
     public async Task The_startup_loop_waits_for_File_Transformation_to_load_then_stops()
     {
         int attempts = 0;
@@ -221,6 +303,43 @@ public sealed class WebInjectionServiceTests
         }
     }
 
+    /// <summary>
+    /// An assembly whose types cannot be loaded, as when a dependency of File Transformation is missing.
+    /// </summary>
+    private sealed class UnloadableAssembly : Assembly
+    {
+        public override AssemblyName GetName()
+        {
+            return new AssemblyName("Jellyfin.Plugin.FileTransformation") { Version = new Version(2, 5, 0, 0) };
+        }
+
+        public override Type? GetType(string name, bool throwOnError)
+        {
+            throw new FileLoadException("A dependency of File Transformation could not be loaded.");
+        }
+    }
+
+    private sealed class RecordingLogger : ILogger<WebInjectionService>
+    {
+        public List<(LogLevel Level, Exception? Exception)> Entries { get; } = new();
+
+        public IDisposable? BeginScope<TState>(TState state)
+            where TState : notnull
+        {
+            return null;
+        }
+
+        public bool IsEnabled(LogLevel logLevel)
+        {
+            return true;
+        }
+
+        public void Log<TState>(LogLevel logLevel, EventId eventId, TState state, Exception? exception, Func<TState, Exception?, string> formatter)
+        {
+            Entries.Add((logLevel, exception));
+        }
+    }
+
     public sealed class FakeJObject
     {
         private FakeJObject(string json)
@@ -275,6 +394,32 @@ public sealed class WebInjectionServiceTests
     public static class UnknownPayloadInterface
     {
         public static void RegisterTransformation(PayloadWithoutParse payload)
+        {
+            Received.Add(payload);
+        }
+    }
+
+    public static class OverloadedInterface
+    {
+        public static void RegisterTransformation(FakeJObject payload)
+        {
+            Received.Add(payload);
+        }
+
+        public static void RegisterTransformation(string payload)
+        {
+            Received.Add(payload);
+        }
+
+        public static void RegisterTransformation(string payload, string options)
+        {
+            Received.Add(payload + options);
+        }
+    }
+
+    public static class GenericInterface
+    {
+        public static void RegisterTransformation<TPayload>(TPayload payload)
         {
             Received.Add(payload);
         }

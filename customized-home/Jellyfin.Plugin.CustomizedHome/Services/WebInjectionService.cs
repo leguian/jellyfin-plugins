@@ -34,6 +34,7 @@ public sealed partial class WebInjectionService : IHostedService, IDisposable
 
     private const string FileTransformationAssemblyName = "Jellyfin.Plugin.FileTransformation";
     private const string FileTransformationInterface = "Jellyfin.Plugin.FileTransformation.PluginInterface";
+    private const string RegisterMethodName = "RegisterTransformation";
 
     private const int FastAttempts = 5;
     private static readonly TimeSpan FastRetryDelay = TimeSpan.FromSeconds(2);
@@ -44,6 +45,7 @@ public sealed partial class WebInjectionService : IHostedService, IDisposable
     private readonly Func<int, TimeSpan> _retryDelay;
     private readonly object _lock = new();
     private CancellationTokenSource? _cts;
+    private string? _lastLoggedFailure;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="WebInjectionService"/> class.
@@ -107,64 +109,97 @@ public sealed partial class WebInjectionService : IHostedService, IDisposable
             Status.LastAttemptUtc = DateTime.UtcNow;
             Status.Error = null;
 
-            Assembly? assembly = _findFileTransformation();
-            if (assembly is null)
-            {
-                Status.FileTransformationDetected = false;
-                Status.Registered = false;
-                return RegistrationOutcome.NotInstalled;
-            }
-
-            Status.FileTransformationDetected = true;
-            Status.FileTransformationVersion = assembly.GetName().Version?.ToString();
-
             try
             {
-                Type? pluginInterface = assembly.GetType(FileTransformationInterface, throwOnError: false);
-                MethodInfo? register = pluginInterface?.GetMethod("RegisterTransformation", BindingFlags.Public | BindingFlags.Static);
-                if (register is null)
-                {
-                    Status.Error = "File Transformation exposes no RegisterTransformation method (incompatible version).";
-                    Status.Registered = false;
-                    return RegistrationOutcome.Incompatible;
-                }
-
-                ParameterInfo[] parameters = register.GetParameters();
-                if (parameters.Length != 1)
-                {
-                    Status.Error = "Unexpected RegisterTransformation signature (incompatible version).";
-                    Status.Registered = false;
-                    return RegistrationOutcome.Incompatible;
-                }
-
-                string json = BuildPayloadJson();
-                object? payload = BuildPayload(parameters[0].ParameterType, json);
-                if (payload is null)
-                {
-                    Status.Error = "Could not build the payload expected by File Transformation (incompatible version).";
-                    Status.Registered = false;
-                    return RegistrationOutcome.Incompatible;
-                }
-
-                register.Invoke(null, [payload]);
-                Status.Registered = true;
-                Status.RegisteredUtc = DateTime.UtcNow;
-                LogRegistered(Status.FileTransformationVersion);
-                return RegistrationOutcome.Registered;
+                return Register();
             }
-            catch (TargetInvocationException ex)
+            catch (TargetInvocationException ex) when (ex.InnerException is not null)
             {
-                Status.Error = ex.InnerException?.Message ?? ex.Message;
-                Status.Registered = false;
-                return RegistrationOutcome.Failed;
+                // File Transformation itself refused or failed: its own message is the useful one.
+                return Fail(ex.InnerException.Message, ex.InnerException);
             }
-            catch (Exception ex) when (ex is ReflectionTypeLoadException or TypeLoadException or ArgumentException or MissingMethodException)
+#pragma warning disable CA1031 // Boundary with third-party code reached through reflection: whatever it throws is a failed attempt.
+            catch (Exception ex)
+#pragma warning restore CA1031
             {
-                Status.Error = ex.Message;
-                Status.Registered = false;
-                return RegistrationOutcome.Failed;
+                // An exception leaving this method would end the startup loop for good and turn the status
+                // and retry endpoints into errors: the administrator would never learn why nothing is injected.
+                return Fail(ex.GetType().Name + ": " + ex.Message, ex);
             }
         }
+    }
+
+    private RegistrationOutcome Register()
+    {
+        Assembly? assembly = _findFileTransformation();
+        if (assembly is null)
+        {
+            Status.FileTransformationDetected = false;
+            Status.Registered = false;
+            return RegistrationOutcome.NotInstalled;
+        }
+
+        Status.FileTransformationDetected = true;
+        Status.FileTransformationVersion = assembly.GetName().Version?.ToString();
+
+        // Picked among the overloads by hand: GetMethod(name) throws as soon as there are two of them.
+        Type? pluginInterface = assembly.GetType(FileTransformationInterface, throwOnError: false);
+        MethodInfo[] overloads = pluginInterface?.GetMethods(BindingFlags.Public | BindingFlags.Static)
+            .Where(method => string.Equals(method.Name, RegisterMethodName, StringComparison.Ordinal))
+            .ToArray() ?? [];
+        if (overloads.Length == 0)
+        {
+            return Incompatible("File Transformation exposes no RegisterTransformation method (incompatible version).");
+        }
+
+        MethodInfo[] candidates = overloads
+            .Where(method => !method.IsGenericMethodDefinition && method.GetParameters().Length == 1)
+            .ToArray();
+        if (candidates.Length == 0)
+        {
+            return Incompatible("Unexpected RegisterTransformation signature (incompatible version).");
+        }
+
+        string json = BuildPayloadJson();
+        foreach (MethodInfo register in candidates)
+        {
+            object? payload = BuildPayload(register.GetParameters()[0].ParameterType, json);
+            if (payload is null)
+            {
+                continue;
+            }
+
+            register.Invoke(null, [payload]);
+            Status.Registered = true;
+            Status.RegisteredUtc = DateTime.UtcNow;
+            _lastLoggedFailure = null;
+            LogRegistered(Status.FileTransformationVersion);
+            return RegistrationOutcome.Registered;
+        }
+
+        return Incompatible("Could not build the payload expected by File Transformation (incompatible version).");
+    }
+
+    private RegistrationOutcome Incompatible(string error)
+    {
+        Status.Error = error;
+        Status.Registered = false;
+        return RegistrationOutcome.Incompatible;
+    }
+
+    private RegistrationOutcome Fail(string error, Exception exception)
+    {
+        Status.Error = error;
+        Status.Registered = false;
+
+        // The startup loop tries thirty times: the same failure is logged once with its stack trace.
+        if (!string.Equals(_lastLoggedFailure, error, StringComparison.Ordinal))
+        {
+            _lastLoggedFailure = error;
+            LogAttemptThrew(error, exception);
+        }
+
+        return RegistrationOutcome.Failed;
     }
 
     private static Assembly? FindFileTransformation()
@@ -209,6 +244,9 @@ public sealed partial class WebInjectionService : IHostedService, IDisposable
 
     [LoggerMessage(Level = LogLevel.Warning, Message = "Customized Home: the File Transformation plugin was not found. Install it (https://github.com/IAmParadox27/jellyfin-plugin-file-transformation) so the client script can be injected into the web client.")]
     private partial void LogNotInstalled();
+
+    [LoggerMessage(Level = LogLevel.Warning, Message = "Customized Home: registering with File Transformation failed, the attempt may be repeated: {Error}")]
+    private partial void LogAttemptThrew(string error, Exception exception);
 
     [LoggerMessage(Level = LogLevel.Debug, Message = "Customized Home: registration attempt {Attempt} failed: {Error}")]
     private partial void LogAttemptFailed(int attempt, string? error);

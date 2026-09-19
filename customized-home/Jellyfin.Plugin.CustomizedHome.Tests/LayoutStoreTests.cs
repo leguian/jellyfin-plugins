@@ -45,11 +45,13 @@ public sealed class LayoutStoreTests : IDisposable
         }
     }
 
-    private LayoutStore CreateStore()
+    private LayoutStore CreateStore(Func<string, Stream>? openRead = null)
     {
         Mock<IApplicationPaths> paths = new();
         paths.SetupGet(p => p.PluginConfigurationsPath).Returns(_root);
-        return new LayoutStore(paths.Object, NullLogger<LayoutStore>.Instance);
+        return openRead is null
+            ? new LayoutStore(paths.Object, NullLogger<LayoutStore>.Instance)
+            : new LayoutStore(paths.Object, NullLogger<LayoutStore>.Instance, openRead);
     }
 
     private string FileOf(Guid userId)
@@ -241,6 +243,123 @@ public sealed class LayoutStoreTests : IDisposable
         StoredLayoutInfo info = Assert.Single(store.List());
         Assert.Equal(3, info.SectionCount);
         Assert.Equal(1, info.FolderCount);
+    }
+
+    [Fact]
+    public void A_file_edited_by_hand_with_null_lists_loads_and_is_listed()
+    {
+        WriteFile(
+            Alice.ToString("N") + ".json",
+            """{ "Hero": { "Enabled": true, "Sources": null }, "Items": [ null, { "Type": "folder", "Id": "f1", "Items": null }, { "Key": "jf:resume", "Genres": null } ] }""");
+        WriteFile(Bob.ToString("N") + ".json", """{ "Hero": null, "Items": null }""");
+        LayoutStore store = CreateStore();
+
+        HomeLayout alice = store.Get(Alice)!;
+        Assert.Equal(2, alice.Items.Count);
+        Assert.Empty(alice.Items[0].Items);
+        Assert.Empty(alice.Items[1].Genres);
+        Assert.False(alice.Hero.Enabled);
+        Assert.Empty(alice.Hero.Sources);
+
+        HomeLayout bob = store.Get(Bob)!;
+        Assert.Empty(bob.Items);
+        Assert.False(bob.Hero.Enabled);
+
+        Assert.Equal([(1, 1), (0, 0)], store.List().OrderBy(info => info.UserId).Select(info => (info.SectionCount, info.FolderCount)));
+    }
+
+    [Fact]
+    public void What_is_read_from_a_file_is_normalized_like_what_a_client_sends()
+    {
+        WriteFile(
+            Alice.ToString("N") + ".json",
+            """{ "Hero": { "Count": 900 }, "Items": [ { "Key": "jf:resume", "Shape": "HEXAGON" }, { "Key": "jf:resume" }, { "Key": "  " } ] }""");
+
+        HomeLayout layout = CreateStore().Get(Alice)!;
+
+        LayoutItem section = Assert.Single(layout.Items);
+        Assert.Equal(LayoutFormats.ShapeAuto, section.Shape);
+        Assert.Equal(HeroLimits.MaxCount, layout.Hero.Count);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void A_file_that_holds_no_valid_layout_means_no_layout(bool tooManyItems)
+    {
+        string contents = tooManyItems
+            ? "{ \"Items\": [ " + string.Join(", ", Enumerable.Range(0, 501).Select(index => "{ \"Key\": \"key:" + index + "\" }")) + " ] }"
+            : "null";
+        WriteFile(Alice.ToString("N") + ".json", contents);
+        LayoutStore store = CreateStore();
+
+        Assert.Null(store.Get(Alice));
+        Assert.Empty(store.List());
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void A_read_that_fails_is_not_remembered_as_no_layout(bool accessDenied)
+    {
+        CreateStore().Save(Alice, SampleLayout());
+        bool failing = true;
+        int attempts = 0;
+        LayoutStore store = CreateStore(path =>
+        {
+            attempts++;
+            if (!failing)
+            {
+                return File.OpenRead(path);
+            }
+
+            throw accessDenied ? new UnauthorizedAccessException("Access to the path is denied.") : new IOException("The file is used by another process.");
+        });
+
+        // While the file cannot be read the user has no layout and the administrator sees none, without an error.
+        Assert.Null(store.Get(Alice));
+        Assert.Empty(store.List());
+        Assert.Equal(2, attempts);
+
+        failing = false;
+
+        Assert.Equal(2, store.Get(Alice)!.Items.Count);
+        Assert.Single(store.List());
+
+        // Read once: from now on the layout comes from memory.
+        Assert.Equal(3, attempts);
+    }
+
+    [Fact]
+    public void A_file_locked_by_another_program_is_read_once_it_is_released()
+    {
+        CreateStore().Save(Alice, SampleLayout());
+        LayoutStore store = CreateStore();
+
+        using (new FileStream(FileOf(Alice), FileMode.Open, FileAccess.ReadWrite, FileShare.None))
+        {
+            Assert.Null(store.Get(Alice));
+        }
+
+        Assert.NotNull(store.Get(Alice));
+    }
+
+    [Fact]
+    public void A_missing_or_corrupt_file_is_remembered_so_the_disk_is_not_read_on_every_request()
+    {
+        WriteFile(Bob.ToString("N") + ".json", "{ broken");
+        int attempts = 0;
+        LayoutStore store = CreateStore(path =>
+        {
+            attempts++;
+            return File.OpenRead(path);
+        });
+
+        Assert.Null(store.Get(Bob));
+        Assert.Null(store.Get(Bob));
+        Assert.Null(store.Get(Alice));
+
+        Assert.Equal(1, attempts);
     }
 
     [Fact]

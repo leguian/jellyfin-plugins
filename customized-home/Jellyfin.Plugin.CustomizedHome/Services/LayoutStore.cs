@@ -4,6 +4,7 @@ using System.Globalization;
 using System.IO;
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using Jellyfin.Plugin.CustomizedHome.Helpers;
 using Jellyfin.Plugin.CustomizedHome.Models;
 using MediaBrowser.Common.Configuration;
 using Microsoft.Extensions.Logging;
@@ -26,6 +27,7 @@ public sealed partial class LayoutStore
     private readonly Dictionary<Guid, HomeLayout?> _cache = new();
     private readonly string _directory;
     private readonly ILogger<LayoutStore> _logger;
+    private readonly Func<string, Stream> _openRead;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="LayoutStore"/> class.
@@ -33,10 +35,24 @@ public sealed partial class LayoutStore
     /// <param name="applicationPaths">The application paths.</param>
     /// <param name="logger">The logger.</param>
     public LayoutStore(IApplicationPaths applicationPaths, ILogger<LayoutStore> logger)
+        : this(applicationPaths, logger, File.OpenRead)
+    {
+    }
+
+    /// <summary>
+    /// Initializes a new instance of the <see cref="LayoutStore"/> class with its own way of opening files.
+    /// Test seam: a locked file or a denied access cannot be produced the same way on every platform. Being
+    /// internal, this constructor is invisible to the dependency injection container.
+    /// </summary>
+    /// <param name="applicationPaths">The application paths.</param>
+    /// <param name="logger">The logger.</param>
+    /// <param name="openRead">Opens a file for reading.</param>
+    internal LayoutStore(IApplicationPaths applicationPaths, ILogger<LayoutStore> logger, Func<string, Stream> openRead)
     {
         ArgumentNullException.ThrowIfNull(applicationPaths);
         _directory = Path.Combine(applicationPaths.PluginConfigurationsPath, typeof(Plugin).Namespace!, "users");
         _logger = logger;
+        _openRead = openRead;
     }
 
     /// <summary>
@@ -59,16 +75,27 @@ public sealed partial class LayoutStore
             {
                 try
                 {
-                    using FileStream stream = File.OpenRead(path);
-                    layout = JsonSerializer.Deserialize<HomeLayout>(stream, JsonOptions);
+                    using Stream stream = _openRead(path);
+
+                    // A file is not a request: it may be edited by hand or come from an older version. Normalizing
+                    // it gives the rest of the plugin the guarantees a saved layout has (no null list, known values).
+                    layout = LayoutValidator.Normalize(JsonSerializer.Deserialize<HomeLayout>(stream, JsonOptions), out string? error);
+                    if (layout is null)
+                    {
+                        LogInvalidLayout(path, error);
+                    }
                 }
                 catch (JsonException ex)
                 {
+                    // The file itself is broken: it stays so until the user saves again.
                     LogUnreadableLayout(path, ex);
                 }
-                catch (IOException ex)
+                catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
                 {
+                    // The file may be fine (locked by a backup, permissions being fixed): remembering "no layout"
+                    // would hide it until the next restart. The next request tries again.
                     LogUnreadableLayout(path, ex);
+                    return null;
                 }
             }
 
@@ -185,6 +212,9 @@ public sealed partial class LayoutStore
 
     [LoggerMessage(Level = LogLevel.Warning, Message = "Customized Home: could not read layout file {Path}, ignoring it")]
     private partial void LogUnreadableLayout(string path, Exception exception);
+
+    [LoggerMessage(Level = LogLevel.Warning, Message = "Customized Home: layout file {Path} holds no valid layout, ignoring it: {Error}")]
+    private partial void LogInvalidLayout(string path, string? error);
 }
 
 /// <summary>
