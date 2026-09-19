@@ -58,7 +58,7 @@ public sealed partial class GenreImageStore
     internal GenreImageStore(IApplicationPaths applicationPaths, ILogger<GenreImageStore> logger, Func<string, Stream> openRead)
     {
         ArgumentNullException.ThrowIfNull(applicationPaths);
-        _directory = Path.Combine(applicationPaths.PluginConfigurationsPath, typeof(Plugin).Namespace!, "genres");
+        _directory = Path.Combine(PluginData.GetRoot(applicationPaths), PluginData.GenresFolder);
         _logger = logger;
         _openRead = openRead;
     }

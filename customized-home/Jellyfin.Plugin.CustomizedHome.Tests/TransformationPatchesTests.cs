@@ -10,7 +10,8 @@ namespace Jellyfin.Plugin.CustomizedHome.Tests;
 /// <summary>
 /// The callback runs on every file of the web client whose name matches "index.html", on every server that
 /// installs the plugin: a document it must not touch has to come back untouched.
-/// No test creates a <see cref="Plugin"/> instance, so the callback runs here with an empty base URL.
+/// No <see cref="Plugin"/> instance exists while these tests run (the one test that creates it runs alone, see
+/// <see cref="PluginInstanceCollection"/>), so the callback runs here with an empty base URL.
 /// </summary>
 public class TransformationPatchesTests
 {

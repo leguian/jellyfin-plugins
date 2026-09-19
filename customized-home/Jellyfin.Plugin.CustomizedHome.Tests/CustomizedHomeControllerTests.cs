@@ -391,6 +391,34 @@ public sealed class CustomizedHomeControllerTests : IDisposable
     }
 
     [Fact]
+    public void The_layout_left_by_a_deleted_user_is_neither_listed_nor_counted()
+    {
+        Guid deleted = Guid.Parse("dddddddd-0000-0000-0000-000000000004");
+        _store.Save(Alice, Layout("jf:resume"));
+        _store.Save(deleted, Layout("jf:resume"));
+
+        // A file named after the empty identifier can only be made by hand; the user manager throws when asked about it.
+        _store.Save(Guid.Empty, Layout("jf:resume"));
+        _userManager.Setup(manager => manager.GetUserById(Guid.Empty)).Throws(new ArgumentException("Guid can't be empty"));
+        CustomizedHomeController controller = ControllerFor(Alice, administrator: true);
+
+        OkObjectResult result = Assert.IsType<OkObjectResult>(controller.GetUserLayouts().Result);
+        StoredLayoutInfo listed = Assert.Single(Assert.IsAssignableFrom<IEnumerable<StoredLayoutInfo>>(result.Value));
+
+        Assert.Equal(Alice, listed.UserId);
+        Assert.Equal("alice", listed.UserName);
+
+        // One lookup per stored layout: on Jellyfin 12 each of them is a database query.
+        _userManager.Verify(manager => manager.GetUserById(Alice), Times.Once);
+        _userManager.Verify(manager => manager.GetUserById(deleted), Times.Once);
+        Assert.Equal(1, controller.GetStatus().Value!.UserLayoutCount);
+
+        // Still there for an administrator who asks for it by identifier.
+        Assert.IsType<NoContentResult>(controller.ResetLayout(deleted));
+        Assert.Null(_store.Get(deleted));
+    }
+
+    [Fact]
     public void The_status_counts_the_layouts_and_reports_the_registration_state()
     {
         _config.DefaultLayout = Layout("jf:latestmedia", "jf:resume");

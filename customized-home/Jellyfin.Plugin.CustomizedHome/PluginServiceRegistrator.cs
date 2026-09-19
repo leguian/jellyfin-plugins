@@ -1,5 +1,7 @@
+using Jellyfin.Data.Events.Users;
 using Jellyfin.Plugin.CustomizedHome.Services;
 using MediaBrowser.Controller;
+using MediaBrowser.Controller.Events;
 using MediaBrowser.Controller.Plugins;
 using Microsoft.Extensions.DependencyInjection;
 
@@ -17,5 +19,8 @@ public class PluginServiceRegistrator : IPluginServiceRegistrator
         serviceCollection.AddSingleton<GenreImageStore>();
         serviceCollection.AddSingleton<WebInjectionService>();
         serviceCollection.AddHostedService(provider => provider.GetRequiredService<WebInjectionService>());
+
+        // Resolved by the event manager of the server each time a user is deleted.
+        serviceCollection.AddScoped<IEventConsumer<UserDeletedEventArgs>, UserDeletedConsumer>();
     }
 }

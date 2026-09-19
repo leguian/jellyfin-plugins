@@ -208,6 +208,29 @@ public sealed class LayoutStoreTests : IDisposable
     }
 
     [Fact]
+    public void Layouts_of_users_that_no_longer_exist_are_not_listed_nor_even_read()
+    {
+        CreateStore().Save(Alice, SampleLayout());
+        CreateStore().Save(Bob, SampleLayout());
+        int reads = 0;
+        LayoutStore store = CreateStore(path =>
+        {
+            reads++;
+            return File.OpenRead(path);
+        });
+
+        StoredLayoutInfo info = Assert.Single(store.List(userId => userId == Bob));
+
+        Assert.Equal(Bob, info.UserId);
+        Assert.Equal(1, reads);
+
+        // The file is not touched: deleting is left to the "user deleted" event and to the administrator.
+        Assert.True(File.Exists(FileOf(Alice)));
+        Assert.Equal(2, store.List().Count);
+        Assert.Throws<ArgumentNullException>(() => store.List(null!));
+    }
+
+    [Fact]
     public void A_layout_written_by_the_first_version_loads_with_todays_defaults()
     {
         WriteFile(Alice.ToString("N") + ".json", FirstVersionLayout);

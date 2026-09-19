@@ -50,7 +50,7 @@ public sealed partial class LayoutStore
     internal LayoutStore(IApplicationPaths applicationPaths, ILogger<LayoutStore> logger, Func<string, Stream> openRead)
     {
         ArgumentNullException.ThrowIfNull(applicationPaths);
-        _directory = Path.Combine(applicationPaths.PluginConfigurationsPath, typeof(Plugin).Namespace!, "users");
+        _directory = Path.Combine(PluginData.GetRoot(applicationPaths), PluginData.UsersFolder);
         _logger = logger;
         _openRead = openRead;
     }
@@ -150,56 +150,68 @@ public sealed partial class LayoutStore
     }
 
     /// <summary>
-    /// Lists the users that saved a layout.
+    /// Lists every stored layout, whoever it belongs to.
     /// </summary>
     /// <returns>The stored layouts summary.</returns>
     public IReadOnlyList<StoredLayoutInfo> List()
     {
+        return List(static _ => true);
+    }
+
+    /// <summary>
+    /// Lists the stored layouts of the users that still exist. The layout of a deleted user is removed when the
+    /// server announces the deletion; a file that outlived its user (deleted while the plugin was not running, or
+    /// before it cleaned up) is of no use to an administrator and is left out.
+    /// </summary>
+    /// <param name="userExists">Tells whether a user identifier is one of a current user.</param>
+    /// <returns>The stored layouts summary.</returns>
+    public IReadOnlyList<StoredLayoutInfo> List(Func<Guid, bool> userExists)
+    {
+        ArgumentNullException.ThrowIfNull(userExists);
+
         List<StoredLayoutInfo> result = new();
-        lock (_lock)
+        if (!Directory.Exists(_directory))
         {
-            if (!Directory.Exists(_directory))
+            return result;
+        }
+
+        // The store is not locked while the caller is asked about a user: that question may reach the database.
+        foreach (string file in Directory.GetFiles(_directory, "*.json"))
+        {
+            string name = Path.GetFileNameWithoutExtension(file);
+            if (!Guid.TryParse(name, out Guid userId) || !userExists(userId))
             {
-                return result;
+                continue;
             }
 
-            foreach (string file in Directory.EnumerateFiles(_directory, "*.json"))
+            HomeLayout? layout = Get(userId);
+            if (layout is null)
             {
-                string name = Path.GetFileNameWithoutExtension(file);
-                if (!Guid.TryParse(name, out Guid userId))
-                {
-                    continue;
-                }
-
-                HomeLayout? layout = Get(userId);
-                if (layout is null)
-                {
-                    continue;
-                }
-
-                int sections = 0;
-                int folders = 0;
-                foreach (LayoutItem item in layout.Items)
-                {
-                    if (string.Equals(item.Type, LayoutItemTypes.Folder, StringComparison.OrdinalIgnoreCase))
-                    {
-                        folders++;
-                        sections += item.Items.Count;
-                    }
-                    else
-                    {
-                        sections++;
-                    }
-                }
-
-                result.Add(new StoredLayoutInfo
-                {
-                    UserId = userId,
-                    ModifiedUtc = File.GetLastWriteTimeUtc(file),
-                    SectionCount = sections,
-                    FolderCount = folders
-                });
+                continue;
             }
+
+            int sections = 0;
+            int folders = 0;
+            foreach (LayoutItem item in layout.Items)
+            {
+                if (string.Equals(item.Type, LayoutItemTypes.Folder, StringComparison.OrdinalIgnoreCase))
+                {
+                    folders++;
+                    sections += item.Items.Count;
+                }
+                else
+                {
+                    sections++;
+                }
+            }
+
+            result.Add(new StoredLayoutInfo
+            {
+                UserId = userId,
+                ModifiedUtc = File.GetLastWriteTimeUtc(file),
+                SectionCount = sections,
+                FolderCount = folders
+            });
         }
 
         return result;
