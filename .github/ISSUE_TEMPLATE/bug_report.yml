@@ -1,0 +1,106 @@
+name: Bug report
+description: Something does not work as described
+title: "[customized-home] "
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time to report a problem. English or French are both fine.
+
+        Before you continue:
+        - The plugin only changes the Jellyfin **web client**: browsers, the official Android and iOS apps, Jellyfin Media Player. Android TV, Swiftfin, Kodi and other native apps are not affected, by design.
+        - Read the [troubleshooting section](https://github.com/leguian/jellyfin-plugins/blob/main/customized-home/README.en.md#troubleshooting): File Transformation must be installed, and a hard refresh (Ctrl+F5) is needed after an install or an update.
+        - A security problem must **not** be reported here: follow the [security policy](https://github.com/leguian/jellyfin-plugins/blob/main/SECURITY.md).
+  - type: dropdown
+    id: plugin
+    attributes:
+      label: Plugin
+      options:
+        - Customized Home
+    validations:
+      required: true
+  - type: input
+    id: plugin-version
+    attributes:
+      label: Plugin version
+      description: Shown in the header of the plugin page (Dashboard, Plugins, Customized Home), or returned by `window.CustomizedHome.version` in the browser console.
+      placeholder: "1.8.3.0"
+    validations:
+      required: true
+  - type: input
+    id: jellyfin-version
+    attributes:
+      label: Jellyfin server version
+      description: Shown on the home page of the Dashboard. Say also how it is installed (Docker, Linux package, Windows…).
+      placeholder: "10.11.0, Docker"
+    validations:
+      required: true
+  - type: input
+    id: file-transformation-version
+    attributes:
+      label: File Transformation version
+      description: Shown in the Status card of the plugin page (Options tab), with the status badge (Active, File Transformation missing, Registration failed).
+      placeholder: "3.0.0.0, badge: Active"
+    validations:
+      required: true
+  - type: input
+    id: client
+    attributes:
+      label: Client
+      description: Browser and version, or app and version, and the operating system.
+      placeholder: "Firefox 130 on Windows 11 / Jellyfin for Android 2.6.2"
+    validations:
+      required: true
+  - type: input
+    id: other-plugins
+    attributes:
+      label: Other plugins and custom CSS that change the web client
+      description: Home Screen Sections, Jellyfin Enhanced, a theme in Dashboard, Branding, Custom CSS… Write "none" when there is none.
+    validations:
+      required: false
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened
+      description: What you did, what you expected, what you got. Screenshots help.
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1. Open the home page
+        2. Customize home, add "Collections"
+        3. Save
+    validations:
+      required: true
+  - type: textarea
+    id: sections
+    attributes:
+      label: Output of window.CustomizedHome.sections()
+      description: |
+        On the home page, open the browser developer tools (F12), Console tab, run the line below and paste the result.
+        If the answer is "window.CustomizedHome is undefined", say so: the script is not loaded.
+        Library names can appear in the labels: edit them out if you prefer.
+      placeholder: "JSON.stringify(window.CustomizedHome.sections(), null, 2)"
+      render: json
+    validations:
+      required: true
+  - type: textarea
+    id: console
+    attributes:
+      label: Browser console errors
+      description: Red lines of the Console tab, in particular the ones that start with [CustomizedHome], and failed requests to /CustomizedHome/ in the Network tab. Remove tokens and server addresses.
+      render: text
+    validations:
+      required: false
+  - type: textarea
+    id: server-log
+    attributes:
+      label: Jellyfin server log
+      description: Lines that mention "Customized Home" or "File Transformation" (Dashboard, Logs). Remove tokens, addresses and user names.
+      render: text
+    validations:
+      required: false
