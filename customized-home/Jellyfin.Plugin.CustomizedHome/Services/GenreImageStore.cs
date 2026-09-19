@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Globalization;
 using System.IO;
 using System.Linq;
 using System.Security.Cryptography;
@@ -24,6 +25,9 @@ public sealed partial class GenreImageStore
     public const int MaxImageBytes = 5 * 1024 * 1024;
 
     private const string IndexFileName = "index.json";
+    private const string TempSuffix = ".tmp";
+    private const string CorruptSuffix = ".bad";
+    private const string IndexUnreadableMessage = "The genre thumbnail index could not be read: nothing was changed.";
     private const int MaxGenreNameLength = 100;
 
     private static readonly JsonSerializerOptions JsonOptions = new() { WriteIndented = true };
@@ -31,6 +35,7 @@ public sealed partial class GenreImageStore
     private readonly object _lock = new();
     private readonly string _directory;
     private readonly ILogger<GenreImageStore> _logger;
+    private readonly Func<string, Stream> _openRead;
     private Dictionary<string, GenreImageEntry>? _index;
 
     /// <summary>
@@ -39,10 +44,24 @@ public sealed partial class GenreImageStore
     /// <param name="applicationPaths">The application paths.</param>
     /// <param name="logger">The logger.</param>
     public GenreImageStore(IApplicationPaths applicationPaths, ILogger<GenreImageStore> logger)
+        : this(applicationPaths, logger, File.OpenRead)
+    {
+    }
+
+    /// <summary>
+    /// Initializes a new instance of the <see cref="GenreImageStore"/> class with its own way of opening files.
+    /// Test seam: a locked file or a denied access cannot be produced the same way on every platform. Being
+    /// internal, this constructor is invisible to the dependency injection container.
+    /// </summary>
+    /// <param name="applicationPaths">The application paths.</param>
+    /// <param name="logger">The logger.</param>
+    /// <param name="openRead">Opens a file for reading.</param>
+    internal GenreImageStore(IApplicationPaths applicationPaths, ILogger<GenreImageStore> logger, Func<string, Stream> openRead)
     {
         ArgumentNullException.ThrowIfNull(applicationPaths);
-        _directory = Path.Combine(applicationPaths.PluginConfigurationsPath, typeof(Plugin).Namespace!, "genres");
+        _directory = Path.Combine(PluginData.GetRoot(applicationPaths), PluginData.GenresFolder);
         _logger = logger;
+        _openRead = openRead;
     }
 
     /// <summary>
@@ -69,7 +88,7 @@ public sealed partial class GenreImageStore
     {
         lock (_lock)
         {
-            return LoadIndex().Values
+            return (LoadIndex()?.Values ?? Enumerable.Empty<GenreImageEntry>())
                 .OrderBy(entry => entry.Name, StringComparer.OrdinalIgnoreCase)
                 .ThenBy(entry => entry.Shape, StringComparer.Ordinal)
                 .ToList();
@@ -84,6 +103,7 @@ public sealed partial class GenreImageStore
     /// <param name="data">The image bytes.</param>
     /// <param name="error">The reason when the image is rejected.</param>
     /// <returns>The stored entry, or <c>null</c> when rejected.</returns>
+    /// <exception cref="IOException">The index could not be read, or the thumbnail could not be written: nothing changed.</exception>
     public GenreImageEntry? Save(string? genreName, string? shape, byte[] data, out string? error)
     {
         ArgumentNullException.ThrowIfNull(data);
@@ -112,28 +132,48 @@ public sealed partial class GenreImageStore
         string normalizedShape = NormalizeShape(shape);
         lock (_lock)
         {
-            Dictionary<string, GenreImageEntry> index = LoadIndex();
+            // Writing over an index that could not be read would drop every other thumbnail.
+            Dictionary<string, GenreImageEntry> index = LoadIndex() ?? throw new IOException(IndexUnreadableMessage);
             string key = KeyOf(name, normalizedShape);
             Directory.CreateDirectory(_directory);
-
             index.TryGetValue(key, out GenreImageEntry? previous);
-            DeleteFile(previous);
-
-            // Both parts come from this class: a hash and a known shape name.
-            string fileName = HashOf(name) + "-" + normalizedShape + format.Extension;
-            File.WriteAllBytes(Path.Combine(_directory, fileName), data);
 
             // Strictly increasing: the version is part of the image URL, which clients cache for good.
+            long version = Math.Max(DateTime.UtcNow.Ticks, (previous?.Version ?? 0) + 1);
+
+            // Every part comes from this class: a hash, a known shape name and the version. The version makes each
+            // upload a new file: a replacement never writes over the image the saved index still names.
+            string fileName = HashOf(name) + "-" + normalizedShape + "-" + version.ToString(CultureInfo.InvariantCulture) + format.Extension;
+            string path = Path.Combine(_directory, fileName);
             GenreImageEntry entry = new()
             {
                 Name = name,
                 Shape = normalizedShape,
                 FileName = fileName,
                 ContentType = format.ContentType,
-                Version = Math.Max(DateTime.UtcNow.Ticks, (previous?.Version ?? 0) + 1)
+                Version = version
             };
-            index[key] = entry;
-            SaveIndex(index);
+            Dictionary<string, GenreImageEntry> updated = new(index, StringComparer.Ordinal) { [key] = entry };
+
+            // Image first, index next, previous file last: whenever this stops, the index on disk and the one in
+            // memory both name a complete file.
+            WriteAtomically(path, stream => stream.Write(data));
+            try
+            {
+                SaveIndex(updated);
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+            {
+                TryDeleteFile(path);
+                throw;
+            }
+
+            _index = updated;
+            if (previous is not null && !string.IsNullOrEmpty(previous.FileName))
+            {
+                TryDeleteFile(PathOf(previous));
+            }
+
             return entry;
         }
     }
@@ -144,6 +184,7 @@ public sealed partial class GenreImageStore
     /// <param name="genreName">The genre name.</param>
     /// <param name="shape">The card shape.</param>
     /// <returns><c>true</c> when a thumbnail existed.</returns>
+    /// <exception cref="IOException">The index could not be read or written: nothing changed.</exception>
     public bool Delete(string? genreName, string? shape)
     {
         string? name = NormalizeName(genreName);
@@ -154,15 +195,24 @@ public sealed partial class GenreImageStore
 
         lock (_lock)
         {
-            Dictionary<string, GenreImageEntry> index = LoadIndex();
+            Dictionary<string, GenreImageEntry> index = LoadIndex() ?? throw new IOException(IndexUnreadableMessage);
             string key = KeyOf(name, NormalizeShape(shape));
-            if (!index.Remove(key, out GenreImageEntry? entry))
+            if (!index.TryGetValue(key, out GenreImageEntry? entry))
             {
                 return false;
             }
 
-            DeleteFile(entry);
-            SaveIndex(index);
+            Dictionary<string, GenreImageEntry> updated = new(index, StringComparer.Ordinal);
+            updated.Remove(key);
+
+            // Index first: a file the index no longer names is harmless, an entry without its file is not.
+            SaveIndex(updated);
+            _index = updated;
+            if (!string.IsNullOrEmpty(entry.FileName))
+            {
+                TryDeleteFile(PathOf(entry));
+            }
+
             return true;
         }
     }
@@ -183,7 +233,8 @@ public sealed partial class GenreImageStore
 
         lock (_lock)
         {
-            if (!LoadIndex().TryGetValue(KeyOf(name, NormalizeShape(shape)), out GenreImageEntry? entry))
+            Dictionary<string, GenreImageEntry>? index = LoadIndex();
+            if (index is null || !index.TryGetValue(KeyOf(name, NormalizeShape(shape)), out GenreImageEntry? entry))
             {
                 return null;
             }
@@ -210,82 +261,136 @@ public sealed partial class GenreImageStore
         return HashOf(name) + ":" + shape;
     }
 
+    /// <summary>
+    /// Writes a file under a temporary name, then gives it its name: readers never see half a file, and a
+    /// failed write leaves the previous contents in place.
+    /// </summary>
+    private static void WriteAtomically(string path, Action<Stream> write)
+    {
+        string temp = path + TempSuffix;
+        try
+        {
+            using (FileStream stream = File.Create(temp))
+            {
+                write(stream);
+            }
+
+            File.Move(temp, path, overwrite: true);
+        }
+        catch
+        {
+            try
+            {
+                File.Delete(temp);
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+            {
+                // The write already failed: that is the error to report.
+            }
+
+            throw;
+        }
+    }
+
     // The file name comes from the index written by this class, never from a request; GetFileName is a second guard.
     private string PathOf(GenreImageEntry entry)
     {
         return Path.Combine(_directory, Path.GetFileName(entry.FileName));
     }
 
-    private void DeleteFile(GenreImageEntry? entry)
+    /// <summary>
+    /// Deletes a file nothing refers to any more. Failing to do so only leaves an unused file behind.
+    /// </summary>
+    private void TryDeleteFile(string path)
     {
-        if (entry is null || string.IsNullOrEmpty(entry.FileName))
-        {
-            return;
-        }
-
-        string path = PathOf(entry);
-        if (File.Exists(path))
+        try
         {
             File.Delete(path);
         }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            LogLeftover(path, ex);
+        }
     }
 
-    private Dictionary<string, GenreImageEntry> LoadIndex()
+    /// <summary>
+    /// Loads the index once. <c>null</c> means it could not be read this time: nothing is remembered, and
+    /// nothing may be written over it.
+    /// </summary>
+    private Dictionary<string, GenreImageEntry>? LoadIndex()
     {
         if (_index is not null)
         {
             return _index;
         }
 
-        _index = new Dictionary<string, GenreImageEntry>(StringComparer.Ordinal);
+        Dictionary<string, GenreImageEntry> index = new(StringComparer.Ordinal);
         string path = Path.Combine(_directory, IndexFileName);
         if (File.Exists(path))
         {
             try
             {
-                using FileStream stream = File.OpenRead(path);
+                using Stream stream = _openRead(path);
                 Dictionary<string, GenreImageEntry>? stored = JsonSerializer.Deserialize<Dictionary<string, GenreImageEntry>>(stream, JsonOptions);
-                foreach (GenreImageEntry entry in stored?.Values ?? Enumerable.Empty<GenreImageEntry>())
+                foreach (GenreImageEntry? entry in stored?.Values ?? Enumerable.Empty<GenreImageEntry>())
                 {
-                    string? name = NormalizeName(entry.Name);
-                    if (name is null)
+                    string? name = NormalizeName(entry?.Name);
+                    if (entry is null || name is null)
                     {
                         continue;
                     }
 
                     // Entries written before shapes existed carry no shape: they were poster thumbnails.
                     entry.Shape = NormalizeShape(entry.Shape);
-                    _index[KeyOf(name, entry.Shape)] = entry;
+                    index[KeyOf(name, entry.Shape)] = entry;
                 }
             }
             catch (JsonException ex)
             {
-                LogUnreadableIndex(path, ex);
+                // The index itself is broken: start again from an empty one, and keep the broken file aside
+                // because the next upload writes a new index.
+                LogCorruptIndex(path, ex);
+                index.Clear();
+                SetCorruptIndexAside(path);
             }
-            catch (IOException ex)
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
             {
+                // The index may be fine (locked by a backup, permissions being fixed): the next call tries again.
                 LogUnreadableIndex(path, ex);
+                return null;
             }
         }
 
-        return _index;
+        _index = index;
+        return index;
+    }
+
+    private void SetCorruptIndexAside(string path)
+    {
+        try
+        {
+            File.Move(path, path + CorruptSuffix, overwrite: true);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            LogLeftover(path, ex);
+        }
     }
 
     private void SaveIndex(Dictionary<string, GenreImageEntry> index)
     {
         Directory.CreateDirectory(_directory);
-        string path = Path.Combine(_directory, IndexFileName);
-        string temp = path + ".tmp";
-        using (FileStream stream = File.Create(temp))
-        {
-            JsonSerializer.Serialize(stream, index, JsonOptions);
-        }
-
-        File.Move(temp, path, overwrite: true);
+        WriteAtomically(Path.Combine(_directory, IndexFileName), stream => JsonSerializer.Serialize(stream, index, JsonOptions));
     }
 
-    [LoggerMessage(Level = LogLevel.Warning, Message = "Customized Home: could not read genre image index {Path}, ignoring it")]
+    [LoggerMessage(Level = LogLevel.Warning, Message = "Customized Home: could not read genre image index {Path} this time, thumbnails are unavailable until it can be read")]
     private partial void LogUnreadableIndex(string path, Exception exception);
+
+    [LoggerMessage(Level = LogLevel.Warning, Message = "Customized Home: genre image index {Path} is corrupt, starting from an empty one (the file is kept with a .bad extension)")]
+    private partial void LogCorruptIndex(string path, Exception exception);
+
+    [LoggerMessage(Level = LogLevel.Warning, Message = "Customized Home: could not remove or move {Path}, the file is left in place")]
+    private partial void LogLeftover(string path, Exception exception);
 
     private sealed record ImageFormat(string Extension, string ContentType)
     {

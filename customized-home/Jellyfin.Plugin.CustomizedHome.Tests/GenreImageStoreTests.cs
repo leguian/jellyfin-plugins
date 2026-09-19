@@ -25,14 +25,37 @@ public sealed class GenreImageStoreTests : IDisposable
         }
     }
 
-    private GenreImageStore CreateStore()
+    private GenreImageStore CreateStore(Func<string, Stream>? openRead = null)
     {
         Mock<IApplicationPaths> paths = new();
         paths.SetupGet(p => p.PluginConfigurationsPath).Returns(_root);
-        return new GenreImageStore(paths.Object, NullLogger<GenreImageStore>.Instance);
+        return openRead is null
+            ? new GenreImageStore(paths.Object, NullLogger<GenreImageStore>.Instance)
+            : new GenreImageStore(paths.Object, NullLogger<GenreImageStore>.Instance, openRead);
     }
 
     private string GenresDirectory => Path.Combine(_root, "Jellyfin.Plugin.CustomizedHome", "genres");
+
+    private string IndexPath => Path.Combine(GenresDirectory, "index.json");
+
+    private string[] ImageFiles()
+    {
+        return Directory.GetFiles(GenresDirectory)
+            .Select(file => Path.GetFileName(file)!)
+            .Where(file => !file.StartsWith("index.json", StringComparison.Ordinal))
+            .Order(StringComparer.Ordinal)
+            .ToArray();
+    }
+
+    /// <summary>
+    /// Makes every write of the index fail: its temporary file name is taken by a folder.
+    /// </summary>
+    private string BlockIndexWrites()
+    {
+        string blocker = IndexPath + ".tmp";
+        Directory.CreateDirectory(blocker);
+        return blocker;
+    }
 
     [Fact]
     public void Save_then_read_returns_the_bytes_and_the_detected_content_type()
@@ -101,7 +124,7 @@ public sealed class GenreImageStoreTests : IDisposable
         string[] files = Directory.GetFiles(_root, "*", SearchOption.AllDirectories);
         Assert.All(files, file => Assert.StartsWith(GenresDirectory, file, StringComparison.Ordinal));
         string image = files.Single(file => !file.EndsWith("index.json", StringComparison.Ordinal));
-        Assert.Matches("^[0-9A-F]{32}-portrait\\.png$", Path.GetFileName(image));
+        Assert.Matches("^[0-9A-F]{32}-portrait-[0-9]+\\.png$", Path.GetFileName(image));
         Assert.Equal(Png, store.Read(hostileName, "portrait")!.Value.Data);
     }
 
@@ -157,7 +180,7 @@ public sealed class GenreImageStoreTests : IDisposable
         GenreImageEntry entry = store.Save("Action", shape, Png, out _)!;
 
         Assert.Equal("portrait", entry.Shape);
-        Assert.EndsWith("-portrait.png", entry.FileName, StringComparison.Ordinal);
+        Assert.Matches("-portrait-[0-9]+\\.png$", entry.FileName);
         Assert.NotNull(store.Read("Action", "portrait"));
     }
 
@@ -196,5 +219,142 @@ public sealed class GenreImageStoreTests : IDisposable
         Assert.Equal(["Comedy"], reloaded.List().Select(entry => entry.Name));
         Assert.Null(reloaded.Read("Horror", "portrait"));
         Assert.NotNull(reloaded.Read("Comedy", "portrait"));
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void An_index_that_cannot_be_read_is_never_written_over_and_is_read_again_later(bool accessDenied)
+    {
+        GenreImageStore first = CreateStore();
+        first.Save("Comedy", "portrait", Png, out _);
+        first.Save("Drama", "landscape", Jpeg, out _);
+        byte[] indexOnDisk = File.ReadAllBytes(IndexPath);
+
+        bool failing = true;
+        GenreImageStore store = CreateStore(path =>
+        {
+            if (!failing)
+            {
+                return File.OpenRead(path);
+            }
+
+            throw accessDenied ? new UnauthorizedAccessException("Access to the path is denied.") : new IOException("The file is used by another process.");
+        });
+
+        // Reading degrades to "no thumbnail", writing refuses: an empty index saved now would drop Comedy and Drama.
+        Assert.Empty(store.List());
+        Assert.Null(store.Read("Comedy", "portrait"));
+        Assert.Throws<IOException>(() => store.Save("Horror", "portrait", Png, out _));
+        Assert.Throws<IOException>(() => store.Delete("Comedy", "portrait"));
+        Assert.Equal(indexOnDisk, File.ReadAllBytes(IndexPath));
+        Assert.Equal(2, ImageFiles().Length);
+
+        failing = false;
+
+        Assert.Equal(["Comedy", "Drama"], store.List().Select(entry => entry.Name));
+        Assert.NotNull(store.Save("Horror", "portrait", Png, out _));
+        Assert.Equal(["Comedy", "Drama", "Horror"], CreateStore().List().Select(entry => entry.Name));
+    }
+
+    [Fact]
+    public void A_corrupt_index_is_set_aside_before_a_new_one_replaces_it()
+    {
+        Directory.CreateDirectory(GenresDirectory);
+        File.WriteAllText(IndexPath, "{ \"ABC\": { \"Name\": \"Comedy\", ");
+        GenreImageStore store = CreateStore();
+
+        Assert.Empty(store.List());
+        Assert.NotNull(store.Save("Drama", "portrait", Png, out _));
+
+        Assert.Equal("{ \"ABC\": { \"Name\": \"Comedy\", ", File.ReadAllText(IndexPath + ".bad"));
+        Assert.Equal(["Drama"], CreateStore().List().Select(entry => entry.Name));
+    }
+
+    [Fact]
+    public void An_index_entry_without_a_value_is_skipped()
+    {
+        Directory.CreateDirectory(GenresDirectory);
+        File.WriteAllText(IndexPath, "{ \"A\": null, \"B\": { \"Name\": \"Comedy\", \"FileName\": \"x.png\", \"ContentType\": \"image/png\", \"Version\": 1 } }");
+
+        Assert.Equal(["Comedy"], CreateStore().List().Select(entry => entry.Name));
+    }
+
+    [Fact]
+    public void A_replacement_that_cannot_be_recorded_leaves_the_previous_thumbnail_untouched()
+    {
+        GenreImageStore store = CreateStore();
+        GenreImageEntry original = store.Save("Comedy", "portrait", Png, out _)!;
+        string[] filesBefore = ImageFiles();
+        string blocker = BlockIndexWrites();
+
+        Assert.ThrowsAny<Exception>(() => store.Save("Comedy", "portrait", Jpeg, out _));
+
+        // Same state for the running instance and for the next start: the PNG, with its version.
+        foreach (GenreImageStore reader in new[] { store, CreateStore() })
+        {
+            (byte[] Data, string ContentType)? image = reader.Read("Comedy", "portrait");
+            Assert.Equal(Png, image!.Value.Data);
+            Assert.Equal("image/png", image.Value.ContentType);
+            Assert.Equal(original.Version, Assert.Single(reader.List()).Version);
+        }
+
+        Assert.Equal(filesBefore, ImageFiles());
+
+        Directory.Delete(blocker);
+        GenreImageEntry replaced = store.Save("Comedy", "portrait", Jpeg, out _)!;
+
+        Assert.True(replaced.Version > original.Version);
+        Assert.Equal("image/jpeg", store.Read("Comedy", "portrait")!.Value.ContentType);
+        Assert.Equal([replaced.FileName], ImageFiles());
+    }
+
+    [Fact]
+    public void Replacing_a_thumbnail_by_one_of_the_same_format_keeps_a_single_complete_file()
+    {
+        byte[] otherPng = [.. Png, 0x01, 0x02, 0x03];
+        GenreImageStore store = CreateStore();
+        GenreImageEntry first = store.Save("Comedy", "portrait", Png, out _)!;
+
+        GenreImageEntry second = store.Save("Comedy", "portrait", otherPng, out _)!;
+
+        Assert.NotEqual(first.FileName, second.FileName);
+        Assert.True(second.Version > first.Version);
+        Assert.Equal(otherPng, store.Read("Comedy", "portrait")!.Value.Data);
+        Assert.Equal([second.FileName], ImageFiles());
+        Assert.DoesNotContain(Directory.GetFiles(GenresDirectory), file => file.EndsWith(".tmp", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void A_same_format_replacement_that_cannot_be_recorded_does_not_change_the_image_either()
+    {
+        byte[] otherPng = [.. Png, 0x01, 0x02, 0x03];
+        GenreImageStore store = CreateStore();
+        GenreImageEntry original = store.Save("Comedy", "portrait", Png, out _)!;
+        BlockIndexWrites();
+
+        Assert.ThrowsAny<Exception>(() => store.Save("Comedy", "portrait", otherPng, out _));
+
+        // The version is in the image URL, cached for good: new bytes under the old version would split the clients.
+        foreach (GenreImageStore reader in new[] { store, CreateStore() })
+        {
+            Assert.Equal(Png, reader.Read("Comedy", "portrait")!.Value.Data);
+            Assert.Equal(original.Version, Assert.Single(reader.List()).Version);
+        }
+
+        Assert.Equal([original.FileName], ImageFiles());
+    }
+
+    [Fact]
+    public void A_deletion_that_cannot_be_recorded_deletes_nothing()
+    {
+        GenreImageStore store = CreateStore();
+        store.Save("Comedy", "portrait", Png, out _);
+        BlockIndexWrites();
+
+        Assert.ThrowsAny<Exception>(() => store.Delete("Comedy", "portrait"));
+
+        Assert.Equal(Png, store.Read("Comedy", "portrait")!.Value.Data);
+        Assert.Equal(Png, CreateStore().Read("Comedy", "portrait")!.Value.Data);
     }
 }

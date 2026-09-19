@@ -4,6 +4,7 @@ using System.Globalization;
 using System.IO;
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using Jellyfin.Plugin.CustomizedHome.Helpers;
 using Jellyfin.Plugin.CustomizedHome.Models;
 using MediaBrowser.Common.Configuration;
 using Microsoft.Extensions.Logging;
@@ -26,6 +27,7 @@ public sealed partial class LayoutStore
     private readonly Dictionary<Guid, HomeLayout?> _cache = new();
     private readonly string _directory;
     private readonly ILogger<LayoutStore> _logger;
+    private readonly Func<string, Stream> _openRead;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="LayoutStore"/> class.
@@ -33,10 +35,24 @@ public sealed partial class LayoutStore
     /// <param name="applicationPaths">The application paths.</param>
     /// <param name="logger">The logger.</param>
     public LayoutStore(IApplicationPaths applicationPaths, ILogger<LayoutStore> logger)
+        : this(applicationPaths, logger, File.OpenRead)
+    {
+    }
+
+    /// <summary>
+    /// Initializes a new instance of the <see cref="LayoutStore"/> class with its own way of opening files.
+    /// Test seam: a locked file or a denied access cannot be produced the same way on every platform. Being
+    /// internal, this constructor is invisible to the dependency injection container.
+    /// </summary>
+    /// <param name="applicationPaths">The application paths.</param>
+    /// <param name="logger">The logger.</param>
+    /// <param name="openRead">Opens a file for reading.</param>
+    internal LayoutStore(IApplicationPaths applicationPaths, ILogger<LayoutStore> logger, Func<string, Stream> openRead)
     {
         ArgumentNullException.ThrowIfNull(applicationPaths);
-        _directory = Path.Combine(applicationPaths.PluginConfigurationsPath, typeof(Plugin).Namespace!, "users");
+        _directory = Path.Combine(PluginData.GetRoot(applicationPaths), PluginData.UsersFolder);
         _logger = logger;
+        _openRead = openRead;
     }
 
     /// <summary>
@@ -59,16 +75,27 @@ public sealed partial class LayoutStore
             {
                 try
                 {
-                    using FileStream stream = File.OpenRead(path);
-                    layout = JsonSerializer.Deserialize<HomeLayout>(stream, JsonOptions);
+                    using Stream stream = _openRead(path);
+
+                    // A file is not a request: it may be edited by hand or come from an older version. Normalizing
+                    // it gives the rest of the plugin the guarantees a saved layout has (no null list, known values).
+                    layout = LayoutValidator.Normalize(JsonSerializer.Deserialize<HomeLayout>(stream, JsonOptions), out string? error);
+                    if (layout is null)
+                    {
+                        LogInvalidLayout(path, error);
+                    }
                 }
                 catch (JsonException ex)
                 {
+                    // The file itself is broken: it stays so until the user saves again.
                     LogUnreadableLayout(path, ex);
                 }
-                catch (IOException ex)
+                catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
                 {
+                    // The file may be fine (locked by a backup, permissions being fixed): remembering "no layout"
+                    // would hide it until the next restart. The next request tries again.
                     LogUnreadableLayout(path, ex);
+                    return null;
                 }
             }
 
@@ -110,69 +137,83 @@ public sealed partial class LayoutStore
     {
         lock (_lock)
         {
-            _cache[userId] = null;
             string path = GetPath(userId);
-            if (!File.Exists(path))
+            bool existed = File.Exists(path);
+            if (existed)
             {
-                return false;
+                File.Delete(path);
             }
 
-            File.Delete(path);
-            return true;
+            // Forgotten once the file is gone: after a deletion that failed, the instance keeps answering what is
+            // on disk instead of "no layout" until the next restart brings the layout back.
+            _cache[userId] = null;
+            return existed;
         }
     }
 
     /// <summary>
-    /// Lists the users that saved a layout.
+    /// Lists every stored layout, whoever it belongs to.
     /// </summary>
     /// <returns>The stored layouts summary.</returns>
     public IReadOnlyList<StoredLayoutInfo> List()
     {
+        return List(static _ => true);
+    }
+
+    /// <summary>
+    /// Lists the stored layouts of the users that still exist. The layout of a deleted user is removed when the
+    /// server announces the deletion; a file that outlived its user (deleted while the plugin was not running, or
+    /// before it cleaned up) is of no use to an administrator and is left out.
+    /// </summary>
+    /// <param name="userExists">Tells whether a user identifier is one of a current user.</param>
+    /// <returns>The stored layouts summary.</returns>
+    public IReadOnlyList<StoredLayoutInfo> List(Func<Guid, bool> userExists)
+    {
+        ArgumentNullException.ThrowIfNull(userExists);
+
         List<StoredLayoutInfo> result = new();
-        lock (_lock)
+        if (!Directory.Exists(_directory))
         {
-            if (!Directory.Exists(_directory))
+            return result;
+        }
+
+        // The store is not locked while the caller is asked about a user: that question may reach the database.
+        foreach (string file in Directory.GetFiles(_directory, "*.json"))
+        {
+            string name = Path.GetFileNameWithoutExtension(file);
+            if (!Guid.TryParse(name, out Guid userId) || !userExists(userId))
             {
-                return result;
+                continue;
             }
 
-            foreach (string file in Directory.EnumerateFiles(_directory, "*.json"))
+            HomeLayout? layout = Get(userId);
+            if (layout is null)
             {
-                string name = Path.GetFileNameWithoutExtension(file);
-                if (!Guid.TryParse(name, out Guid userId))
-                {
-                    continue;
-                }
-
-                HomeLayout? layout = Get(userId);
-                if (layout is null)
-                {
-                    continue;
-                }
-
-                int sections = 0;
-                int folders = 0;
-                foreach (LayoutItem item in layout.Items)
-                {
-                    if (string.Equals(item.Type, LayoutItemTypes.Folder, StringComparison.OrdinalIgnoreCase))
-                    {
-                        folders++;
-                        sections += item.Items.Count;
-                    }
-                    else
-                    {
-                        sections++;
-                    }
-                }
-
-                result.Add(new StoredLayoutInfo
-                {
-                    UserId = userId,
-                    ModifiedUtc = File.GetLastWriteTimeUtc(file),
-                    SectionCount = sections,
-                    FolderCount = folders
-                });
+                continue;
             }
+
+            int sections = 0;
+            int folders = 0;
+            foreach (LayoutItem item in layout.Items)
+            {
+                if (string.Equals(item.Type, LayoutItemTypes.Folder, StringComparison.OrdinalIgnoreCase))
+                {
+                    folders++;
+                    sections += item.Items.Count;
+                }
+                else
+                {
+                    sections++;
+                }
+            }
+
+            result.Add(new StoredLayoutInfo
+            {
+                UserId = userId,
+                ModifiedUtc = File.GetLastWriteTimeUtc(file),
+                SectionCount = sections,
+                FolderCount = folders
+            });
         }
 
         return result;
@@ -185,6 +226,9 @@ public sealed partial class LayoutStore
 
     [LoggerMessage(Level = LogLevel.Warning, Message = "Customized Home: could not read layout file {Path}, ignoring it")]
     private partial void LogUnreadableLayout(string path, Exception exception);
+
+    [LoggerMessage(Level = LogLevel.Warning, Message = "Customized Home: layout file {Path} holds no valid layout, ignoring it: {Error}")]
+    private partial void LogInvalidLayout(string path, string? error);
 }
 
 /// <summary>
