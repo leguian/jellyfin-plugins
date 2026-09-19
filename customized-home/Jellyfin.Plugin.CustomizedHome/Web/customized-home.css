@@ -1269,12 +1269,16 @@ html.ch-hero-under-header .skinHeader {
     background: rgba(255, 255, 255, 0.85);
 }
 
-.ch-hero-favorite .ratingbutton-icon-withrating {
+.ch-hero-favorite.ch-on .material-icons {
     color: #e0245e;
 }
 
-.ch-hero-played .playstatebutton-icon-played {
+.ch-hero-played.ch-on .material-icons {
     color: #52b54b;
+}
+
+.ch-hero-round:disabled {
+    cursor: progress;
 }
 
 .ch-hero-nav {

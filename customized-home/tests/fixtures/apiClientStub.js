@@ -211,6 +211,16 @@
                 }, mock.delays['GET UserViews'] || 0);
             });
         },
+        // User data writes: recorded like the other requests, and able to fail ("POST UserData").
+        updateFavoriteStatus: function (userId, itemId, isFavorite) {
+            return respond('POST', 'UserData', { action: 'favorite', userId: userId, itemId: itemId, value: isFavorite });
+        },
+        markPlayed: function (userId, itemId) {
+            return respond('POST', 'UserData', { action: 'played', userId: userId, itemId: itemId, value: true });
+        },
+        markUnplayed: function (userId, itemId) {
+            return respond('POST', 'UserData', { action: 'played', userId: userId, itemId: itemId, value: false });
+        },
         getImageUrl: function (id) {
             return 'about:blank#' + id;
         },

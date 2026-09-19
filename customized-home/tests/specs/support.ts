@@ -97,6 +97,8 @@ export interface MockOptions {
     enableIntegratedSections?: boolean;
     genreImages?: { Name: string; Shape?: 'portrait' | 'landscape' | 'square'; Version: number }[];
     heroItems?: Partial<Record<HeroSource, HeroItem[]>>;
+    /** Replaces the three default genres. */
+    genres?: { Id: string; Name: string; Type: string }[];
     /** Layout per user id, for tests that switch users; the other options apply to everyone. */
     layoutsByUser?: Record<string, Layout>;
     resumeItems?: CardItem[];
@@ -162,7 +164,7 @@ function mockState(options: MockOptions): Record<string, unknown> {
         failures: options.failures ?? {},
         delays: options.delays ?? {},
         catalog: CATALOG,
-        genres: GENRES,
+        genres: options.genres ?? GENRES,
         genreImages: options.genreImages ?? [],
         heroItems: options.heroItems ?? {},
         defaultLayout: options.defaultLayout ?? EMPTY_LAYOUT,

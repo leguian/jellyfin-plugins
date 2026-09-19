@@ -35,9 +35,34 @@ test('genre cards are poster shaped and show a collage of four distinct posters'
     });
     const card = page.locator('[data-ch-key="ch:allGenres"] .ch-card').first();
     await expect(card).toHaveClass(/overflowPortraitCard/);
+    await expect(card.locator('.ch-collage-cell')).toHaveCount(4);
     const cells = await card.locator('.ch-collage-cell').evaluateAll((nodes) => nodes.map((node) => (node as HTMLElement).style.backgroundImage));
-    expect(cells).toHaveLength(4);
     expect(new Set(cells).size).toBe(4);
+});
+
+test('collages are only requested for the genre cards that come into view', async ({ page }) => {
+    const many = Array.from({ length: 60 }, (_, index) => ({ Id: 'genre-' + index, Name: 'Genre ' + String(index).padStart(2, '0'), Type: 'Genre' }));
+    await page.setViewportSize({ width: 900, height: 600 });
+    await openHome(page, {
+        enableIntegratedSections: true,
+        layout: layoutWith([{ Type: 'section', Key: 'ch:allGenres', Visible: true }]),
+        genres: many
+    });
+    const cards = page.locator('[data-ch-key="ch:allGenres"] .ch-card');
+    // One horizontal row that scrolls, like in the web client (fixture): most cards are off screen.
+    // The whole row is there at once, names first.
+    await expect(cards).toHaveCount(60);
+    await expect(cards.first().locator('.ch-collage-cell')).toHaveCount(4);
+
+    const collageRequests = async (): Promise<number> => (await recordedRequests(page)).filter((request) => (request.url ?? '').includes('genreIds=')).length;
+    const before = await collageRequests();
+    expect(before).toBeGreaterThan(0);
+    expect(before).toBeLessThan(60);
+    await expect(cards.last().locator('.ch-collage-cell')).toHaveCount(0);
+
+    await cards.last().scrollIntoViewIfNeeded();
+    await expect(cards.last().locator('.ch-collage-cell')).toHaveCount(4);
+    expect(await collageRequests()).toBeGreaterThan(before);
 });
 
 test('uploaded thumbnails are only used when the section is set to custom images', async ({ page }) => {

@@ -150,14 +150,57 @@ test('fills a slide with the media details and the native actions', async ({ pag
     await expect(page.locator('.ch-hero-slides')).toHaveAttribute('is', 'emby-itemscontainer');
     await expect(slide.locator('.ch-hero-play')).toHaveAttribute('data-action', 'resume');
     await expect(slide.locator('.ch-hero-play')).toHaveClass(/itemAction/);
-    await expect(slide.locator('.ch-hero-restart')).toHaveAttribute('data-action', 'play');
+    // The web client starts "play" and "resume" alike at data-positionticks of the closest element carrying
+    // data-id: the restart button carries its own, at position 0.
+    const restart = slide.locator('.ch-hero-restart');
+    await expect(restart).toHaveAttribute('data-action', 'play');
+    await expect(restart).toHaveAttribute('data-id', 'movie-1');
+    await expect(restart).toHaveAttribute('data-serverid', 'server-1');
+    await expect(restart).toHaveAttribute('data-type', 'Movie');
+    await expect(restart).toHaveAttribute('data-positionticks', '0');
+    await expect(slide.locator('.ch-hero-play')).not.toHaveAttribute('data-id', /.*/);
     await expect(slide.locator('.ch-hero-trailer')).toHaveAttribute('data-action', 'playtrailer');
-    const favorite = slide.locator('.ch-hero-favorite');
-    await expect(favorite).toHaveAttribute('is', 'emby-ratingbutton');
-    await expect(favorite).toHaveAttribute('data-isfavorite', 'true');
-    await expect(favorite).toHaveAttribute('data-id', 'movie-1');
-    await expect(slide.locator('.ch-hero-played')).toHaveAttribute('data-played', 'false');
+    await expect(slide.locator('.ch-hero-favorite')).toHaveAttribute('aria-pressed', 'true');
+    await expect(slide.locator('.ch-hero-played')).toHaveAttribute('aria-pressed', 'false');
     await expect(slide.locator('.ch-hero-more')).toHaveAttribute('href', '#/details?id=movie-1&serverId=server-1');
+});
+
+test('favorite and watched are sent by the plugin itself, without any web client element', async ({ page }) => {
+    await openHome(page, { layout: layout(hero()), enableIntegratedSections: true, heroItems: HERO_ITEMS });
+    const slide = page.locator('.ch-hero-slide[data-id="movie-1"]');
+    const favorite = slide.locator('.ch-hero-favorite');
+    const played = slide.locator('.ch-hero-played');
+    // Nothing to upgrade: they work on a home page where the web client registered no rating element yet.
+    await expect(favorite).not.toHaveAttribute('is', /.*/);
+    await expect(played).not.toHaveAttribute('is', /.*/);
+
+    await favorite.click();
+    await expect(favorite).toHaveAttribute('aria-pressed', 'false');
+    await expect(favorite).not.toHaveClass(/ch-on/);
+    await played.click();
+    await expect(played).toHaveAttribute('aria-pressed', 'true');
+    await expect(played).toHaveClass(/ch-on/);
+    await played.click();
+    await expect(played).toHaveAttribute('aria-pressed', 'false');
+
+    const writes = (await recordedRequests(page)).filter((request) => request.path === 'UserData').map((request) => request.body);
+    expect(writes).toEqual([
+        { action: 'favorite', userId: 'user-1', itemId: 'movie-1', value: false },
+        { action: 'played', userId: 'user-1', itemId: 'movie-1', value: true },
+        { action: 'played', userId: 'user-1', itemId: 'movie-1', value: false }
+    ]);
+});
+
+test('a refused favorite or watched change is reverted and reported', async ({ page }) => {
+    await openHome(page, { layout: layout(hero()), enableIntegratedSections: true, heroItems: HERO_ITEMS, failures: { 'POST UserData': 1 } });
+    const favorite = page.locator('.ch-hero-slide[data-id="movie-1"] .ch-hero-favorite');
+    await favorite.click();
+    await expect(page.locator('.ch-toast')).toHaveText('Could not update this media');
+    await expect(favorite).toHaveAttribute('aria-pressed', 'true');
+    await expect(favorite).toBeEnabled();
+
+    await favorite.click();
+    await expect(favorite).toHaveAttribute('aria-pressed', 'false');
 });
 
 test('falls back to the title, plays from the start and links remote trailers safely', async ({ page }) => {

@@ -14,6 +14,8 @@
         .page { padding-top: 5em; }
         .sections { padding: 0 0.75em; }
         .card { display: inline-block; width: 8em; height: 4em; background: #333; margin-right: 0.5em; }
+        /* Like the emby-scroller of jellyfin-web: one row that scrolls sideways, most cards are off screen. */
+        .itemsContainer { white-space: nowrap; overflow-x: auto; }
     </style>
 </head>
 <body>

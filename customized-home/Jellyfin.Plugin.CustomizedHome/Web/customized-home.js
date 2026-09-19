@@ -150,6 +150,8 @@
             heroTrailer: 'Trailer',
             heroFavorite: 'Favorite',
             heroPlayed: 'Watched',
+            heroActionError: 'Could not update this media',
+            latestUnavailable: 'Recently added (library not available)',
             heroMore: 'More info',
             heroPrev: 'Previous media',
             heroNext: 'Next media',
@@ -281,6 +283,8 @@
             heroTrailer: 'Bande-annonce',
             heroFavorite: 'Favori',
             heroPlayed: 'Vu',
+            heroActionError: 'Impossible de mettre à jour ce média',
+            latestUnavailable: 'Ajouts récents (médiathèque indisponible)',
             heroMore: "Plus d'infos",
             heroPrev: 'Média précédent',
             heroNext: 'Média suivant',
@@ -746,29 +750,8 @@
 
     const GENRE_COLLAGE_SIZE = 4;
     const GENRE_FETCH_CONCURRENCY = 6;
+    const GENRE_EAGER_COLLAGES = 12;
 
-    // Runs `worker` over `values` with a bounded number of requests in flight.
-    function mapLimit(values, limit, worker) {
-        const results = new Array(values.length);
-        let next = 0;
-        function run() {
-            if (next >= values.length) {
-                return Promise.resolve();
-            }
-            const index = next++;
-            return worker(values[index]).then(function (result) {
-                results[index] = result;
-                return run();
-            });
-        }
-        const runners = [];
-        for (let i = 0; i < Math.min(limit, values.length); i++) {
-            runners.push(run());
-        }
-        return Promise.all(runners).then(function () {
-            return results;
-        });
-    }
 
     // Uploaded thumbnails, by genre (upper case) then by card shape.
     function fetchGenreImages() {
@@ -825,6 +808,88 @@
         return 'linear-gradient(135deg, ' + pair[0] + ', ' + pair[1] + ')';
     }
 
+    // Poster collages of the "all genres" cards cost one request per genre: they are loaded when a card comes
+    // close to the screen, a few at a time, and kept for the session.
+    const COLLAGE_ROOT_MARGIN = '300px';
+    const collageQueue = [];
+    let collageRunning = 0;
+
+    function collageHtml(collage) {
+        // Each cell keeps the poster ratio on portrait cards (2 x 2 posters = one poster shaped card).
+        return '<div class="ch-collage ch-collage-' + collage.length + '">' + collage.map(function (url) {
+            return '<span class="ch-collage-cell" style="background-image:url(&quot;' + escapeHtml(url) + '&quot;)"></span>';
+        }).join('') + '</div>';
+    }
+
+    function runCollageQueue() {
+        while (collageRunning < GENRE_FETCH_CONCURRENCY && collageQueue.length) {
+            const job = collageQueue.shift();
+            collageRunning++;
+            job().then(function () {
+                collageRunning--;
+                runCollageQueue();
+            });
+        }
+    }
+
+    function fillCollage(card, genre) {
+        const epoch = state.epoch;
+        collageQueue.push(function () {
+            if (epoch !== state.epoch || !card.isConnected) {
+                return Promise.resolve();
+            }
+            return withPosterCollage(genre).then(function () {
+                const holder = card.querySelector('.cardImageContainer');
+                if (epoch !== state.epoch || !holder || !genre._chCollage || !genre._chCollage.length) {
+                    return;
+                }
+                const text = holder.querySelector('.cardDefaultText');
+                if (text) {
+                    text.remove();
+                }
+                holder.insertAdjacentHTML('afterbegin', collageHtml(genre._chCollage));
+            });
+        });
+        runCollageQueue();
+    }
+
+    function observeLazyCollages(node, items) {
+        const cards = node.querySelectorAll('.ch-card');
+        const waiting = [];
+        items.forEach(function (item, index) {
+            if (item._chLazyCollage && !item._chCollage && cards[index]) {
+                waiting.push({ card: cards[index], genre: item });
+            }
+        });
+        if (!waiting.length) {
+            return;
+        }
+        if (typeof IntersectionObserver !== 'function') {
+            // Old browser: the first cards only, the others keep the genre name.
+            waiting.slice(0, GENRE_EAGER_COLLAGES).forEach(function (entry) {
+                fillCollage(entry.card, entry.genre);
+            });
+            return;
+        }
+        const observer = new IntersectionObserver(function (entries) {
+            entries.forEach(function (entry) {
+                if (!entry.isIntersecting) {
+                    return;
+                }
+                observer.unobserve(entry.target);
+                const match = waiting.filter(function (candidate) {
+                    return candidate.card === entry.target;
+                })[0];
+                if (match) {
+                    fillCollage(match.card, match.genre);
+                }
+            });
+        }, { rootMargin: COLLAGE_ROOT_MARGIN });
+        waiting.forEach(function (entry) {
+            observer.observe(entry.card);
+        });
+    }
+
     function withPosterCollage(genre) {
         return itemsQuery({ genreIds: genre.Id, includeItemTypes: 'Movie,Series', recursive: true, sortBy: 'Random', imageTypes: 'Primary', limit: GENRE_COLLAGE_SIZE, fields: 'PrimaryImageAspectRatio' })
             .then(function (items) {
@@ -858,14 +923,16 @@
         const shape = formatFor(item, INTEGRATED['ch:allGenres']).shape;
         return Promise.all([fetchGenreList(), images]).then(function (results) {
             const custom = results[1];
-            return mapLimit(results[0], GENRE_FETCH_CONCURRENCY, function (genre) {
+            // No request per genre here: the row is displayed at once, the collages follow (observeLazyCollages).
+            results[0].forEach(function (genre) {
                 const uploaded = pickGenreImage(custom[String(genre.Name).toUpperCase()], shape);
                 if (uploaded) {
                     genre._chImage = genreImageUrl(uploaded);
-                    return Promise.resolve(genre);
+                } else {
+                    genre._chLazyCollage = true;
                 }
-                return withPosterCollage(genre);
             });
+            return results[0];
         });
     }
 
@@ -1070,10 +1137,7 @@
         if (item._chColor) {
             defaultText = '<div class="ch-genre-color" style="background:' + escapeHtml(item._chColor) + '"><span>' + escapeHtml(title) + '</span></div>';
         } else if (collage.length) {
-            // Each cell keeps the poster ratio on portrait cards (2 x 2 posters = one poster shaped card).
-            defaultText = '<div class="ch-collage ch-collage-' + collage.length + '">' + collage.map(function (url) {
-                return '<span class="ch-collage-cell" style="background-image:url(&quot;' + escapeHtml(url) + '&quot;)"></span>';
-            }).join('') + '</div>';
+            defaultText = collageHtml(collage);
         } else if (!image) {
             defaultText = '<div class="cardText cardDefaultText">' + escapeHtml(title) + '</div>';
         }
@@ -1120,6 +1184,7 @@
             return cardHtml(item, shape, showTitle);
         }).join('');
         setClass(node, 'hide', items.length === 0);
+        observeLazyCollages(node, items);
     }
 
     function wantedIntegrated(layout) {
@@ -1170,7 +1235,7 @@
     function itemState(item) {
         const userData = item.UserData || {};
         return [item.Id, userData.PlaybackPositionTicks || 0, Math.round(userData.PlayedPercentage || 0), !!userData.Played, !!userData.IsFavorite,
-            userData.UnplayedItemCount || 0, item._chImage || '', item._chColor || '', (item._chCollage || []).join(',')];
+            userData.UnplayedItemCount || 0, item._chImage || '', item._chColor || ''];
     }
 
     function maxAgeOf(key) {
@@ -1503,8 +1568,10 @@
         return parts.join('');
     }
 
-    function heroButton(className, action, icon, label) {
-        return '<button is="emby-button" type="button" class="ch-hero-btn ' + className + ' itemAction" data-action="' + action + '" aria-label="' + escapeHtml(label) + '">'
+    // extraAttributes: the native click handler takes the item from the closest element carrying data-id, the
+    // button itself when it has one.
+    function heroButton(className, action, icon, label, extraAttributes) {
+        return '<button is="emby-button" type="button" class="ch-hero-btn ' + className + ' itemAction" data-action="' + action + '" aria-label="' + escapeHtml(label) + '"' + (extraAttributes || '') + '>'
             + '<span class="material-icons" aria-hidden="true">' + icon + '</span><span>' + escapeHtml(label) + '</span></button>';
     }
 
@@ -1538,7 +1605,10 @@
             ? heroButton('ch-hero-play', 'resume', 'play_arrow', t('heroResume'))
             : heroButton('ch-hero-play', 'play', 'play_arrow', t('heroPlay'));
         if (resumable) {
-            html += heroButton('ch-hero-restart', 'play', 'replay', t('heroRestart'));
+            // "play" and "resume" both start at data-positionticks: the restart button is its own item, at position 0.
+            html += heroButton('ch-hero-restart', 'play', 'replay', t('heroRestart'), ids
+                + ' data-type="' + escapeHtml(item.Type || '') + '" data-isfolder="' + (item.IsFolder ? 'true' : 'false') + '"'
+                + (item.MediaType ? ' data-mediatype="' + escapeHtml(item.MediaType) + '"' : '') + ' data-positionticks="0"');
         }
         if (item.LocalTrailerCount > 0) {
             html += heroButton('ch-hero-trailer', 'playtrailer', 'theaters', t('heroTrailer'));
@@ -1546,14 +1616,14 @@
             html += '<a is="emby-linkbutton" class="ch-hero-btn ch-hero-trailer" target="_blank" rel="noopener noreferrer" aria-label="' + escapeHtml(t('heroTrailer')) + '" href="' + escapeHtml(remoteTrailerUrl(item)) + '">'
                 + '<span class="material-icons" aria-hidden="true">theaters</span><span>' + escapeHtml(t('heroTrailer')) + '</span></a>';
         }
-        html += '<button is="emby-ratingbutton" type="button" class="ch-hero-round ch-hero-favorite' + (userData.IsFavorite ? ' ratingbutton-withrating' : '') + '"' + ids
-            + ' data-itemtype="' + escapeHtml(item.Type || '') + '" data-likes="' + (userData.Likes == null ? '' : escapeHtml(userData.Likes)) + '" data-isfavorite="' + (userData.IsFavorite ? 'true' : 'false') + '"'
+        // Plain buttons handled by the plugin: the rating and play state elements of the web client are only
+        // registered once another view needed them, which left these buttons dead on the home page.
+        html += '<button type="button" class="ch-hero-round ch-hero-favorite' + (userData.IsFavorite ? ' ch-on' : '') + '" aria-pressed="' + (userData.IsFavorite ? 'true' : 'false') + '"'
             + ' title="' + escapeHtml(t('heroFavorite')) + '" aria-label="' + escapeHtml(t('heroFavorite')) + '">'
-            + '<span class="material-icons favorite' + (userData.IsFavorite ? ' ratingbutton-icon-withrating' : '') + '" aria-hidden="true"></span></button>';
-        html += '<button is="emby-playstatebutton" type="button" class="ch-hero-round ch-hero-played' + (userData.Played ? ' playstatebutton-played' : '') + '"' + ids
-            + ' data-itemtype="' + escapeHtml(item.Type || '') + '" data-played="' + (userData.Played ? 'true' : 'false') + '"'
+            + '<span class="material-icons" aria-hidden="true">favorite</span></button>';
+        html += '<button type="button" class="ch-hero-round ch-hero-played' + (userData.Played ? ' ch-on' : '') + '" aria-pressed="' + (userData.Played ? 'true' : 'false') + '"'
             + ' title="' + escapeHtml(t('heroPlayed')) + '" aria-label="' + escapeHtml(t('heroPlayed')) + '">'
-            + '<span class="material-icons check' + (userData.Played ? ' playstatebutton-icon-played' : '') + '" aria-hidden="true"></span></button>';
+            + '<span class="material-icons" aria-hidden="true">check</span></button>';
         html += '<a is="emby-linkbutton" class="ch-hero-btn ch-hero-more" aria-label="' + escapeHtml(t('heroMore')) + '" href="' + href + '"><span class="material-icons" aria-hidden="true">info</span><span>' + escapeHtml(t('heroMore')) + '</span></a>';
         html += '</div></div></div>';
         return html;
@@ -1564,6 +1634,53 @@
             clearTimeout(node._chHero.timer);
             node._chHero = null;
         }
+    }
+
+    // Favorite / watched: optimistic, reverted when the server refuses. The media kept by the hero entry and by
+    // the cache is updated too, so that the next reload sees nothing to replace.
+    function toggleHeroUserData(node, button) {
+        const slide = button.closest('.ch-hero-slide');
+        const client = apiClient();
+        const userId = currentUserId();
+        if (!slide || !userId || button.disabled) {
+            return;
+        }
+        const itemId = slide.getAttribute('data-id');
+        const favorite = button.classList.contains('ch-hero-favorite');
+        const value = button.getAttribute('aria-pressed') !== 'true';
+        const epoch = state.epoch;
+        function show(on) {
+            setClass(button, 'ch-on', on);
+            button.setAttribute('aria-pressed', on ? 'true' : 'false');
+        }
+        show(value);
+        button.disabled = true;
+        let request;
+        if (favorite) {
+            request = client.updateFavoriteStatus(userId, itemId, value);
+        } else {
+            request = value ? client.markPlayed(userId, itemId, new Date()) : client.markUnplayed(userId, itemId);
+        }
+        Promise.resolve(request).then(function () {
+            const container = node.parentNode;
+            const entry = container && container._chHeroEntry;
+            if (epoch !== state.epoch || !entry || !entry.items) {
+                return;
+            }
+            entry.items.forEach(function (item) {
+                if (item.Id === itemId) {
+                    item.UserData = item.UserData || {};
+                    item.UserData[favorite ? 'IsFavorite' : 'Played'] = value;
+                }
+            });
+            entry.rendered = JSON.stringify(entry.items.map(itemState));
+        }).catch(function (error) {
+            console.warn('[CustomizedHome] hero action failed', error);
+            show(!value);
+            toast(t('heroActionError'));
+        }).then(function () {
+            button.disabled = false;
+        });
     }
 
     function startHero(node, intervalSeconds, startIndex) {
@@ -1635,13 +1752,9 @@
                 }
                 return;
             }
-            if (e.target.closest('.ch-hero-favorite, .ch-hero-played')) {
-                // The cached items no longer reflect the user data: fetch them again next time.
-                Object.keys(state.integratedCache).forEach(function (key) {
-                    if (key.indexOf('|hero#') >= 0) {
-                        delete state.integratedCache[key];
-                    }
-                });
+            const toggle = e.target.closest('.ch-hero-favorite, .ch-hero-played');
+            if (toggle) {
+                toggleHeroUserData(node, toggle);
             }
         });
         node.addEventListener('mouseenter', function () {
@@ -2597,6 +2710,10 @@
 
     let editor = null;
 
+    function isLibrarySection(key) {
+        return String(key || '').toLowerCase().indexOf('jf:latestmedia:') === 0;
+    }
+
     function cloneLayout(layout) {
         return JSON.parse(JSON.stringify(layout || { Items: [] }));
     }
@@ -2732,7 +2849,9 @@
                     const definition = info.byKey[item.Key];
                     info.known[item.Key] = {
                         key: item.Key,
-                        label: (definition ? familyLabel(catalogLabel(definition, lang)) : null) || item.Label || item.Key,
+                        // A library section that is not among the user's libraries: removed or no longer accessible.
+                        label: (definition ? familyLabel(catalogLabel(definition, lang)) : null)
+                            || (isLibrarySection(item.Key) ? t('latestUnavailable') : (item.Label || item.Key)),
                         origin: definition ? definition.Origin : 'other',
                         present: false,
                         family: !!(definition && definition.IsFamily)
@@ -3826,7 +3945,8 @@
             return {
                 Type: 'section',
                 Key: item.Key,
-                Label: (editor.known[item.Key] && editor.known[item.Key].label) || item.Label || null,
+                // Never for a library section: the name of a library is not for everyone (default layout).
+                Label: isLibrarySection(item.Key) ? null : ((editor.known[item.Key] && editor.known[item.Key].label) || item.Label || null),
                 Visible: item.Visible !== false,
                 Shape: item.Shape || 'auto',
                 Size: item.Size || 'normal',

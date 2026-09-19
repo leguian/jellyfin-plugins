@@ -13,6 +13,7 @@ using Jellyfin.Plugin.CustomizedHome.Models;
 using Jellyfin.Plugin.CustomizedHome.Services;
 using MediaBrowser.Common.Api;
 using MediaBrowser.Controller.Library;
+using MediaBrowser.Model.Library;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
@@ -34,12 +35,17 @@ public class CustomizedHomeController : ControllerBase
     // 5 MB image, base64 encoded, plus the JSON envelope.
     private const long GenreImageRequestLimit = 8 * 1024 * 1024;
 
+    // A layout at every validation limit (500 sections, 20 genres each) stays under it. Without a limit the body
+    // is fully deserialized before the validator can reject it.
+    private const long LayoutRequestLimit = 2 * 1024 * 1024;
+
     private static readonly ConcurrentDictionary<string, CachedAsset> AssetCache = new(StringComparer.Ordinal);
 
     private readonly LayoutStore _store;
     private readonly GenreImageStore _genreImages;
     private readonly WebInjectionService _injection;
     private readonly IUserManager _userManager;
+    private readonly IUserViewManager _userViewManager;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="CustomizedHomeController"/> class.
@@ -48,11 +54,13 @@ public class CustomizedHomeController : ControllerBase
     /// <param name="genreImages">The genre thumbnail store.</param>
     /// <param name="injection">The web injection service.</param>
     /// <param name="userManager">The user manager.</param>
-    public CustomizedHomeController(LayoutStore store, GenreImageStore genreImages, WebInjectionService injection, IUserManager userManager)
+    /// <param name="userViewManager">The user view manager.</param>
+    public CustomizedHomeController(LayoutStore store, GenreImageStore genreImages, WebInjectionService injection, IUserManager userManager, IUserViewManager userViewManager)
     {
         _store = store;
         _injection = injection;
         _userManager = userManager;
+        _userViewManager = userViewManager;
         _genreImages = genreImages;
     }
 
@@ -111,7 +119,8 @@ public class CustomizedHomeController : ControllerBase
         else if (config.DefaultLayout.Items.Count > 0 || config.DefaultLayout.Hero.Enabled)
         {
             // A default layout may consist of the hero alone, above the regular home page.
-            layout = config.DefaultLayout;
+            // Written by an administrator: it may list libraries this user must not know about.
+            layout = DefaultLayoutFilter.ForUser(config.DefaultLayout, GetAccessibleViews(userId));
             source = "default";
         }
         else
@@ -142,6 +151,7 @@ public class CustomizedHomeController : ControllerBase
     /// <returns>The normalized layout that was saved.</returns>
     [HttpPost("Layout")]
     [Authorize]
+    [RequestSizeLimit(LayoutRequestLimit)]
     [ProducesResponseType(StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status403Forbidden)]
@@ -215,6 +225,7 @@ public class CustomizedHomeController : ControllerBase
     /// <returns>The normalized layout that was saved.</returns>
     [HttpPost("DefaultLayout")]
     [Authorize(Policy = Policies.RequiresElevation)]
+    [RequestSizeLimit(LayoutRequestLimit)]
     [ProducesResponseType(StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     public ActionResult<HomeLayout> SaveDefaultLayout([FromBody] HomeLayout layout)
@@ -460,6 +471,20 @@ public class CustomizedHomeController : ControllerBase
         }
 
         return isAdmin || config.AllowUserCustomization;
+    }
+
+    private HashSet<Guid> GetAccessibleViews(Guid userId)
+    {
+        var user = userId == Guid.Empty ? null : _userManager.GetUserById(userId);
+        if (user is null)
+        {
+            return new HashSet<Guid>();
+        }
+
+        // Views the user hid from their home page are still theirs to see.
+        return _userViewManager.GetUserViews(new UserViewQuery { User = user, IncludeHidden = true })
+            .Select(view => view.Id)
+            .ToHashSet();
     }
 
     private Guid GetUserId()
