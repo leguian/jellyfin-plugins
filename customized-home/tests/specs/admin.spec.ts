@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test';
-import { openAdminPage, recordedRequests, rowTitles, type Layout } from './support';
+import { LIGHT_DASHBOARD_STYLE, openAdminPage, recordedRequests, rowTitles, textContrast, type Layout } from './support';
 
 const EDITOR = '#chDefaultEditor';
 
@@ -94,6 +94,45 @@ test('layouts tab has no "not displayed" toggle: there is no home page under the
     await page.waitForSelector(`${EDITOR} .ch-list .ch-row`);
     await expect(page.locator(`${EDITOR} .ch-show-all`)).toBeHidden();
     expect((await rowTitles(page, `${EDITOR} .ch-unlisted`)).length).toBeGreaterThan(0);
+});
+
+const READABLE_TEXTS = ['.ch-hint', '.ch-col-layout .ch-col-title', '.ch-list .ch-row-title', '.ch-list .ch-row-sub', '.ch-unlisted .ch-row-title',
+    '.ch-unlisted .ch-row-sub', '.ch-dialog-footer .ch-cancel'];
+// WCAG AA for normal size text.
+const MIN_CONTRAST = 4.5;
+
+for (const theme of ['light', 'dark'] as const) {
+    test(`embedded editor takes the text colour of a ${theme} dashboard and stays readable`, async ({ page }) => {
+        await openAdminPage(page, { defaultLayout: DEFAULT_LAYOUT, enableIntegratedSections: true });
+        if (theme === 'light') {
+            await page.addStyleTag({ content: LIGHT_DASHBOARD_STYLE });
+        }
+        await page.click('#chTabLayouts');
+        await page.waitForSelector(`${EDITOR} .ch-list .ch-row`);
+
+        const pageColor = await page.evaluate(() => getComputedStyle(document.body).color);
+        await expect(page.locator(`${EDITOR} .ch-dialog`)).toHaveCSS('color', pageColor);
+        await expect(page.locator(`${EDITOR} .ch-dialog`)).toHaveCSS('background-color', 'rgba(0, 0, 0, 0)');
+        for (const selector of READABLE_TEXTS) {
+            const ratio = await textContrast(page.locator(`${EDITOR} ${selector}`));
+            expect(ratio, `${selector} on a ${theme} dashboard`).toBeGreaterThanOrEqual(MIN_CONTRAST);
+        }
+        // Rows of the default layout are not "absent": there is no home page to be absent from.
+        await expect(page.locator(`${EDITOR} .ch-row-absent`)).toHaveCount(0);
+    });
+}
+
+test('light dashboard: a folder name field has no dark surface left', async ({ page }) => {
+    await openAdminPage(page, {
+        defaultLayout: { Version: 1, HideUnlisted: true, Items: [{ Type: 'folder', Id: 'f1', Name: 'Series', Visible: true, Items: [{ Type: 'section', Key: 'jf:nextup', Visible: true }] }] }
+    });
+    await page.addStyleTag({ content: LIGHT_DASHBOARD_STYLE });
+    await page.click('#chTabLayouts');
+    const field = page.locator(`${EDITOR} .ch-folder-name`);
+    await expect(field).toHaveValue('Series');
+    expect(await textContrast(field)).toBeGreaterThanOrEqual(MIN_CONTRAST);
+    // Derived from the text colour (black on this theme), where the modal dialog uses a fixed dark tint.
+    expect(await field.evaluate((node) => getComputedStyle(node).backgroundColor)).toMatch(/^color\(srgb 0 0 0 \/ 0\.0\d+\)$/);
 });
 
 test('genres tab shows the optimal sizes and handles one thumbnail per card shape', async ({ page }) => {

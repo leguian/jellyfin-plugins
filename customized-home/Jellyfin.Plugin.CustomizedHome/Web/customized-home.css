@@ -1,15 +1,21 @@
 /* Customized Home - client styles (injected into jellyfin-web) */
 
+/* Older engines (webOS up to 6, iOS up to 14.4...): every value they may not know (color-mix, clamp, min, max)
+   comes after a plain declaration of the same property, which the cascade keeps when the second one is dropped.
+   The "inset" shorthand is not used, and a rule never mixes :focus-visible with other selectors: an unknown
+   selector drops the whole rule, and the engine then keeps its own focus outline. */
+
 /* Home container: sections are ordered with flex "order" so the DOM is never moved
-   (moving emby-itemscontainer elements would reset their data bindings). */
-.homeSectionsContainer.ch-container {
+   (moving emby-itemscontainer elements would reset their data bindings).
+   ch-ordered is only set by the script when the engine knows "display: contents" (see canReorder). */
+.homeSectionsContainer.ch-container.ch-ordered {
     display: flex;
     flex-direction: column;
 }
 
 /* Built-in wrappers holding several sections (recently added per library, live tv, library buttons):
    let their children take part in the flex ordering. */
-.ch-container > .ch-wrapper {
+.ch-container.ch-ordered > .ch-wrapper {
     display: contents;
 }
 
@@ -42,14 +48,23 @@
     cursor: default;
 }
 
-.ch-folder-header:hover:not(:disabled),
-.ch-folder-header:focus-visible {
+.ch-folder-header:hover:not(:disabled) {
+    background: rgba(128, 128, 128, 0.12);
     background: color-mix(in srgb, currentColor 6%, transparent);
-    outline: none;
+}
+
+.ch-folder-header:focus-visible {
+    background: rgba(128, 128, 128, 0.12);
+    background: color-mix(in srgb, currentColor 6%, transparent);
+    outline: 2px solid #00a4dc;
+    outline-offset: -2px;
 }
 
 .layout-tv .ch-folder-header:focus {
+    background: rgba(128, 128, 128, 0.24);
     background: color-mix(in srgb, currentColor 12%, transparent);
+    outline: 2px solid #00a4dc;
+    outline-offset: -2px;
 }
 
 .ch-folder-header .sectionTitle {
@@ -95,6 +110,7 @@
     display: inline-flex;
     align-items: center;
     gap: 0.4em;
+    background: rgba(128, 128, 128, 0.16);
     background: color-mix(in srgb, currentColor 8%, transparent);
     color: inherit;
     border: 0;
@@ -105,14 +121,23 @@
     cursor: pointer;
 }
 
-.ch-customize-button:hover,
-.ch-customize-button:focus-visible {
+.ch-customize-button:hover {
+    background: rgba(128, 128, 128, 0.32);
     background: color-mix(in srgb, currentColor 16%, transparent);
-    outline: none;
+}
+
+.ch-customize-button:focus-visible {
+    background: rgba(128, 128, 128, 0.32);
+    background: color-mix(in srgb, currentColor 16%, transparent);
+    outline: 2px solid #00a4dc;
+    outline-offset: 2px;
 }
 
 .layout-tv .ch-customize-button:focus {
+    background: rgba(128, 128, 128, 0.5);
     background: color-mix(in srgb, currentColor 25%, transparent);
+    outline: 2px solid #00a4dc;
+    outline-offset: 2px;
 }
 
 /* User menu entry (MUI menu) */
@@ -123,7 +148,10 @@
 /* ---------- Editor dialog ---------- */
 .ch-overlay {
     position: fixed;
-    inset: 0;
+    top: 0;
+    right: 0;
+    bottom: 0;
+    left: 0;
     z-index: 100000;
     background: rgba(0, 0, 0, 0.72);
     display: flex;
@@ -164,6 +192,7 @@
     align-items: center;
     gap: 0.6em;
     padding: 0.9em 1.1em;
+    border-bottom: 1px solid rgba(128, 128, 128, 0.16);
     border-bottom: 1px solid color-mix(in srgb, currentColor 8%, transparent);
 }
 
@@ -186,8 +215,36 @@
     justify-content: flex-end;
     gap: 0.6em;
     padding: 0.8em 1.1em;
+    border-top: 1px solid rgba(128, 128, 128, 0.16);
     border-top: 1px solid color-mix(in srgb, currentColor 8%, transparent);
     flex-wrap: wrap;
+}
+
+/* A question asked in place of the footer (unsaved changes, reset): the rest of the dialog waits for the answer. */
+.ch-confirm {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 0.6em;
+    padding: 0.8em 1.1em;
+    border-top: 1px solid rgba(128, 128, 128, 0.16);
+    border-top: 1px solid color-mix(in srgb, currentColor 8%, transparent);
+}
+
+.ch-confirm-text {
+    flex: 1 1 14em;
+    margin: 0;
+}
+
+.ch-confirming .ch-dialog-footer {
+    display: none;
+}
+
+.ch-confirming .ch-dialog-header,
+.ch-confirming .ch-dialog-body {
+    opacity: 0.45;
+    pointer-events: none;
 }
 
 .ch-toolbar {
@@ -209,7 +266,7 @@
 
 .ch-hint {
     font-size: 0.85em;
-    opacity: 0.65;
+    opacity: 0.75;
     margin: 0 0 0.6em;
 }
 
@@ -217,6 +274,7 @@
     display: inline-flex;
     align-items: center;
     gap: 0.35em;
+    background: rgba(128, 128, 128, 0.2);
     background: color-mix(in srgb, currentColor 10%, transparent);
     color: inherit;
     border: 0;
@@ -228,10 +286,16 @@
     text-transform: none;
 }
 
-.ch-btn:hover,
-.ch-btn:focus-visible {
+.ch-btn:hover {
+    background: rgba(128, 128, 128, 0.4);
     background: color-mix(in srgb, currentColor 20%, transparent);
-    outline: none;
+}
+
+.ch-btn:focus-visible {
+    background: rgba(128, 128, 128, 0.4);
+    background: color-mix(in srgb, currentColor 20%, transparent);
+    outline: 2px solid #00a4dc;
+    outline-offset: 2px;
 }
 
 .ch-btn-primary {
@@ -239,7 +303,10 @@
     color: #fff;
 }
 
-.ch-btn-primary:hover,
+.ch-btn-primary:hover {
+    background: #0288b8;
+}
+
 .ch-btn-primary:focus-visible {
     background: #0288b8;
 }
@@ -266,10 +333,23 @@
     line-height: 1;
 }
 
-.ch-icon-btn:hover,
-.ch-icon-btn:focus-visible {
+.ch-icon-btn:hover {
+    background: rgba(128, 128, 128, 0.28);
     background: color-mix(in srgb, currentColor 14%, transparent);
-    outline: none;
+}
+
+.ch-icon-btn:focus-visible {
+    background: rgba(128, 128, 128, 0.28);
+    background: color-mix(in srgb, currentColor 14%, transparent);
+    outline: 2px solid #00a4dc;
+    outline-offset: 1px;
+}
+
+/* TV layout: the remote moves a plain :focus. */
+.layout-tv .ch-btn:focus,
+.layout-tv .ch-icon-btn:focus {
+    outline: 2px solid #00a4dc;
+    outline-offset: 1px;
 }
 
 .ch-icon-btn:disabled {
@@ -290,6 +370,7 @@
     display: flex;
     align-items: center;
     gap: 0.4em;
+    background: rgba(128, 128, 128, 0.12);
     background: color-mix(in srgb, currentColor 6%, transparent);
     border-radius: 0.35em;
     padding: 0.35em 0.5em;
@@ -301,6 +382,7 @@
 
 .ch-row.ch-row-child {
     margin-left: 2em;
+    background: rgba(128, 128, 128, 0.08);
     background: color-mix(in srgb, currentColor 4%, transparent);
 }
 
@@ -332,6 +414,44 @@
     cursor: grabbing;
 }
 
+/* Left column: the handle is a button (arrow keys, move menu). It keeps the look of the plain icon. */
+button.ch-handle {
+    background: transparent;
+    border: 0;
+    margin: 0;
+    color: inherit;
+    font: inherit;
+    line-height: 1;
+    display: inline-flex;
+    align-items: center;
+    border-radius: 0.3em;
+}
+
+button.ch-handle:focus-visible {
+    opacity: 1;
+    outline: 2px solid #00a4dc;
+    outline-offset: 1px;
+}
+
+.layout-tv button.ch-handle:focus {
+    opacity: 1;
+    outline: 2px solid #00a4dc;
+    outline-offset: 1px;
+}
+
+/* Read by screen readers only: where a row landed after a keyboard move. */
+.ch-live {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    margin: -1px;
+    padding: 0;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+    border: 0;
+}
+
 .ch-row-icon {
     opacity: 0.8;
 }
@@ -351,7 +471,7 @@
 
 .ch-row-sub {
     font-size: 0.75em;
-    opacity: 0.55;
+    opacity: 0.7;
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
@@ -368,6 +488,7 @@
     min-width: 0;
     background: rgba(0, 0, 0, 0.25);
     color: inherit;
+    border: 1px solid rgba(128, 128, 128, 0.3);
     border: 1px solid color-mix(in srgb, currentColor 15%, transparent);
     border-radius: 0.3em;
     padding: 0.35em 0.5em;
@@ -417,6 +538,12 @@
     overflow-y: auto;
 }
 
+/* A menu without a single available entry takes the focus itself. */
+.ch-popup:focus {
+    outline: 2px solid #00a4dc;
+    outline-offset: -2px;
+}
+
 .ch-popup button,
 .ch-popup .ch-popup-label {
     display: flex;
@@ -439,14 +566,32 @@
     font-size: 0.85em;
 }
 
-.ch-popup button:hover,
-.ch-popup button:focus-visible {
+.ch-popup button:disabled {
+    opacity: 0.4;
+    cursor: default;
+}
+
+.ch-popup button:hover {
+    background: rgba(128, 128, 128, 0.2);
     background: color-mix(in srgb, currentColor 10%, transparent);
-    outline: none;
+}
+
+/* Inside the scrolling menu: the ring is drawn inwards so that it is never clipped. */
+.ch-popup button:focus-visible {
+    background: rgba(128, 128, 128, 0.2);
+    background: color-mix(in srgb, currentColor 10%, transparent);
+    outline: 2px solid #00a4dc;
+    outline-offset: -2px;
+}
+
+.layout-tv .ch-popup button:focus {
+    outline: 2px solid #00a4dc;
+    outline-offset: -2px;
 }
 
 .ch-popup .ch-popup-sep {
     height: 1px;
+    background: rgba(128, 128, 128, 0.2);
     background: color-mix(in srgb, currentColor 10%, transparent);
     margin: 0.3em 0;
 }
@@ -464,6 +609,7 @@
     display: inline-flex;
     align-items: center;
     justify-content: center;
+    background: rgba(128, 128, 128, 0.12);
     background: color-mix(in srgb, currentColor 6%, transparent);
     border: 0;
     border-radius: 0.3em;
@@ -500,7 +646,7 @@
 
 .ch-empty {
     text-align: center;
-    opacity: 0.6;
+    opacity: 0.7;
     padding: 2em 1em;
 }
 
@@ -592,7 +738,10 @@
 
 .ch-card .cardDefaultText {
     position: absolute;
-    inset: 0;
+    top: 0;
+    right: 0;
+    bottom: 0;
+    left: 0;
     display: flex;
     align-items: center;
     justify-content: center;
@@ -631,6 +780,7 @@
     white-space: nowrap;
     padding: 0.1em 0.5em;
     border-radius: 1em;
+    background: rgba(128, 128, 128, 0.16);
     background: color-mix(in srgb, currentColor 8%, transparent);
 }
 
@@ -640,6 +790,7 @@
     align-items: center;
     gap: 0.3em;
     background: rgba(0, 0, 0, 0.25);
+    border: 1px solid rgba(128, 128, 128, 0.3);
     border: 1px solid color-mix(in srgb, currentColor 15%, transparent);
     border-radius: 0.3em;
     padding: 0.2em 0.5em;
@@ -657,7 +808,16 @@
     color: inherit;
     font: inherit;
     width: 100%;
+}
+
+/* The box shows the focus (border below): only engines that know :focus-within lose the outline of the field. */
+.ch-search-box:focus-within .ch-search {
     outline: none;
+}
+
+.ch-search::placeholder {
+    color: inherit;
+    opacity: 0.6;
 }
 
 .ch-filtered .ch-handle {
@@ -739,7 +899,7 @@
 }
 
 .ch-row:hover .ch-act-top,
-.ch-act-top:focus-visible {
+.ch-act-top:focus {
     opacity: 1;
 }
 
@@ -759,6 +919,7 @@
 
 /* ---------- Editor polish ---------- */
 .ch-dialog {
+    border: 1px solid rgba(128, 128, 128, 0.24);
     border: 1px solid color-mix(in srgb, currentColor 12%, transparent);
     border-radius: 0.8em;
 }
@@ -779,7 +940,9 @@
 .ch-search-box {
     padding: 0.45em 0.7em;
     border-radius: 0.5em;
+    background: rgba(128, 128, 128, 0.12);
     background: color-mix(in srgb, currentColor 6%, transparent);
+    border: 1px solid rgba(128, 128, 128, 0.28);
     border: 1px solid color-mix(in srgb, currentColor 14%, transparent);
     transition: border-color 0.15s ease;
 }
@@ -789,7 +952,9 @@
 }
 
 .ch-col {
+    background: rgba(128, 128, 128, 0.08);
     background: color-mix(in srgb, currentColor 4%, transparent);
+    border: 1px solid rgba(128, 128, 128, 0.2);
     border: 1px solid color-mix(in srgb, currentColor 10%, transparent);
     border-radius: 0.6em;
     padding: 0.8em;
@@ -808,6 +973,7 @@
 }
 
 .ch-row {
+    border: 1px solid rgba(128, 128, 128, 0.18);
     border: 1px solid color-mix(in srgb, currentColor 9%, transparent);
     border-radius: 0.5em;
     padding: 0.45em 0.6em;
@@ -815,7 +981,9 @@
 }
 
 .ch-row:hover {
+    background: rgba(128, 128, 128, 0.2);
     background: color-mix(in srgb, currentColor 10%, transparent);
+    border-color: rgba(128, 128, 128, 0.36);
     border-color: color-mix(in srgb, currentColor 18%, transparent);
 }
 
@@ -845,6 +1013,7 @@
 }
 
 .ch-empty {
+    border: 1px dashed rgba(128, 128, 128, 0.32);
     border: 1px dashed color-mix(in srgb, currentColor 16%, transparent);
     border-radius: 0.5em;
     padding: 1.4em 1em;
@@ -852,6 +1021,7 @@
 }
 
 .ch-popup {
+    border: 1px solid rgba(128, 128, 128, 0.24);
     border: 1px solid color-mix(in srgb, currentColor 12%, transparent);
     border-radius: 0.6em;
     padding: 0.35em;
@@ -862,13 +1032,41 @@
 }
 
 .ch-customize-button {
+    border: 1px solid rgba(128, 128, 128, 0.28);
     border: 1px solid color-mix(in srgb, currentColor 14%, transparent);
     padding: 0.6em 1.3em;
 }
 
-/* Embedded editor sits inside an administration card: no second frame. */
+/* Embedded editor sits inside an administration card: no second frame. The dashboard may be light or dark: the
+   text is the one of the page, and nothing keeps a surface or an accent made for the dark dialog. */
 .ch-embedded .ch-dialog {
     border: 0;
+    color: inherit;
+}
+
+.ch-embedded .ch-folder-name {
+    background: rgba(128, 128, 128, 0.12);
+    background: color-mix(in srgb, currentColor 6%, transparent);
+}
+
+/* Accents lean towards the text colour: darker on a light page, lighter on a dark one. */
+.ch-embedded .ch-btn-danger,
+.ch-embedded .ch-act-remove:hover {
+    color: #e05555;
+    color: color-mix(in srgb, #e53935 75%, currentColor);
+}
+
+.ch-embedded .ch-row-icon:not(.ch-origin-other),
+.ch-embedded .ch-act-add,
+.ch-embedded .ch-origin-customized,
+.ch-embedded .ch-hero-toggle[aria-checked="true"] .material-icons {
+    color: #0093c6;
+    color: color-mix(in srgb, #00a4dc 65%, currentColor);
+}
+
+.ch-embedded .ch-row-icon.ch-origin-jellyfin {
+    color: #9a4db3;
+    color: color-mix(in srgb, #aa5cc3 78%, currentColor);
 }
 
 .ch-embedded .ch-dialog-footer {
@@ -905,6 +1103,7 @@
 }
 
 .ch-genre-option:hover {
+    background: rgba(128, 128, 128, 0.2);
     background: color-mix(in srgb, currentColor 10%, transparent);
 }
 
@@ -988,7 +1187,10 @@
 /* ---------- Genre cards: poster collage ---------- */
 .ch-collage {
     position: absolute;
-    inset: 0;
+    top: 0;
+    right: 0;
+    bottom: 0;
+    left: 0;
     display: grid;
     grid-template-columns: 1fr 1fr;
     grid-template-rows: 1fr 1fr;
@@ -1045,7 +1247,10 @@
 /* Genre cards: name on a colored background */
 .ch-genre-color {
     position: absolute;
-    inset: 0;
+    top: 0;
+    right: 0;
+    bottom: 0;
+    left: 0;
     display: flex;
     align-items: center;
     justify-content: center;
@@ -1068,6 +1273,7 @@
     /* Full bleed and under the header: the negative margins are measured by the script. */
     /* The first section moves up into the dissolving part. */
     margin: 0 0 -1.5em;
+    min-height: 82vh;
     min-height: clamp(26em, 82vh, 56em);
     color: #fff;
     /* Horizontal swipes change the slide, vertical ones scroll the page. */
@@ -1083,18 +1289,25 @@ html.ch-hero-under-header .skinHeader {
     color: #fff;
 }
 
-.skinHeader {
+/* Only while a hero is displayed: no rule of this stylesheet touches the header of the web client otherwise. */
+html.ch-hero-shown .skinHeader {
     transition: background-color 0.25s ease;
 }
 
 .ch-hero-slides {
     position: absolute;
-    inset: 0;
+    top: 0;
+    right: 0;
+    bottom: 0;
+    left: 0;
 }
 
 .ch-hero-slide {
     position: absolute;
-    inset: 0;
+    top: 0;
+    right: 0;
+    bottom: 0;
+    left: 0;
     display: flex;
     align-items: flex-end;
     opacity: 0;
@@ -1118,7 +1331,10 @@ html.ch-hero-under-header .skinHeader {
 
 .ch-hero-backdrop {
     position: absolute;
-    inset: 0;
+    top: 0;
+    right: 0;
+    bottom: 0;
+    left: 0;
     background-position: center 20%;
     background-size: cover;
     background-repeat: no-repeat;
@@ -1126,13 +1342,19 @@ html.ch-hero-under-header .skinHeader {
 
 /* No backdrop available: the poster is used as a soft background. */
 .ch-hero-backdrop.ch-hero-backdrop-poster {
-    inset: -2em;
+    top: -2em;
+    right: -2em;
+    bottom: -2em;
+    left: -2em;
     filter: blur(1.5em) brightness(0.7);
 }
 
 .ch-hero-shade {
     position: absolute;
-    inset: 0;
+    top: 0;
+    right: 0;
+    bottom: 0;
+    left: 0;
     background:
         linear-gradient(to right, rgba(0, 0, 0, 0.82) 0%, rgba(0, 0, 0, 0.5) 38%, rgba(0, 0, 0, 0) 70%),
         linear-gradient(to top, rgba(0, 0, 0, 0.75) 0%, rgba(0, 0, 0, 0) 45%);
@@ -1141,8 +1363,10 @@ html.ch-hero-under-header .skinHeader {
 .ch-hero-content {
     position: relative;
     box-sizing: border-box;
-    width: min(100%, 46em);
+    width: 100%;
+    max-width: 46em;
     /* Aligned with the section titles of the web client; kept above the dissolving part. */
+    padding: 2em 1.5em 7em 3.3%;
     padding: 2em 1.5em 7em max(env(safe-area-inset-left), 3.3%);
     text-shadow: 0 1px 3px rgba(0, 0, 0, 0.6);
     display: flex;
@@ -1152,6 +1376,7 @@ html.ch-hero-under-header .skinHeader {
 
 .ch-hero-logo {
     display: block;
+    max-width: 70%;
     max-width: min(70%, 24em);
     max-height: 9em;
     object-fit: contain;
@@ -1245,17 +1470,33 @@ html.ch-hero-under-header .skinHeader {
 }
 
 .ch-hero-btn:hover,
-.ch-hero-round:hover,
+.ch-hero-round:hover {
+    background: rgba(255, 255, 255, 0.32);
+}
+
 .ch-hero-btn:focus-visible,
 .ch-hero-round:focus-visible {
     background: rgba(255, 255, 255, 0.32);
 }
 
+/* !important: the web client removes the outline of its buttons with ".emby-button { outline: none !important }",
+   which left the play, trailer and details buttons without any sign of the keyboard focus. */
 .ch-hero-btn:focus-visible,
 .ch-hero-round:focus-visible,
 .ch-hero-nav:focus-visible,
+.ch-hero-pause:focus-visible,
 .ch-hero-dot:focus-visible {
-    outline: 2px solid #00a4dc;
+    outline: 2px solid #00a4dc !important;
+    outline-offset: 2px;
+}
+
+/* TV layout: the remote moves a plain :focus, and older engines do not know :focus-visible. */
+.layout-tv .ch-hero-btn:focus,
+.layout-tv .ch-hero-round:focus,
+.layout-tv .ch-hero-nav:focus,
+.layout-tv .ch-hero-pause:focus,
+.layout-tv .ch-hero-dot:focus {
+    outline: 2px solid #00a4dc !important;
     outline-offset: 2px;
 }
 
@@ -1264,7 +1505,10 @@ html.ch-hero-under-header .skinHeader {
     color: #101010;
 }
 
-.ch-hero-btn.ch-hero-play:hover,
+.ch-hero-btn.ch-hero-play:hover {
+    background: rgba(255, 255, 255, 0.85);
+}
+
 .ch-hero-btn.ch-hero-play:focus-visible {
     background: rgba(255, 255, 255, 0.85);
 }
@@ -1310,7 +1554,7 @@ html.ch-hero-under-header .skinHeader {
 }
 
 .ch-hero:hover .ch-hero-nav,
-.ch-hero-nav:focus-visible {
+.ch-hero-nav:focus {
     opacity: 1;
 }
 
@@ -1320,11 +1564,41 @@ html.ch-hero-under-header .skinHeader {
 
 .ch-hero-dots {
     position: absolute;
+    right: 3.3%;
     right: max(env(safe-area-inset-right), 3.3%);
     bottom: 7.4em;
     z-index: 2;
     display: flex;
+    align-items: center;
     gap: 0.45em;
+}
+
+/* Stops and resumes the rotation: large enough for a finger (28px at the default font size). */
+.ch-hero-pause {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    box-sizing: border-box;
+    font: inherit;
+    width: 1.75em;
+    height: 1.75em;
+    min-width: 24px;
+    min-height: 24px;
+    margin: 0 0.3em 0 0;
+    padding: 0;
+    border: 0;
+    border-radius: 50%;
+    color: #fff;
+    background: rgba(0, 0, 0, 0.45);
+    cursor: pointer;
+}
+
+.ch-hero-pause:hover {
+    background: rgba(0, 0, 0, 0.7);
+}
+
+.ch-hero-pause .material-icons {
+    font-size: 1.15em;
 }
 
 .ch-hero-dot {
@@ -1346,10 +1620,12 @@ html.ch-hero-under-header .skinHeader {
 
 @media (max-width: 50em) {
     .ch-hero {
+        min-height: 72vh;
         min-height: clamp(22em, 72vh, 36em);
     }
 
     .ch-hero-content {
+        padding: 1.2em 1.2em 5.5em 3.3%;
         padding: 1.2em 1.2em 5.5em max(env(safe-area-inset-left), 3.3%);
     }
 
@@ -1383,6 +1659,7 @@ html.ch-hero-under-header .skinHeader {
 
     .ch-hero-dots {
         right: auto;
+        left: 3.3%;
         left: max(env(safe-area-inset-left), 3.3%);
         bottom: 3.6em;
     }
@@ -1413,7 +1690,9 @@ html.ch-hero-under-header .skinHeader {
 }
 
 .ch-hero-row.ch-hero-row-off {
+    border-color: rgba(128, 128, 128, 0.28);
     border-color: color-mix(in srgb, currentColor 14%, transparent);
+    background: rgba(128, 128, 128, 0.08);
     background: color-mix(in srgb, currentColor 4%, transparent);
 }
 
@@ -1462,6 +1741,7 @@ html.ch-hero-under-header .skinHeader {
     display: flex;
     align-items: flex-start;
     gap: 0.8em;
+    margin: 2em 3.3% 1em;
     margin: 2em max(env(safe-area-inset-right), 3.3%) 1em max(env(safe-area-inset-left), 3.3%);
     padding: 0.9em 1em;
     border: 1px solid rgba(128, 128, 128, 0.35);

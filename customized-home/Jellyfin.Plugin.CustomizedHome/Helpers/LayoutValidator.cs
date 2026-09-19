@@ -46,7 +46,8 @@ public static partial class LayoutValidator
         HashSet<string> keys = new(StringComparer.Ordinal);
         HashSet<string> folderIds = new(StringComparer.Ordinal);
 
-        foreach (LayoutItem item in layout.Items)
+        // A request body is refused by MVC when a list is null, a file edited by hand is not: both get here.
+        foreach (LayoutItem item in layout.Items ?? [])
         {
             if (item is null)
             {
@@ -62,7 +63,7 @@ public static partial class LayoutValidator
             if (IsFolder(item))
             {
                 LayoutItem folder = NormalizeFolder(item, folderIds);
-                foreach (LayoutItem member in item.Items)
+                foreach (LayoutItem member in item.Items ?? [])
                 {
                     if (member is null || IsFolder(member))
                     {

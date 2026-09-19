@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
-import type { Page } from '@playwright/test';
+import type { Locator, Page } from '@playwright/test';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const PLUGIN_DIR = resolve(HERE, '../../Jellyfin.Plugin.CustomizedHome');
@@ -64,6 +64,21 @@ export interface Layout {
     Items: LayoutSection[];
 }
 
+export interface LayoutFolder {
+    Type: 'folder';
+    Id: string;
+    Name: string;
+    Icon?: string;
+    Visible: boolean;
+    Collapsed?: boolean;
+    Items: LayoutSection[];
+}
+
+/** Layouts saved by earlier versions may hold folders; the editor no longer creates them. */
+export interface FolderLayout extends Omit<Layout, 'Items'> {
+    Items: (LayoutSection | LayoutFolder)[];
+}
+
 export interface CatalogEntry {
     Key: string;
     Origin: 'customized' | 'jellyfin' | 'hss';
@@ -90,8 +105,8 @@ export interface CardItem {
 }
 
 export interface MockOptions {
-    layout?: Layout;
-    defaultLayout?: Layout;
+    layout?: Layout | FolderLayout;
+    defaultLayout?: Layout | FolderLayout;
     hasUserLayout?: boolean;
     canCustomize?: boolean;
     enableIntegratedSections?: boolean;
@@ -106,6 +121,8 @@ export interface MockOptions {
     failures?: Record<string, number>;
     /** "<METHOD> <path>" -> milliseconds before the answer. */
     delays?: Record<string, number>;
+    /** Stylesheet text injected instead of the plugin stylesheet (see legacyEngineStyle). */
+    style?: string;
 }
 
 interface MockWindow {
@@ -138,7 +155,7 @@ export const GENRES = [
     { Id: 'genre-drama', Name: 'Drama', Type: 'Genre' }
 ];
 
-function layoutResponse(options: MockOptions, layout: Layout | undefined): Record<string, unknown> {
+function layoutResponse(options: MockOptions, layout: Layout | FolderLayout | undefined): Record<string, unknown> {
     return {
         Source: layout ? 'user' : 'none',
         Layout: layout ?? EMPTY_LAYOUT,
@@ -180,8 +197,26 @@ export async function injectPlugin(page: Page, options: MockOptions): Promise<vo
         (window as unknown as { __mock: Record<string, unknown> }).__mock = state;
     }, mockState(options));
     await page.addScriptTag({ path: STUB_PATH });
-    await page.addStyleTag({ path: STYLE_PATH });
+    await page.addStyleTag(options.style === undefined ? { path: STYLE_PATH } : { content: options.style });
     await page.addScriptTag({ path: SCRIPT_PATH });
+}
+
+/** Values and properties that Chromium up to 79 (webOS up to 6) and iOS up to 14.4 do not know. */
+const MODERN_VALUE = /(^|[^a-z-])(clamp|min|max)\(|color-mix\(/;
+
+export function isModernDeclaration(property: string, value: string): boolean {
+    return property === 'inset' || MODERN_VALUE.test(value);
+}
+
+/**
+ * The plugin stylesheet as an older engine reads it: declarations it does not know are dropped one by one, and a
+ * rule whose selector it does not know (:focus-visible, :focus-within) is dropped as a whole.
+ */
+export function legacyEngineStyle(): string {
+    const css = readFileSync(STYLE_PATH, 'utf8').replace(/\/\*[\s\S]*?\*\//g, '');
+    return css
+        .replace(/([^{}]*)\{([^{}]*)\}/g, (rule: string, selector: string) => (/:focus-visible|:focus-within/.test(selector) ? '' : rule))
+        .replace(/([\w-]+)\s*:\s*([^;{}]+);/g, (declaration: string, property: string, value: string) => (isModernDeclaration(property, value) ? '' : declaration));
 }
 
 /** Loads the mocked home page and the plugin without waiting for a layout to be applied (failing server...). */
@@ -247,6 +282,9 @@ export async function openAdminPage(page: Page, options: MockOptions = {}): Prom
     }, body);
 }
 
+/** Page colours of the light theme of jellyfin-web (src/themes/light/theme.scss); the fixture is dark by default. */
+export const LIGHT_DASHBOARD_STYLE = 'html, body { background-color: #f2f2f2; color: rgba(0, 0, 0, 0.87); }';
+
 /** Visible home sections in visual (flex order) order, by title. */
 export async function visibleSectionTitles(page: Page): Promise<string[]> {
     return page.evaluate(() => {
@@ -255,6 +293,51 @@ export async function visibleSectionTitles(page: Page): Promise<string[]> {
             .filter((node) => node.querySelector('h2') !== null && getComputedStyle(node).display !== 'none')
             .sort((a, b) => Number(a.style.order) - Number(b.style.order))
             .map((node) => node.querySelector('h2')?.textContent?.trim() ?? '');
+    });
+}
+
+/**
+ * WCAG contrast ratio between the text of an element and what is painted behind it. Backgrounds and opacities of
+ * the ancestors are composited on a canvas, which understands every colour syntax the engine computes
+ * (color-mix results come back as "color(srgb ...)").
+ */
+export async function textContrast(target: Locator): Promise<number> {
+    return target.first().evaluate((node) => {
+        const canvas = document.createElement('canvas');
+        canvas.width = 1;
+        canvas.height = 1;
+        const context = canvas.getContext('2d');
+        if (!context) {
+            throw new Error('no 2d context');
+        }
+        const chain: Element[] = [];
+        for (let element: Element | null = node; element; element = element.parentElement) {
+            chain.unshift(element);
+        }
+        const pixel = (): number[] => Array.from(context.getImageData(0, 0, 1, 1).data.slice(0, 3));
+        const luminance = (rgb: number[]): number => {
+            const [r = 0, g = 0, b = 0] = rgb.map((value) => {
+                const channel = value / 255;
+                return channel <= 0.03928 ? channel / 12.92 : Math.pow((channel + 0.055) / 1.055, 2.4);
+            });
+            return 0.2126 * r + 0.7152 * g + 0.0722 * b;
+        };
+        context.fillStyle = '#ffffff';
+        context.fillRect(0, 0, 1, 1);
+        let opacity = 1;
+        for (const element of chain) {
+            const style = getComputedStyle(element);
+            opacity *= parseFloat(style.opacity);
+            context.globalAlpha = opacity;
+            context.fillStyle = style.backgroundColor;
+            context.fillRect(0, 0, 1, 1);
+        }
+        const background = luminance(pixel());
+        context.globalAlpha = opacity;
+        context.fillStyle = getComputedStyle(node).color;
+        context.fillRect(0, 0, 1, 1);
+        const text = luminance(pixel());
+        return (Math.max(text, background) + 0.05) / (Math.min(text, background) + 0.05);
     });
 }
 

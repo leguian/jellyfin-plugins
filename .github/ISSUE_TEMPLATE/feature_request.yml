@@ -1,0 +1,82 @@
+name: Feature request
+description: Suggest an improvement or a new section
+title: "[customized-home] "
+labels: ["enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        English or French are both fine.
+
+        Please keep in mind what the plugin can reach: it changes the Jellyfin **web client** only (browsers, the official Android and iOS apps, Jellyfin Media Player). A request for Android TV, Swiftfin, Kodi or another native app cannot be done from a server plugin.
+  - type: dropdown
+    id: plugin
+    attributes:
+      label: Plugin
+      options:
+        - Customized Home
+    validations:
+      required: true
+  - type: textarea
+    id: problem
+    attributes:
+      label: What are you trying to do
+      description: The need behind the request, in your own words. "I want my kids' profile to only show…" is more useful than "add option X".
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: What you would like
+      description: How it could look or behave, for users and for the administrator. A sketch or a screenshot of another product helps.
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: What you do today instead
+      description: A workaround, another plugin, a Jellyfin setting… or nothing.
+    validations:
+      required: false
+  - type: input
+    id: jellyfin-version
+    attributes:
+      label: Jellyfin server version
+      placeholder: "10.11.0"
+    validations:
+      required: true
+  - type: input
+    id: plugin-version
+    attributes:
+      label: Plugin version
+      description: Shown in the header of the plugin page (Dashboard, Plugins, Customized Home).
+      placeholder: "1.8.3.0"
+    validations:
+      required: true
+  - type: input
+    id: file-transformation-version
+    attributes:
+      label: File Transformation version
+      description: Shown in the Status card of the plugin page (Options tab).
+    validations:
+      required: false
+  - type: input
+    id: client
+    attributes:
+      label: Client you use the most
+      description: Browser or app, and the device (desktop, phone, tablet, TV).
+      placeholder: "Chrome on a desktop, Jellyfin for Android on a tablet"
+    validations:
+      required: true
+  - type: textarea
+    id: sections
+    attributes:
+      label: Output of window.CustomizedHome.sections() (when the request is about existing sections)
+      description: |
+        On the home page, browser developer tools (F12), Console tab, run this line and paste the result:
+        `JSON.stringify(window.CustomizedHome.sections(), null, 2)`
+        It tells which sections exist on your home page and where they come from. Library names can appear in the labels, edit them out if you prefer.
+      placeholder: '[ { "key": "jf:resume", "label": "Continue Watching", "origin": "jellyfin" } ]'
+      render: json
+    validations:
+      required: false
