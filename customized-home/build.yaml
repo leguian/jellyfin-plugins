@@ -22,6 +22,7 @@ artifacts:
 changelog: >
   Reliability: logging out or switching user in the same tab no longer keeps the previous user's layout
   and cached rows. Continue Watching / Next Up, Watch Again, Because You Watched and the hero are reloaded
-  when the home page is shown again. A failing server is retried with growing delays instead of on every
-  page change. A layout whose sections all disappeared no longer leaves an empty home page. The save
-  button is locked while saving.
+  when the home page is shown again, without flicker and without losing what is on screen when the reload
+  fails. A failing server is retried with growing delays instead of on every page change. A layout whose
+  sections all disappeared falls back to the default home page, and a message explains why the layout is
+  not applied (or why the page is empty) and how to fix it. The save button is locked while saving.

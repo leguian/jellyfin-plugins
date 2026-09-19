@@ -78,6 +78,8 @@ export interface MockRequest {
     url?: string;
     body: unknown;
     failed?: boolean;
+    /** Date.now() of the page when the request was made (the fake clock when one is installed). */
+    ts?: number;
 }
 
 export interface CardItem {
@@ -197,6 +199,20 @@ export async function updateMock(page: Page, changes: Record<string, unknown>): 
         Object.assign((window as unknown as MockWindow).__mock, values);
         document.body.appendChild(document.createElement('i')).remove();
     }, changes);
+}
+
+/** jellyfin-web threw the cached home view away and rendered a new one: same native sections, new container. */
+export async function rebuildHomeView(page: Page): Promise<void> {
+    await page.evaluate(() => {
+        const container = document.querySelector('#homeTab .sections');
+        if (!container) {
+            throw new Error('home container missing');
+        }
+        const fresh = container.cloneNode(true) as HTMLElement;
+        fresh.querySelectorAll('.ch-section, .ch-hero, .ch-folder, .ch-customize-bar, .ch-notice').forEach((node) => node.remove());
+        fresh.className = 'sections homeSectionsContainer';
+        container.replaceWith(fresh);
+    });
 }
 
 /** jellyfin-web dispatches a bubbling "viewshow" on the view it shows again (back navigation, end of playback). */

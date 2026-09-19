@@ -34,7 +34,7 @@
 
     function route(method, url, body) {
         const path = url.split('?')[0];
-        mock.requests.push({ method: method, path: path, url: url, body: body === undefined ? null : body });
+        mock.requests.push({ method: method, path: path, url: url, body: body === undefined ? null : body, ts: Date.now() });
         if (path === 'CustomizedHome/Layout' && method === 'GET') {
             return mock.layoutResponses[mock.userId] || mock.layoutResponse;
         }
@@ -51,8 +51,9 @@
             return { Items: mock.nextUpItems };
         }
         if (path === 'CustomizedHome/Layout' && method === 'DELETE') {
-            mock.layoutResponse.Layout = { Version: 1, HideUnlisted: false, Items: [] };
-            mock.layoutResponse.HasUserLayout = false;
+            const own = mock.layoutResponses[mock.userId] || mock.layoutResponse;
+            own.Layout = { Version: 1, HideUnlisted: false, Items: [] };
+            own.HasUserLayout = false;
             return null;
         }
         if (path === 'CustomizedHome/DefaultLayout') {
@@ -92,6 +93,21 @@
         }
         if (path === 'Genres') {
             return { Items: mock.genres };
+        }
+        if (path === 'Items' && /[?&]ids=/.test(url)) {
+            // Reload of the media already shown by the hero: same ids, current state.
+            const ids = decodeURIComponent(/[?&]ids=([^&]*)/.exec(url)[1]).split(',');
+            const known = {};
+            Object.keys(mock.heroItems).forEach(function (source) {
+                mock.heroItems[source].forEach(function (item) {
+                    known[item.Id] = item;
+                });
+            });
+            return {
+                Items: ids.map(function (id) {
+                    return known[id];
+                }).filter(Boolean)
+            };
         }
         if (path === 'Items' && /[?&]fields=Overview/.test(url)) {
             // Hero query: one list per source, recognized by its sort order and item type.
@@ -153,7 +169,7 @@
             if (left > 0) {
                 mock.failures[key] = left - 1;
             }
-            mock.requests.push({ method: method, path: url.split('?')[0], url: url, body: body === undefined ? null : body, failed: true });
+            mock.requests.push({ method: method, path: url.split('?')[0], url: url, body: body === undefined ? null : body, failed: true, ts: Date.now() });
             return Promise.reject({ status: 500 });
         }
         return Promise.resolve(route(method, url, body));
@@ -182,11 +198,17 @@
             return Promise.resolve({ CustomPrefs: {} });
         },
         getUserViews: function () {
-            return Promise.resolve({
+            const views = {
                 Items: [
                     { Id: 'lib-movies', Name: 'Movies', CollectionType: 'movies' },
                     { Id: 'lib-shows', Name: 'Shows', CollectionType: 'tvshows' }
                 ]
+            };
+            // delays['GET UserViews'] makes the editor slow to open.
+            return new Promise(function (resolve) {
+                setTimeout(function () {
+                    resolve(views);
+                }, mock.delays['GET UserViews'] || 0);
             });
         },
         getImageUrl: function (id) {

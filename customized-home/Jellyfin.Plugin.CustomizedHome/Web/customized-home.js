@@ -28,6 +28,15 @@
     const I18N = {
         en: {
             customize: 'Customize home',
+            emptyHomeTitle: 'The home layout is not applied',
+            emptyHomeTitleBlank: 'Nothing to show on the home page',
+            emptyHomeHidden: 'Every section of the layout is hidden.',
+            emptyHomeEmpty: 'The sections of the layout have nothing to display for now (nothing in progress, empty library...).',
+            emptyHomeMissing: 'The sections of the layout are no longer offered on this home page (Jellyfin update, plugin removed, Jellyfin home settings). The default home page is shown instead.',
+            emptyHomeDisabled: 'The layout only holds sections rendered by Customized Home, which the administrator turned off. The default home page is shown instead.',
+            emptyHomeFix: 'Open "Customize home" to show or add sections, or reset the layout.',
+            emptyHomeFixAdmin: 'This layout is managed by the administrator: ask them to update it.',
+            emptyHomeDismiss: 'Hide this message',
             editorTitle: 'Customize the home screen',
             defaultTitle: 'Default home layout (all users)',
             newFolder: 'New folder',
@@ -150,6 +159,15 @@
         },
         fr: {
             customize: "Personnaliser l'accueil",
+            emptyHomeTitle: "La disposition de l'accueil n'est pas appliquée",
+            emptyHomeTitleBlank: "Rien à afficher sur l'accueil",
+            emptyHomeHidden: 'Toutes les sections de la disposition sont masquées.',
+            emptyHomeEmpty: "Les sections de la disposition n'ont rien à afficher pour le moment (rien en cours de lecture, bibliothèque vide…).",
+            emptyHomeMissing: "Les sections de la disposition ne sont plus proposées sur cet accueil (mise à jour de Jellyfin, plugin retiré, réglages d'accueil Jellyfin). La page d'accueil par défaut est affichée à la place.",
+            emptyHomeDisabled: "La disposition ne contient que des sections rendues par Customized Home, désactivées par l'administrateur. La page d'accueil par défaut est affichée à la place.",
+            emptyHomeFix: "Ouvrez « Personnaliser l'accueil » pour réafficher ou ajouter des sections, ou réinitialisez la disposition.",
+            emptyHomeFixAdmin: "Cette disposition est gérée par l'administrateur : demandez-lui de la mettre à jour.",
+            emptyHomeDismiss: 'Masquer ce message',
             editorTitle: "Personnaliser l'accueil",
             defaultTitle: 'Disposition par défaut (tous les utilisateurs)',
             newFolder: 'Nouveau dossier',
@@ -294,7 +312,8 @@
         loadFailures: 0,
         retryAt: 0,
         retryTimer: null,
-        warnedEmptyHome: false
+        warnedEmptyHome: false,
+        noticeDismissed: false
     };
 
     /* ------------------------------------------------------------------ */
@@ -469,7 +488,7 @@
     // Gives the home sections back their native look and removes what the plugin rendered.
     function restoreContainer(container) {
         removeHero(container);
-        Array.prototype.forEach.call(container.querySelectorAll(':scope > .ch-section, :scope > .ch-folder, :scope > .ch-customize-bar'), function (node) {
+        Array.prototype.forEach.call(container.querySelectorAll(':scope > .ch-section, :scope > .ch-folder, :scope > .ch-customize-bar, :scope > .ch-notice'), function (node) {
             node.remove();
         });
         container._chIntegrated = null;
@@ -493,6 +512,8 @@
         closeEditor();
         if (state.container && state.container.isConnected) {
             restoreContainer(state.container);
+            // The next user's sections get their content after the login: same patience as for a new page.
+            startSettling(state.container);
         }
         Array.prototype.forEach.call(document.querySelectorAll('.ch-menu-entry'), function (node) {
             node.remove();
@@ -512,6 +533,7 @@
         state.retryAt = 0;
         state.retryTimer = null;
         state.warnedEmptyHome = false;
+        state.noticeDismissed = false;
     }
 
     // Returns false while nobody is logged in.
@@ -660,6 +682,23 @@
         });
     }
 
+    // Sub-requests may fail one by one without taking the row down. When they all fail the row itself failed:
+    // the caller then keeps what is on screen instead of replacing it with nothing.
+    function tolerant(requests, fallback) {
+        let failures = 0;
+        return Promise.all(requests.map(function (request) {
+            return request.catch(function () {
+                failures++;
+                return fallback;
+            });
+        })).then(function (results) {
+            if (requests.length > 0 && failures === requests.length) {
+                throw new Error('every request failed');
+            }
+            return results;
+        });
+    }
+
     function dedupeItems(items) {
         const seen = {};
         return items.filter(function (item) {
@@ -674,10 +713,10 @@
     function fetchCombined() {
         const client = apiClient();
         const common = { userId: currentUserId(), fields: IMAGE_FIELDS, imageTypeLimit: 1, enableImageTypes: IMAGE_TYPES, enableTotalRecordCount: false };
-        return Promise.all([
-            client.getJSON(client.getUrl('UserItems/Resume', Object.assign({ limit: 12, mediaTypes: 'Video' }, common))).catch(function () { return null; }),
-            client.getJSON(client.getUrl('Shows/NextUp', Object.assign({ limit: 24, enableResumable: false }, common))).catch(function () { return null; })
-        ]).then(function (results) {
+        return tolerant([
+            client.getJSON(client.getUrl('UserItems/Resume', Object.assign({ limit: 12, mediaTypes: 'Video' }, common))),
+            client.getJSON(client.getUrl('Shows/NextUp', Object.assign({ limit: 24, enableResumable: false }, common)))
+        ], null).then(function (results) {
             const resume = (results[0] && results[0].Items) || [];
             const nextUp = (results[1] && results[1].Items) || [];
             return dedupeItems(resume.concat(nextUp));
@@ -687,16 +726,13 @@
     function fetchBecauseYouWatched() {
         return itemsQuery({ includeItemTypes: 'Movie,Series', recursive: true, isPlayed: true, sortBy: 'DatePlayed', sortOrder: 'Descending', limit: 3, fields: 'PrimaryImageAspectRatio' })
             .then(function (seeds) {
-                return Promise.all(seeds.map(function (seed) {
+                return tolerant(seeds.map(function (seed) {
                     const client = apiClient();
                     return client.getJSON(client.getUrl('Items/' + seed.Id + '/Similar', { userId: currentUserId(), limit: 12, fields: IMAGE_FIELDS }))
                         .then(function (result) {
                             return { title: t('becauseYouWatched', seed.Name), items: (result && result.Items) || [] };
-                        })
-                        .catch(function () {
-                            return { title: '', items: [] };
                         });
-                }));
+                }), { title: '', items: [] });
             })
             .then(function (list) {
                 return list.filter(function (instance) {
@@ -885,15 +921,12 @@
         const source = selected.length ? Promise.resolve(selected) : autoGenres();
         return source
             .then(function (genres) {
-                return Promise.all(genres.map(function (genre) {
+                return tolerant(genres.map(function (genre) {
                     return itemsQuery({ genres: genre, includeItemTypes: 'Movie,Series', recursive: true, sortBy: 'Random', limit: GENRE_ROW_ITEMS })
                         .then(function (items) {
                             return { title: t('genreTitle', genre), items: items };
-                        })
-                        .catch(function () {
-                            return { title: genre, items: [] };
                         });
-                }));
+                }), { title: '', items: [] });
             })
             .then(function (list) {
                 return list.filter(function (instance) {
@@ -1133,18 +1166,67 @@
         });
     }
 
-    // The rows on screen stay until the new data is there: no flicker, and a failed reload keeps them.
+    // What a reload may change on screen: the media, their order and the user data drawn on the cards.
+    function itemState(item) {
+        const userData = item.UserData || {};
+        return [item.Id, userData.PlaybackPositionTicks || 0, Math.round(userData.PlayedPercentage || 0), !!userData.Played, !!userData.IsFavorite,
+            userData.UnplayedItemCount || 0, item._chImage || '', item._chColor || '', (item._chCollage || []).join(',')];
+    }
+
+    function maxAgeOf(key) {
+        return INTEGRATED[key] && INTEGRATED[key].volatile ? VOLATILE_REFRESH_MS : INTEGRATED_CACHE_MS;
+    }
+
+    // Keyboard and remote users: the focus follows the media from the old nodes to the new ones.
+    function focusedItemId(nodes) {
+        const active = document.activeElement;
+        for (let i = 0; i < nodes.length; i++) {
+            if (active && nodes[i].contains(active)) {
+                const holder = active.closest('[data-id]');
+                return holder ? holder.getAttribute('data-id') : '';
+            }
+        }
+        return null;
+    }
+
+    function restoreFocus(nodes, itemId) {
+        if (itemId === null) {
+            return;
+        }
+        for (let i = 0; i < nodes.length; i++) {
+            const holder = itemId ? nodes[i].querySelector('[data-id="' + itemId.replace(/"/g, '') + '"]') : null;
+            const target = holder ? (holder.matches('a, button') ? holder : holder.querySelector('a, button')) : null;
+            if (target) {
+                target.focus();
+                return;
+            }
+        }
+    }
+
+    // The rows on screen stay until the new data is there, and are only replaced when it differs: no flicker,
+    // no lost scroll position, and a failed reload keeps them.
     function loadIntegratedSection(container, registry, key, item, signature, fresh) {
         const definition = INTEGRATED[key];
         const previous = registry[key];
-        const entry = { loading: true, count: previous ? previous.count : 0, signature: signature, ts: Date.now(), refresh: false };
+        const sameData = !!previous && previous.signature === signature;
+        const entry = {
+            loading: true,
+            // first: nothing was ever loaded for this key, the page waits for it before judging the layout.
+            first: !previous || !previous.loaded,
+            loaded: !!previous && previous.loaded,
+            count: previous ? previous.count : 0,
+            signature: signature,
+            ts: previous ? previous.ts : 0,
+            refresh: false,
+            rendered: sameData ? previous.rendered : null
+        };
         registry[key] = entry;
         const epoch = state.epoch;
         const cacheKey = state.identity + '|' + key + '#' + signature;
         const cached = state.integratedCache[cacheKey];
         let dataPromise;
         if (!fresh && cached && Date.now() - cached.ts < INTEGRATED_CACHE_MS) {
-            dataPromise = Promise.resolve(cached.data);
+            dataPromise = Promise.resolve(cached);
         } else {
             const load = definition.family
                 ? definition.fetchInstances(item)
@@ -1152,31 +1234,64 @@
                     return [{ title: t(definition.titleKey), items: items }];
                 });
             dataPromise = load.then(function (data) {
+                const record = { ts: Date.now(), data: data };
                 if (epoch === state.epoch) {
-                    state.integratedCache[cacheKey] = { ts: Date.now(), data: data };
+                    state.integratedCache[cacheKey] = record;
                 }
-                return data;
+                return record;
             });
         }
-        dataPromise.then(function (instances) {
+        function current() {
+            return epoch === state.epoch && container.isConnected && container._chIntegrated === registry && registry[key] === entry;
+        }
+        function nodesOf() {
+            return container.querySelectorAll(':scope > [data-ch-key="' + key + '"]');
+        }
+        dataPromise.then(function (record) {
             entry.loading = false;
-            if (epoch !== state.epoch || !container.isConnected || container._chIntegrated !== registry || registry[key] !== entry) {
+            if (!current()) {
                 return;
             }
+            const instances = record.data;
+            const rendered = JSON.stringify(instances.map(function (instance) {
+                return [instance.title, instance.items.map(itemState)];
+            }));
+            entry.loaded = true;
+            entry.first = false;
+            // The age is the age of the data: rows served from the cache of a previous home view get old on time.
+            entry.ts = record.ts;
+            const old = nodesOf();
+            if (rendered !== entry.rendered || old.length !== instances.length) {
+                const focused = focusedItemId(old);
+                Array.prototype.forEach.call(old, function (node) {
+                    node.remove();
+                });
+                instances.forEach(function (instance, index) {
+                    const node = createIntegratedSection(container, key, index);
+                    const format = formatFor(item, definition);
+                    renderIntegratedSection(node, instance.title, instance.items, format.shape, format.showTitle);
+                });
+                restoreFocus(nodesOf(), focused);
+            }
+            entry.rendered = rendered;
             entry.count = instances.length;
-            entry.ts = Date.now();
-            Array.prototype.forEach.call(container.querySelectorAll(':scope > [data-ch-key="' + key + '"]'), function (node) {
-                node.remove();
-            });
-            instances.forEach(function (instance, index) {
-                const node = createIntegratedSection(container, key, index);
-                const format = formatFor(item, definition);
-                renderIntegratedSection(node, instance.title, instance.items, format.shape, format.showTitle);
-            });
+            if (Date.now() - entry.ts > maxAgeOf(key)) {
+                entry.refresh = true;
+            }
             scheduleApply();
         }).catch(function (error) {
             entry.loading = false;
             console.warn('[CustomizedHome] section ' + key + ' failed', error);
+            if (!current()) {
+                return;
+            }
+            entry.first = false;
+            if (!nodesOf().length) {
+                // Nothing to look for any more: a wiped row must not turn every pass into a request.
+                entry.count = 0;
+            }
+            // The layout may now have nothing to show at all: let the next pass decide.
+            scheduleApply();
         });
     }
 
@@ -1199,7 +1314,7 @@
         }
         const registry = container._chIntegrated || {};
         Object.keys(registry).forEach(function (key) {
-            flag(registry[key], INTEGRATED[key] && INTEGRATED[key].volatile ? VOLATILE_REFRESH_MS : INTEGRATED_CACHE_MS);
+            flag(registry[key], maxAgeOf(key));
         });
         // The hero carries the resume position and the favorite / watched states.
         flag(container._chHeroEntry, VOLATILE_REFRESH_MS);
@@ -1285,7 +1400,7 @@
     }
 
     function fetchHeroItems(hero) {
-        return Promise.all(hero.Sources.map(function (source) {
+        return tolerant(hero.Sources.map(function (source) {
             const query = Object.assign({ recursive: true, limit: hero.Count, fields: HERO_FIELDS, enableImageTypes: HERO_IMAGE_TYPES }, HERO_SOURCES[source].query);
             if (hero.ExcludePlayed) {
                 query.isPlayed = false;
@@ -1293,10 +1408,8 @@
             if (hero.RequireBackdrop) {
                 query.imageTypes = 'Backdrop';
             }
-            return itemsQuery(query).catch(function () {
-                return [];
-            });
-        })).then(function (lists) {
+            return itemsQuery(query);
+        }), []).then(function (lists) {
             // Round robin between the sources, so that each of them is represented.
             const mixed = [];
             for (let i = 0; i < hero.Count; i++) {
@@ -1307,6 +1420,25 @@
                 });
             }
             return dedupeItems(mixed).slice(0, hero.Count);
+        });
+    }
+
+    // Reload of a hero on screen: same selection, fresh user data (resume position, favorite, watched). One request
+    // instead of one per source, and the random source does not deal new media under the user's eyes.
+    function refreshHeroItems(hero, items) {
+        const ids = items.map(function (item) {
+            return item.Id;
+        });
+        return itemsQuery({ ids: ids.join(','), fields: HERO_FIELDS, enableImageTypes: HERO_IMAGE_TYPES }).then(function (fresh) {
+            const byId = {};
+            fresh.forEach(function (item) {
+                byId[item.Id] = item;
+            });
+            return ids.map(function (id) {
+                return byId[id];
+            }).filter(function (item) {
+                return !!item && !(hero.ExcludePlayed && item.UserData && item.UserData.Played);
+            });
         });
     }
 
@@ -1624,6 +1756,12 @@
         // A reload keeps the media the user is looking at in front, when it is still part of the selection.
         const shown = container.querySelector(':scope > .ch-hero .ch-hero-slide.ch-active');
         const shownId = shown ? shown.getAttribute('data-id') : null;
+        const previousNode = container.querySelector(':scope > .ch-hero');
+        const focusedControl = previousNode && previousNode.contains(document.activeElement)
+            ? ['ch-hero-play', 'ch-hero-restart', 'ch-hero-trailer', 'ch-hero-favorite', 'ch-hero-played', 'ch-hero-more'].filter(function (name) {
+                return document.activeElement.classList.contains(name);
+            })[0] || 'ch-hero-play'
+            : null;
         let startIndex = 0;
         items.forEach(function (item, index) {
             if (item.Id === shownId) {
@@ -1648,6 +1786,12 @@
         node.innerHTML = html;
         container.appendChild(node);
         startHero(node, hero.IntervalSeconds, startIndex);
+        if (focusedControl) {
+            const target = node.querySelector('.ch-hero-slide.ch-active .' + focusedControl) || node.querySelector('.ch-hero-slide.ch-active .ch-hero-play');
+            if (target) {
+                target.focus();
+            }
+        }
         initHeroChrome();
         updateHeroChrome(true);
         return node;
@@ -1669,7 +1813,8 @@
             }
             return;
         }
-        const signature = heroDataSignature(hero) + '#' + hero.IntervalSeconds;
+        const dataSignatureOfHero = heroDataSignature(hero);
+        const signature = dataSignatureOfHero + '#' + hero.IntervalSeconds;
         const known = container._chHeroEntry;
         let fresh = false;
         if (known && known.signature === signature) {
@@ -1680,35 +1825,69 @@
                 return;
             }
         }
-        // The hero on screen stays until the new selection is there.
-        const entry = { loading: true, count: known ? known.count : 0, signature: signature, ts: Date.now(), refresh: false };
+        // The hero on screen stays until the new data is there, and is only replaced when it differs.
+        const sameSelection = !!known && known.dataSignature === dataSignatureOfHero;
+        const entry = {
+            loading: true,
+            count: known ? known.count : 0,
+            signature: signature,
+            dataSignature: dataSignatureOfHero,
+            ts: known ? known.ts : 0,
+            selectedAt: sameSelection ? known.selectedAt : 0,
+            items: sameSelection ? known.items : null,
+            refresh: false,
+            rendered: known && known.signature === signature ? known.rendered : null
+        };
         container._chHeroEntry = entry;
         const epoch = state.epoch;
-        const cacheKey = state.identity + '|hero#' + heroDataSignature(hero);
+        const cacheKey = state.identity + '|hero#' + dataSignatureOfHero;
         const cached = state.integratedCache[cacheKey];
-        const dataPromise = !fresh && cached && Date.now() - cached.ts < INTEGRATED_CACHE_MS
-            ? Promise.resolve(cached.data)
-            : fetchHeroItems(hero).then(function (items) {
+        let dataPromise;
+        if (!fresh && cached && Date.now() - cached.selectedAt < INTEGRATED_CACHE_MS) {
+            dataPromise = Promise.resolve(cached);
+        } else {
+            // A selection that is still young only gets its user data reloaded; past the cache lifetime the sources run again.
+            const keep = fresh && entry.items && entry.items.length && Date.now() - entry.selectedAt < INTEGRATED_CACHE_MS;
+            const selectedAt = keep ? entry.selectedAt : Date.now();
+            dataPromise = (keep ? refreshHeroItems(hero, entry.items) : fetchHeroItems(hero)).then(function (items) {
+                const record = { ts: Date.now(), selectedAt: selectedAt, data: items };
                 if (epoch === state.epoch) {
-                    state.integratedCache[cacheKey] = { ts: Date.now(), data: items };
+                    state.integratedCache[cacheKey] = record;
                 }
-                return items;
+                return record;
             });
-        dataPromise.then(function (items) {
+        }
+        function current() {
+            return epoch === state.epoch && container.isConnected && container._chHeroEntry === entry;
+        }
+        dataPromise.then(function (record) {
             entry.loading = false;
-            if (epoch !== state.epoch || !container.isConnected || container._chHeroEntry !== entry) {
+            if (!current()) {
                 return;
             }
+            const items = record.data;
+            const rendered = JSON.stringify(items.map(itemState));
+            entry.ts = record.ts;
+            entry.selectedAt = record.selectedAt;
+            entry.items = items;
             entry.count = items.length;
-            entry.ts = Date.now();
-            if (items.length) {
-                renderHero(container, hero, items);
-            } else {
+            const node = container.querySelector(':scope > .ch-hero');
+            if (!items.length) {
                 removeHero(container);
+            } else if (rendered !== entry.rendered || !node) {
+                renderHero(container, hero, items);
             }
+            entry.rendered = rendered;
+            if (Date.now() - entry.ts > VOLATILE_REFRESH_MS) {
+                entry.refresh = true;
+            }
+            scheduleApply();
         }).catch(function (error) {
             entry.loading = false;
             console.warn('[CustomizedHome] hero failed', error);
+            if (current() && !container.querySelector(':scope > .ch-hero')) {
+                entry.count = 0;
+            }
         });
     }
 
@@ -1985,7 +2164,8 @@
         const children = container.children;
         for (let i = 0; i < children.length; i++) {
             const child = children[i];
-            if (child.nodeType !== 1 || child.classList.contains('ch-folder') || child.classList.contains('ch-customize-bar') || child.classList.contains('ch-hero')) {
+            if (child.nodeType !== 1 || child.classList.contains('ch-folder') || child.classList.contains('ch-customize-bar') || child.classList.contains('ch-hero')
+                || child.classList.contains('ch-notice')) {
                 continue;
             }
             nodes.push(child);
@@ -2047,12 +2227,18 @@
 
         let order = ORDER_STEP;
         let shownTotal = 0;
+        let resolved = 0;
         const used = {};
+        const integratedRegistry = container._chIntegrated || {};
 
         function place(item, visible, folder, collapsed) {
             const key = item.Key;
             used[key] = true;
             const group = byKey[key];
+            // Resolved: the section exists on this server, displayed or not (hidden by the user, empty for now).
+            if (group || (integratedRegistry[key] && integratedRegistry[key].loaded)) {
+                resolved++;
+            }
             if (!group) {
                 return 0;
             }
@@ -2111,17 +2297,31 @@
         });
 
         // Safety net: a layout whose sections all went missing (renamed by an update, plugin removed...) would leave
-        // an empty page. While plugin sections are still loading, wait for them instead.
-        const pending = Object.keys(container._chIntegrated || {}).some(function (key) {
-            return container._chIntegrated[key].loading;
+        // an empty page for good: the default home page comes back. A section that exists but is empty or hidden
+        // keeps the layout in charge. First loads of plugin sections are waited for, reloads are not.
+        const pending = Object.keys(integratedRegistry).some(function (key) {
+            return integratedRegistry[key].loading && integratedRegistry[key].first;
         });
         // The native sections arrive one by one: the verdict only falls once the page had time to fill.
         const settling = Date.now() - (container._chAttachedAt || 0) < EMPTY_HOME_GRACE_MS;
-        const hideUnlisted = replacesHome && (shownTotal > 0 || pending || settling);
+        const hideUnlisted = replacesHome && (resolved > 0 || pending || settling);
         if (replacesHome && !hideUnlisted && !state.warnedEmptyHome) {
             state.warnedEmptyHome = true;
-            console.warn('[CustomizedHome] no section of the layout is displayed: showing the default home page instead');
+            console.warn('[CustomizedHome] no section of the layout exists on this home page: showing the default home page instead');
         }
+        // Default home page back although a layout exists, or nothing at all on the page: say why, and how to fix it.
+        let noticeReason = null;
+        const heroEntry = container._chHeroEntry;
+        if (replacesHome && !hideUnlisted) {
+            noticeReason = 'missing';
+        } else if (!replacesHome && layoutSections(layout).length > 0) {
+            noticeReason = 'disabled';
+        } else if (replacesHome && shownTotal === 0 && !pending && !settling && !(heroEntry && (heroEntry.loading || heroEntry.count > 0))) {
+            noticeReason = layoutSections(layout).every(function (entry) {
+                return !entry.visible;
+            }) ? 'hidden' : 'empty';
+        }
+        syncEmptyHomeNotice(container, noticeReason);
 
         sections.forEach(function (section) {
             if (used[section.key]) {
@@ -2142,6 +2342,79 @@
     // A layout replaces the default home page as soon as it lists one section that can exist: sections rendered
     // by the plugin do not count while the administrator keeps them disabled.
     const EMPTY_HOME_GRACE_MS = 5000;
+    // After the hero (-2 in the stylesheet), before anything else: sections the web client left empty keep the default order 0.
+    const ORDER_NOTICE = -1;
+    const EMPTY_HOME_TEXT = { hidden: 'emptyHomeHidden', empty: 'emptyHomeEmpty', missing: 'emptyHomeMissing', disabled: 'emptyHomeDisabled' };
+    // With these reasons the default home page is displayed; with the others the page is just empty.
+    const EMPTY_HOME_FALLBACK = { missing: true, disabled: true };
+
+    function startSettling(container) {
+        container._chAttachedAt = Date.now();
+        clearTimeout(container._chSettleTimer);
+        container._chSettleTimer = setTimeout(scheduleApply, EMPTY_HOME_GRACE_MS + RETRY_TIMER_MARGIN_MS);
+    }
+
+    // The sections of a layout with their effective visibility (a hidden folder hides its members).
+    function layoutSections(layout) {
+        const list = [];
+        (layout.Items || []).forEach(function (item) {
+            if (item.Type === 'folder') {
+                (item.Items || []).forEach(function (member) {
+                    if (member.Key) {
+                        list.push({ item: member, visible: item.Visible !== false && member.Visible !== false });
+                    }
+                });
+            } else if (item.Key) {
+                list.push({ item: item, visible: item.Visible !== false });
+            }
+        });
+        return list;
+    }
+
+    function syncEmptyHomeNotice(container, reason) {
+        const existing = container.querySelector(':scope > .ch-notice');
+        if (!reason || state.noticeDismissed) {
+            if (existing) {
+                existing.remove();
+            }
+            return;
+        }
+        const canCustomize = !!(state.response && state.response.CanCustomize);
+        const signature = reason + '|' + canCustomize + '|' + getLanguage();
+        if (existing && existing.dataset.chNotice === signature) {
+            return;
+        }
+        if (existing) {
+            existing.remove();
+        }
+        const notice = el('div', 'ch-notice');
+        notice.dataset.chNotice = signature;
+        notice.dataset.chReason = reason;
+        notice.setAttribute('role', 'status');
+        notice.innerHTML = '<span class="material-icons ch-notice-icon" aria-hidden="true">info</span>'
+            + '<div class="ch-notice-text"><h2 class="ch-notice-title"></h2><p class="ch-notice-why"></p><p class="ch-notice-fix"></p>'
+            + '<div class="ch-notice-actions">'
+            + (canCustomize ? '<button type="button" class="ch-btn ch-btn-primary ch-notice-customize"></button>' : '')
+            + '<button type="button" class="ch-btn ch-notice-dismiss"></button>'
+            + '</div></div>';
+        notice.querySelector('.ch-notice-title').textContent = t(EMPTY_HOME_FALLBACK[reason] ? 'emptyHomeTitle' : 'emptyHomeTitleBlank');
+        notice.querySelector('.ch-notice-why').textContent = t(EMPTY_HOME_TEXT[reason]);
+        notice.querySelector('.ch-notice-fix').textContent = t(canCustomize ? 'emptyHomeFix' : 'emptyHomeFixAdmin');
+        notice.querySelector('.ch-notice-dismiss').textContent = t('emptyHomeDismiss');
+        notice.querySelector('.ch-notice-dismiss').addEventListener('click', function () {
+            // For this session only: the message comes back with the next page load, as long as the cause is there.
+            state.noticeDismissed = true;
+            notice.remove();
+        });
+        if (canCustomize) {
+            notice.querySelector('.ch-notice-customize').textContent = t('customize');
+            notice.querySelector('.ch-notice-customize').addEventListener('click', function () {
+                openEditor({ mode: 'user' });
+            });
+        }
+        setOrder(notice, ORDER_NOTICE);
+        container.appendChild(notice);
+    }
 
     function layoutReplacesHome(layout) {
         const integratedAllowed = !!(state.response && state.response.EnableIntegratedSections);
@@ -2171,7 +2444,11 @@
             }
             if (state.ctxStale) {
                 state.ctxStale = false;
+                const epoch = state.epoch;
                 loadJfSections().then(function (sections) {
+                    if (epoch !== state.epoch || !state.ctx) {
+                        return;
+                    }
                     if (sections) {
                         state.ctx.jfSections = sections;
                     }
@@ -2197,9 +2474,8 @@
         if (!container) {
             return;
         }
-        // Start of the grace period of the empty home safety net (applyLayout).
-        container._chAttachedAt = Date.now();
-        setTimeout(scheduleApply, EMPTY_HOME_GRACE_MS + RETRY_TIMER_MARGIN_MS);
+        // Grace period of the empty home safety net (applyLayout).
+        startSettling(container);
         state.containerObserver = new MutationObserver(function (mutations) {
             let relevant = false;
             for (let i = 0; i < mutations.length; i++) {
@@ -2210,8 +2486,10 @@
                         for (let j = 0; j < mutation.addedNodes.length; j++) {
                             const node = mutation.addedNodes[j];
                             if (node.nodeType === 1 && sectionIndexClass(node) >= 0 && node.dataset.page === undefined) {
-                                // The built-in home was re-rendered: the user may have changed their home settings.
+                                // The built-in home was re-rendered: the user may have changed their home settings,
+                                // and the page is filling up again.
                                 state.ctxStale = true;
+                                startSettling(container);
                             }
                         }
                     }
@@ -2405,18 +2683,27 @@
             }
         }
         const mode = options.mode === 'default' ? 'default' : 'user';
+        const epoch = state.epoch;
         ensureLoaded().then(function () {
+            if (epoch !== state.epoch) {
+                return null;
+            }
             if (mode === 'user' && !state.response.CanCustomize) {
                 toast(t('notAllowed'));
                 return null;
             }
             const layoutPromise = mode === 'default' ? apiGet('DefaultLayout') : Promise.resolve(state.layout);
             return Promise.all([loadCatalog(), loadUserViews(), layoutPromise]).then(function (results) {
-                buildEditor(mode, results[0] || [], results[1] || [], results[2] || { Items: [] }, options);
+                // Requested by someone who is gone: never open their layout in the next session.
+                if (epoch === state.epoch) {
+                    buildEditor(mode, results[0] || [], results[1] || [], results[2] || { Items: [] }, options);
+                }
             });
         }).catch(function (error) {
-            console.error('[CustomizedHome] editor error', error);
-            toast(t('loadError'));
+            if (epoch === state.epoch) {
+                console.error('[CustomizedHome] editor error', error);
+                toast(t('loadError'));
+            }
         });
     }
 
@@ -3601,9 +3888,11 @@
                 current.options.onSaved(saved || payload);
             }
             toast(t('saved'));
-            closeEditor();
-            if (current.embedded) {
-                openEditor(current.options);
+            if (editor === current) {
+                closeEditor();
+                if (current.embedded) {
+                    openEditor(current.options);
+                }
             }
         }).catch(function (error) {
             console.error('[CustomizedHome] save failed', error);
