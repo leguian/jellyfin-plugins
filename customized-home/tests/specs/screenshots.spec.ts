@@ -1,5 +1,5 @@
 import { test } from '@playwright/test';
-import { openAdminPage, openEditor, openHome, type Layout } from './support';
+import { LIGHT_DASHBOARD_STYLE, openAdminPage, openEditor, openHome, type Layout } from './support';
 
 // Visual review helper, not an assertion suite: run with `npm run screenshots`.
 
@@ -65,4 +65,16 @@ test('administration page', async ({ page }) => {
     await page.click('#chTabGenres');
     await page.locator('#chGenres .cha-genre').first().waitFor();
     await page.screenshot({ path: `${OUTPUT_DIR}/admin-genres.png`, fullPage: true });
+});
+
+test('administration page on a light dashboard', async ({ page }) => {
+    await openAdminPage(page, { defaultLayout: DEFAULT_LAYOUT, enableIntegratedSections: true });
+    await page.addStyleTag({ url: MATERIAL_ICONS });
+    await page.addStyleTag({ content: LIGHT_DASHBOARD_STYLE });
+    await page.click('#chTabLayouts');
+    await page.waitForSelector('#chDefaultEditor .ch-row');
+    await page.waitForTimeout(500);
+    await page.screenshot({ path: `${OUTPUT_DIR}/admin-layouts-light.png`, fullPage: true });
+    await page.locator('#chDefaultEditor .ch-list .ch-row').first().locator('.ch-act-menu').click();
+    await page.screenshot({ path: `${OUTPUT_DIR}/admin-layouts-light-menu.png`, fullPage: true });
 });

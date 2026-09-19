@@ -3130,15 +3130,16 @@
 
     function renderSectionRow(item, parent, index, siblings) {
         const entry = editor.known[item.Key] || { label: item.Label || item.Key, origin: 'other', present: false, family: false };
-        const row = el('div', 'ch-row' + (parent ? ' ch-row-child' : '') + (item.Visible === false ? ' ch-row-hidden' : '') + (entry.present ? '' : ' ch-row-absent'));
+        // The administration editor has no home page under it: "not displayed right now" would be noise there.
+        const absent = !entry.present && editor.mode !== 'default';
+        const row = el('div', 'ch-row' + (parent ? ' ch-row-child' : '') + (item.Visible === false ? ' ch-row-hidden' : '') + (absent ? ' ch-row-absent' : ''));
         row._item = item;
         row._parent = parent;
         const subtitle = [originLabel(entry.origin)];
         if (entry.family) {
             subtitle.push(t('family'));
         }
-        // The administration editor has no home page under it: "not displayed right now" would be noise there.
-        if (!entry.present && entry.origin !== 'customized' && editor.mode !== 'default') {
+        if (absent && entry.origin !== 'customized') {
             subtitle.push(t('absent'));
         }
         const badge = formatBadge(item);

@@ -73,7 +73,7 @@ test('every clamp(), min(), max() and color-mix() value follows a plain declarat
             modern++;
             const fallback = rule.declarations.slice(0, index).some((earlier) => earlier.property === declaration.property
                 && !isModernDeclaration(earlier.property, earlier.value)
-                && (!declaration.value.includes('color-mix(') || earlier.value.includes('rgba(')));
+                && (!declaration.value.includes('color-mix(') || /rgba\(|#[0-9a-f]{3,8}\b/i.test(earlier.value)));
             if (!fallback) {
                 offenders.push(`${rule.selector} { ${declaration.property}: ${declaration.value} }`);
             }

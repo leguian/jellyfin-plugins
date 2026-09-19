@@ -239,7 +239,7 @@
 
 .ch-hint {
     font-size: 0.85em;
-    opacity: 0.65;
+    opacity: 0.75;
     margin: 0 0 0.6em;
 }
 
@@ -406,7 +406,7 @@
 
 .ch-row-sub {
     font-size: 0.75em;
-    opacity: 0.55;
+    opacity: 0.7;
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
@@ -570,7 +570,7 @@
 
 .ch-empty {
     text-align: center;
-    opacity: 0.6;
+    opacity: 0.7;
     padding: 2em 1em;
 }
 
@@ -737,6 +737,11 @@
 /* The box shows the focus (border below): only engines that know :focus-within lose the outline of the field. */
 .ch-search-box:focus-within .ch-search {
     outline: none;
+}
+
+.ch-search::placeholder {
+    color: inherit;
+    opacity: 0.6;
 }
 
 .ch-filtered .ch-handle {
@@ -956,9 +961,36 @@
     padding: 0.6em 1.3em;
 }
 
-/* Embedded editor sits inside an administration card: no second frame. */
+/* Embedded editor sits inside an administration card: no second frame. The dashboard may be light or dark: the
+   text is the one of the page, and nothing keeps a surface or an accent made for the dark dialog. */
 .ch-embedded .ch-dialog {
     border: 0;
+    color: inherit;
+}
+
+.ch-embedded .ch-folder-name {
+    background: rgba(128, 128, 128, 0.12);
+    background: color-mix(in srgb, currentColor 6%, transparent);
+}
+
+/* Accents lean towards the text colour: darker on a light page, lighter on a dark one. */
+.ch-embedded .ch-btn-danger,
+.ch-embedded .ch-act-remove:hover {
+    color: #e05555;
+    color: color-mix(in srgb, #e53935 75%, currentColor);
+}
+
+.ch-embedded .ch-row-icon:not(.ch-origin-other),
+.ch-embedded .ch-act-add,
+.ch-embedded .ch-origin-customized,
+.ch-embedded .ch-hero-toggle[aria-checked="true"] .material-icons {
+    color: #0093c6;
+    color: color-mix(in srgb, #00a4dc 65%, currentColor);
+}
+
+.ch-embedded .ch-row-icon.ch-origin-jellyfin {
+    color: #9a4db3;
+    color: color-mix(in srgb, #aa5cc3 78%, currentColor);
 }
 
 .ch-embedded .ch-dialog-footer {
