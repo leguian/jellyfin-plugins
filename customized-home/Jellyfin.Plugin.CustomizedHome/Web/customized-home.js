@@ -368,9 +368,43 @@
         });
     }
 
+    const SLUG_MAX_LENGTH = 80;
+    // Accents of the Latin, Greek and Cyrillic letters. The marks of the other scripts are not decoration (vowel
+    // signs of the Indic scripts, voicing of the kana...): they stay in the slug.
+    const COMBINING_DIACRITICS = /[\u0300-\u036f]/g;
+    const LEGACY_SLUG_SEPARATORS = /[^a-z0-9]+/g;
+    // Everything that is not a letter, a digit or a mark, in any script. Built at run time: an engine without Unicode
+    // property escapes (Chromium < 64, Safari < 11.1) would reject the whole script for a literal it cannot parse.
+    // There, an approximation: ASCII as before, and outside ASCII everything but the punctuation and symbol blocks.
+    const SLUG_SEPARATORS = (function () {
+        try {
+            return new RegExp('[^\\p{L}\\p{N}\\p{M}]+', 'gu');
+        } catch (e) {
+            return /[^a-z0-9\u00c0-\u00d6\u00d8-\u00f6\u00f8-\u1fff\u2c00-\u2dff\u3005-\u3007\u3040-\u309f\u30a1-\u30fa\u30fc-\u31ff\u3400-\ud7ff\uf900-\ufdff\ufe70-\ufeff\uff10-\uff19\uff21-\uff3a\uff41-\uff5a\uff66-\uffdc]+/g;
+        }
+    })();
+
+    function normalizeText(text, form) {
+        return typeof text.normalize === 'function' ? text.normalize(form) : text;
+    }
+
+    function slugWith(text, separators) {
+        const base = normalizeText(String(text || '').toLowerCase(), 'NFD').replace(COMBINING_DIACRITICS, '');
+        // Composed again: a shorter key, and the same one whatever form the title came in.
+        return normalizeText(base.replace(separators, '-').replace(/^-+|-+$/g, ''), 'NFC').substring(0, SLUG_MAX_LENGTH)
+            // The cut may fall inside a surrogate pair: half a character would not survive the trip to the server.
+            .replace(/[\ud800-\udbff]$/, '');
+    }
+
+    // Letters and digits of any script. For a title in ASCII or in accented Latin letters the result is the one of
+    // legacySlug, byte for byte: saved layouts hold these keys.
     function slug(text) {
-        return String(text || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '')
-            .replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').substring(0, 80);
+        return slugWith(text, SLUG_SEPARATORS);
+    }
+
+    // Up to 1.8.3 only a-z and 0-9 were kept: "Популярное" and "最新电影" both gave an empty slug.
+    function legacySlug(text) {
+        return slugWith(text, LEGACY_SLUG_SEPARATORS);
     }
 
     function storageGet(key) {
@@ -2159,6 +2193,28 @@
         return null;
     }
 
+    function layoutHoldsKey(key) {
+        return layoutSections(state.layout || {}).some(function (entry) {
+            return entry.item.Key === key;
+        });
+    }
+
+    // Key of a section that is only known by its title.
+    function titleKey(prefix, label) {
+        const text = slug(label);
+        if (!text) {
+            // Nothing but symbols (stars, emoji): a hash keeps two such sections apart. "~" never comes out of slug().
+            return prefix + '~' + textHash(normalizeText(String(label).toLowerCase(), 'NFC')).toString(36);
+        }
+        // A layout saved before the other scripts were kept ("Coup de cœur" was "coup-de-c-ur") keeps its section
+        // for as long as it holds that key.
+        const legacy = legacySlug(label);
+        if (legacy && legacy !== text && layoutHoldsKey(prefix + legacy) && !layoutHoldsKey(prefix + text)) {
+            return prefix + legacy;
+        }
+        return prefix + text;
+    }
+
     function describeSection(node, wrapperType, index, subIndex, ctx) {
         const info = { el: node, key: null, label: sectionTitle(node), origin: 'other', family: null, instance: null, origOrder: 0 };
 
@@ -2203,7 +2259,7 @@
         // settings could not be read: its key must be the library id, never its name.
         const libraryId = libraryIdFromSection(node) || (type === 'latestmedia' ? libraryIdFromTitle(info.label, ctx) : null);
         if (type === 'latestmedia' || (!type && libraryId)) {
-            info.key = 'jf:latestmedia:' + (libraryId || slug(info.label));
+            info.key = libraryId ? 'jf:latestmedia:' + libraryId : titleKey('jf:latestmedia:', info.label);
             info.origin = 'jellyfin';
             return info;
         }
@@ -2213,7 +2269,7 @@
             return info;
         }
 
-        info.key = info.label ? 'title:' + slug(info.label) : 'anon:' + index + ':' + (subIndex || 0);
+        info.key = info.label ? titleKey('title:', info.label) : 'anon:' + index + ':' + (subIndex || 0);
         return info;
     }
 
