@@ -9,6 +9,22 @@
     "imageUrl": "https://raw.githubusercontent.com/leguian/jellyfin-plugins/main/customized-home/logo.png",
     "versions": [
       {
+        "version": "1.8.4.2",
+        "changelog": "Readability of the administration page on a light dashboard: secondary text and the buttons of the destructive actions now meet the WCAG AA contrast minimum on both a light and a dark dashboard.",
+        "targetAbi": "12.0.0.0",
+        "sourceUrl": "https://github.com/leguian/jellyfin-plugins/releases/download/customized-home-v1.8.4.2/customized-home_1.8.4.2_jellyfin-12.zip",
+        "checksum": "90dbf0602bb3596cfae08394d4608d17",
+        "timestamp": "2026-09-19T16:53:28Z"
+      },
+      {
+        "version": "1.8.4.2",
+        "changelog": "Readability of the administration page on a light dashboard: secondary text and the buttons of the destructive actions now meet the WCAG AA contrast minimum on both a light and a dark dashboard.",
+        "targetAbi": "10.11.0.0",
+        "sourceUrl": "https://github.com/leguian/jellyfin-plugins/releases/download/customized-home-v1.8.4.2/customized-home_1.8.4.2_jellyfin-10.11.zip",
+        "checksum": "71af829c3defb1531ef9eea3366955e0",
+        "timestamp": "2026-09-19T16:53:28Z"
+      },
+      {
         "version": "1.8.4.1",
         "changelog": "Housekeeping. The administration page asks its questions in the page instead of a browser prompt, like the editor does. The dots of the hero are easier to hit on a touch screen. At server start the layouts left behind by users deleted while the plugin was not running are removed. Saving the default layout or reading a genre thumbnail answers a readable error instead of a generic failure when the disk refuses, and a default layout that could not be written is no longer applied until the next restart.",
         "targetAbi": "12.0.0.0",
