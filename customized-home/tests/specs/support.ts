@@ -106,6 +106,8 @@ export interface MockOptions {
     failures?: Record<string, number>;
     /** "<METHOD> <path>" -> milliseconds before the answer. */
     delays?: Record<string, number>;
+    /** Stylesheet text injected instead of the plugin stylesheet (see legacyEngineStyle). */
+    style?: string;
 }
 
 interface MockWindow {
@@ -180,8 +182,26 @@ export async function injectPlugin(page: Page, options: MockOptions): Promise<vo
         (window as unknown as { __mock: Record<string, unknown> }).__mock = state;
     }, mockState(options));
     await page.addScriptTag({ path: STUB_PATH });
-    await page.addStyleTag({ path: STYLE_PATH });
+    await page.addStyleTag(options.style === undefined ? { path: STYLE_PATH } : { content: options.style });
     await page.addScriptTag({ path: SCRIPT_PATH });
+}
+
+/** Values and properties that Chromium up to 79 (webOS up to 6) and iOS up to 14.4 do not know. */
+const MODERN_VALUE = /(^|[^a-z-])(clamp|min|max)\(|color-mix\(/;
+
+export function isModernDeclaration(property: string, value: string): boolean {
+    return property === 'inset' || MODERN_VALUE.test(value);
+}
+
+/**
+ * The plugin stylesheet as an older engine reads it: declarations it does not know are dropped one by one, and a
+ * rule whose selector it does not know (:focus-visible, :focus-within) is dropped as a whole.
+ */
+export function legacyEngineStyle(): string {
+    const css = readFileSync(STYLE_PATH, 'utf8').replace(/\/\*[\s\S]*?\*\//g, '');
+    return css
+        .replace(/([^{}]*)\{([^{}]*)\}/g, (rule: string, selector: string) => (/:focus-visible|:focus-within/.test(selector) ? '' : rule))
+        .replace(/([\w-]+)\s*:\s*([^;{}]+);/g, (declaration: string, property: string, value: string) => (isModernDeclaration(property, value) ? '' : declaration));
 }
 
 /** Loads the mocked home page and the plugin without waiting for a layout to be applied (failing server...). */

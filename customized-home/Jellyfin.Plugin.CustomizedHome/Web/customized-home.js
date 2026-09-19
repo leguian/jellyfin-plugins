@@ -417,6 +417,26 @@
         }
     }
 
+    // The order of the sections relies on a flex container whose built-in wrappers are "display: contents". An
+    // engine that does not know it (Chromium < 65, Safari < 11.1) would pin every wrapped section at the top of the
+    // page: there the container keeps its native flow. Sections are still hidden and formatted, not reordered.
+    function canReorder() {
+        return !!(window.CSS && typeof window.CSS.supports === 'function' && window.CSS.supports('display', 'contents'));
+    }
+
+    // What the plugin adds finds its place through "order"; without reordering it is inserted where it belongs
+    // (the native sections themselves are never moved).
+    function insertOwnNode(container, node, atTop) {
+        if (canReorder()) {
+            container.appendChild(node);
+        } else if (atTop) {
+            const hero = node.classList.contains('ch-hero') ? null : container.querySelector(':scope > .ch-hero');
+            container.insertBefore(node, hero ? hero.nextSibling : container.firstChild);
+        } else {
+            container.insertBefore(node, container.querySelector(':scope > .ch-customize-bar'));
+        }
+    }
+
     let toastTimer = null;
     function toast(message) {
         let node = document.querySelector('.ch-toast');
@@ -1180,7 +1200,7 @@
             + '<div is="emby-scroller" class="padded-top-focusscale padded-bottom-focusscale" data-centerfocus="true">'
             + '<div is="emby-itemscontainer" class="itemsContainer scrollSlider focuscontainer-x ch-items"></div>'
             + '</div>';
-        container.appendChild(node);
+        insertOwnNode(container, node, false);
         return node;
     }
 
@@ -1924,7 +1944,7 @@
                 }).join('') + '</div>';
         }
         node.innerHTML = html;
-        container.appendChild(node);
+        insertOwnNode(container, node, true);
         startHero(node, hero.IntervalSeconds, startIndex);
         if (focusedControl) {
             const target = node.querySelector('.ch-hero-slide.ch-active .' + focusedControl) || node.querySelector('.ch-hero-slide.ch-active .ch-hero-play');
@@ -2366,7 +2386,9 @@
         }
         const ctx = state.ctx;
         ctx.hss = !!container.querySelector(':scope > [data-page]');
+        const ordered = canReorder();
         setClass(container, 'ch-container', true);
+        setClass(container, 'ch-ordered', ordered);
 
         const layout = state.layout || { Items: [], HideUnlisted: false };
         syncIntegratedSections(container, wantedIntegrated(layout));
@@ -2443,20 +2465,25 @@
                 if (!item.Id) {
                     return;
                 }
-                keptFolders[item.Id] = true;
-                const collapsed = isFolderCollapsed(item);
-                const header = ensureFolderHeader(container, item, existingFolders);
-                setOrder(header, order);
+                // Without reordering a header cannot sit above its members: no header, and nothing to collapse.
+                const header = ordered ? ensureFolderHeader(container, item, existingFolders) : null;
+                const collapsed = ordered && isFolderCollapsed(item);
+                if (header) {
+                    keptFolders[item.Id] = true;
+                    setOrder(header, order);
+                }
                 order += ORDER_STEP;
                 let visibleMembers = 0;
                 (item.Items || []).forEach(function (member) {
                     if (member.Type === 'folder' || !member.Key) {
                         return;
                     }
-                    visibleMembers += place(member, item.Visible !== false && member.Visible !== false, item, collapsed);
+                    visibleMembers += place(member, item.Visible !== false && member.Visible !== false, header ? item : null, collapsed);
                 });
-                updateFolderHeader(header, item, collapsed, visibleMembers);
-                setClass(header, 'ch-hidden', item.Visible === false || visibleMembers === 0);
+                if (header) {
+                    updateFolderHeader(header, item, collapsed, visibleMembers);
+                    setClass(header, 'ch-hidden', item.Visible === false || visibleMembers === 0);
+                }
             } else if (item.Key) {
                 place(item, item.Visible !== false, null, false);
             }
@@ -2585,7 +2612,7 @@
             });
         }
         setOrder(notice, ORDER_NOTICE);
-        container.appendChild(notice);
+        insertOwnNode(container, notice, true);
     }
 
     function layoutReplacesHome(layout) {
