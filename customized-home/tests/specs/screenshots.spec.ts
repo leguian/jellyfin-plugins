@@ -37,6 +37,27 @@ test('home with colored genre cards', async ({ page }) => {
     await page.locator('[data-ch-key="ch:allGenres"]').screenshot({ path: `${OUTPUT_DIR}/home-all-genres-colors.png` });
 });
 
+test('home with a rotating hero: pause button next to the dots, keyboard focus on it', async ({ page }) => {
+    const media = [1, 2, 3].map((index) => ({
+        Id: `hero-${index}`, Name: `Featured movie ${index}`, Type: 'Movie' as const, MediaType: 'Video', ProductionYear: 2024,
+        Overview: 'A synopsis long enough to show how the text sits above the actions of the hero.', BackdropImageTags: ['backdrop']
+    }));
+    await openHome(page, {
+        enableIntegratedSections: true,
+        heroItems: { recentMovies: media },
+        layout: {
+            Version: 1, HideUnlisted: false, Items: [{ Type: 'section', Key: 'jf:resume', Visible: true }],
+            Hero: { Enabled: true, Sources: ['recentMovies'], Count: 3, IntervalSeconds: 10, ExcludePlayed: true, RequireBackdrop: true }
+        }
+    });
+    await page.addStyleTag({ url: MATERIAL_ICONS });
+    await page.locator('.ch-hero .ch-hero-pause').waitFor();
+    await page.keyboard.press('Tab');
+    await page.locator('.ch-hero .ch-hero-pause').focus();
+    await page.waitForTimeout(500);
+    await page.screenshot({ path: `${OUTPUT_DIR}/home-hero-pause.png` });
+});
+
 test('user editor', async ({ page }) => {
     await openHome(page, { enableIntegratedSections: true, layout: DEFAULT_LAYOUT });
     await page.addStyleTag({ url: MATERIAL_ICONS });

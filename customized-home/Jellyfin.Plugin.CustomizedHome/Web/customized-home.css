@@ -1472,11 +1472,24 @@ html.ch-hero-under-header .skinHeader {
     background: rgba(255, 255, 255, 0.32);
 }
 
+/* !important: the web client removes the outline of its buttons with ".emby-button { outline: none !important }",
+   which left the play, trailer and details buttons without any sign of the keyboard focus. */
 .ch-hero-btn:focus-visible,
 .ch-hero-round:focus-visible,
 .ch-hero-nav:focus-visible,
+.ch-hero-pause:focus-visible,
 .ch-hero-dot:focus-visible {
-    outline: 2px solid #00a4dc;
+    outline: 2px solid #00a4dc !important;
+    outline-offset: 2px;
+}
+
+/* TV layout: the remote moves a plain :focus, and older engines do not know :focus-visible. */
+.layout-tv .ch-hero-btn:focus,
+.layout-tv .ch-hero-round:focus,
+.layout-tv .ch-hero-nav:focus,
+.layout-tv .ch-hero-pause:focus,
+.layout-tv .ch-hero-dot:focus {
+    outline: 2px solid #00a4dc !important;
     outline-offset: 2px;
 }
 
@@ -1549,7 +1562,36 @@ html.ch-hero-under-header .skinHeader {
     bottom: 7.4em;
     z-index: 2;
     display: flex;
+    align-items: center;
     gap: 0.45em;
+}
+
+/* Stops and resumes the rotation: large enough for a finger (28px at the default font size). */
+.ch-hero-pause {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    box-sizing: border-box;
+    font: inherit;
+    width: 1.75em;
+    height: 1.75em;
+    min-width: 24px;
+    min-height: 24px;
+    margin: 0 0.3em 0 0;
+    padding: 0;
+    border: 0;
+    border-radius: 50%;
+    color: #fff;
+    background: rgba(0, 0, 0, 0.45);
+    cursor: pointer;
+}
+
+.ch-hero-pause:hover {
+    background: rgba(0, 0, 0, 0.7);
+}
+
+.ch-hero-pause .material-icons {
+    font-size: 1.15em;
 }
 
 .ch-hero-dot {

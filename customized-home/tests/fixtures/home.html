@@ -6,6 +6,10 @@
     <style>
         body { background: #101010; color: #ddd; font-family: sans-serif; margin: 0; }
         .hide { display: none !important; }
+        /* Same rules as jellyfin-web: the tabs of the home page are shown and hidden with "is-active"
+           (src/styles/librarybrowser.scss), and its buttons never show an outline (emby-button.scss). */
+        .pageTabContent:not(.is-active) { display: none; }
+        .emby-button { outline: none !important; }
         /* Same rule as jellyfin-web src/styles/site.scss: plugin pages must override it on purpose. */
         @media all and (min-width: 50em) { form { max-width: 54em; } }
         .verticalSection { padding: 0.5em 1em; }
@@ -22,7 +26,7 @@
     <!-- Same structure as jellyfin-web: #homeTab .sections > .verticalSection.sectionN -->
     <div class="skinHeader skinHeader-withBackground"></div>
     <div id="indexPage" class="page homePage">
-        <div id="homeTab">
+        <div id="homeTab" class="tabContent pageTabContent is-active" data-index="0">
             <div class="sections homeSectionsContainer">
                 <div class="verticalSection section0"><h2 class="sectionTitle">My Media</h2><div class="itemsContainer"><div class="card"></div></div></div>
                 <div class="verticalSection section1"><h2 class="sectionTitle">Continue Watching</h2><div class="itemsContainer"><div class="card"></div></div></div>
@@ -39,6 +43,7 @@
                 <div class="verticalSection section9"></div>
             </div>
         </div>
+        <div id="favoritesTab" class="tabContent pageTabContent" data-index="1"><div class="sections"></div></div>
     </div>
     <div id="adminHost"></div>
 </body>

@@ -159,6 +159,8 @@
             latestUnavailable: 'Recently added (library not available)',
             heroMore: 'More info',
             heroPrev: 'Previous media',
+            heroPause: 'Pause the automatic rotation',
+            heroResumeRotation: 'Resume the automatic rotation',
             heroNext: 'Next media',
             heroPosition: '{0} of {1}',
             heroHours: '{0} h {1} min',
@@ -297,6 +299,8 @@
             latestUnavailable: 'Ajouts récents (médiathèque indisponible)',
             heroMore: "Plus d'infos",
             heroPrev: 'Média précédent',
+            heroPause: 'Mettre la rotation automatique en pause',
+            heroResumeRotation: 'Reprendre la rotation automatique',
             heroNext: 'Média suivant',
             heroPosition: '{0} sur {1}',
             heroHours: '{0} h {1} min',
@@ -327,7 +331,9 @@
         retryAt: 0,
         retryTimer: null,
         warnedEmptyHome: false,
-        noticeDismissed: false
+        noticeDismissed: false,
+        // The user stopped the rotation of the hero: it stays stopped, whatever rebuilds the hero, until they resume.
+        heroPaused: false
     };
 
     /* ------------------------------------------------------------------ */
@@ -613,6 +619,7 @@
         state.retryTimer = null;
         state.warnedEmptyHome = false;
         state.noticeDismissed = false;
+        state.heroPaused = false;
     }
 
     // Returns false while nobody is logged in.
@@ -1776,10 +1783,25 @@
         });
     }
 
+    function prefersReducedMotion() {
+        return !!(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches);
+    }
+
+    // A toggle button: the name stays, aria-pressed says whether the rotation is stopped.
+    function updateHeroPause(node) {
+        const button = node.querySelector('.ch-hero-pause');
+        if (button) {
+            button.setAttribute('aria-pressed', state.heroPaused ? 'true' : 'false');
+            button.title = t(state.heroPaused ? 'heroResumeRotation' : 'heroPause');
+            button.querySelector('.material-icons').textContent = state.heroPaused ? 'play_arrow' : 'pause';
+        }
+    }
+
     function startHero(node, intervalSeconds, startIndex) {
         const slides = node.querySelectorAll('.ch-hero-slide');
         const dots = node.querySelectorAll('.ch-hero-dot');
-        const reducedMotion = !!(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches);
+        const reducedMotion = prefersReducedMotion();
+        // paused: for as long as the pointer or the focus is on the hero. state.heroPaused: asked for by the user.
         const carousel = { index: 0, timer: null, paused: false };
         node._chHero = carousel;
 
@@ -1793,7 +1815,7 @@
 
         function schedule() {
             clearTimeout(carousel.timer);
-            if (intervalSeconds <= 0 || reducedMotion || slides.length < 2 || carousel.paused || node._chHero !== carousel) {
+            if (intervalSeconds <= 0 || reducedMotion || slides.length < 2 || carousel.paused || state.heroPaused || node._chHero !== carousel) {
                 return;
             }
             carousel.timer = setTimeout(function () {
@@ -1845,6 +1867,12 @@
         }
 
         node.addEventListener('click', function (e) {
+            if (e.target.closest('.ch-hero-pause')) {
+                state.heroPaused = !state.heroPaused;
+                updateHeroPause(node);
+                schedule();
+                return;
+            }
             const control = e.target.closest('.ch-hero-prev, .ch-hero-next, .ch-hero-dot');
             if (control) {
                 if (control.classList.contains('ch-hero-dot')) {
@@ -1896,6 +1924,7 @@
             swipeStart = null;
         });
 
+        updateHeroPause(node);
         show(startIndex || 0);
     }
 
@@ -1903,6 +1932,8 @@
     const HERO_NAVIGATION_SETTLE_MS = 300;
     let heroChromeReady = false;
     let heroChromeScheduled = false;
+    let heroTabObserver = null;
+    let heroTab = null;
 
     function currentHero() {
         const container = state.container;
@@ -1950,6 +1981,24 @@
         });
     }
 
+    // The web client switches between the tabs of the home page (Home, Favorites) with the "is-active" class of
+    // their panels (maintabsmanager.js); its "tabchange" events do not bubble and no view is shown. The header must
+    // not stay see-through over the favorites: the class of the panel that holds the hero is watched.
+    function observeHeroTab(node) {
+        const tab = node.closest('.pageTabContent') || node.closest('#homeTab');
+        if (!tab || tab === heroTab || !window.MutationObserver) {
+            return;
+        }
+        if (heroTabObserver) {
+            heroTabObserver.disconnect();
+        }
+        heroTab = tab;
+        heroTabObserver = new MutationObserver(function () {
+            updateHeroChrome(true);
+        });
+        heroTabObserver.observe(tab, { attributes: true, attributeFilter: ['class'] });
+    }
+
     function initHeroChrome() {
         if (heroChromeReady) {
             return;
@@ -1973,7 +2022,7 @@
         const shownId = shown ? shown.getAttribute('data-id') : null;
         const previousNode = container.querySelector(':scope > .ch-hero');
         const focusedControl = previousNode && previousNode.contains(document.activeElement)
-            ? ['ch-hero-play', 'ch-hero-restart', 'ch-hero-trailer', 'ch-hero-favorite', 'ch-hero-played', 'ch-hero-more'].filter(function (name) {
+            ? ['ch-hero-play', 'ch-hero-restart', 'ch-hero-trailer', 'ch-hero-favorite', 'ch-hero-played', 'ch-hero-more', 'ch-hero-pause'].filter(function (name) {
                 return document.activeElement.classList.contains(name);
             })[0] || 'ch-hero-play'
             : null;
@@ -1994,7 +2043,11 @@
         if (items.length > 1) {
             html += '<button type="button" class="ch-hero-nav ch-hero-prev" aria-label="' + escapeHtml(t('heroPrev')) + '"><span class="material-icons" aria-hidden="true">chevron_left</span></button>'
                 + '<button type="button" class="ch-hero-nav ch-hero-next" aria-label="' + escapeHtml(t('heroNext')) + '"><span class="material-icons" aria-hidden="true">chevron_right</span></button>'
-                + '<div class="ch-hero-dots">' + items.map(function (item, index) {
+                // Something that moves on its own for more than five seconds can be stopped (WCAG 2.2.2): a real
+                // button, since hovering is no answer on a touch screen and the focus leaves the hero sooner or later.
+                + '<div class="ch-hero-dots">' + (hero.IntervalSeconds > 0 && !prefersReducedMotion()
+                    ? '<button type="button" class="ch-hero-pause" aria-pressed="false" aria-label="' + escapeHtml(t('heroPause')) + '"><span class="material-icons" aria-hidden="true">pause</span></button>'
+                    : '') + items.map(function (item, index) {
                     return '<button type="button" class="ch-hero-dot" data-ch-index="' + index + '" aria-label="' + escapeHtml(t('heroPosition', index + 1, items.length)) + '"></button>';
                 }).join('') + '</div>';
         }
@@ -2002,12 +2055,14 @@
         insertOwnNode(container, node, true);
         startHero(node, hero.IntervalSeconds, startIndex);
         if (focusedControl) {
-            const target = node.querySelector('.ch-hero-slide.ch-active .' + focusedControl) || node.querySelector('.ch-hero-slide.ch-active .ch-hero-play');
+            const target = node.querySelector('.ch-hero-slide.ch-active .' + focusedControl + ', .ch-hero-dots .' + focusedControl)
+                || node.querySelector('.ch-hero-slide.ch-active .ch-hero-play');
             if (target) {
                 target.focus();
             }
         }
         initHeroChrome();
+        observeHeroTab(node);
         updateHeroChrome(true);
         return node;
     }

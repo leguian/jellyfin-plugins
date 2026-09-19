@@ -345,7 +345,8 @@ test('rotates on its own and pauses while hovered', async ({ page }) => {
     await page.locator('.ch-hero').hover();
     const held = await active.getAttribute('data-id');
     await page.waitForTimeout(1600);
-    await expect(active).toHaveAttribute('data-id', held ?? '');
+    // Read once: an assertion that retries would pass when the rotation comes round to the same slide.
+    expect(await active.getAttribute('data-id')).toBe(held);
 });
 
 test('shows no hero without sources, without media, or when plugin sections are disabled', async ({ page }) => {
@@ -421,4 +422,99 @@ test('switches the hero off when its last source is removed', async ({ page }) =
     await page.keyboard.press('Escape');
     await page.locator('.ch-dialog-footer .ch-save').click();
     await expect(page.locator('.ch-hero')).toHaveCount(0);
+});
+
+/* ---- pause control, focus ring, tabs of the home page ---- */
+
+/** Pointer and focus away from the hero: neither of the two automatic pauses is holding the rotation. */
+async function leaveHero(page: import('@playwright/test').Page): Promise<void> {
+    await page.mouse.move(2, 2);
+    await page.evaluate(() => (document.activeElement as HTMLElement | null)?.blur());
+}
+
+test('a pause button stops the rotation until the user resumes it, from the keyboard as well', async ({ page }) => {
+    await openHome(page, { layout: layout(hero({ IntervalSeconds: 1 })), enableIntegratedSections: true, heroItems: HERO_ITEMS });
+    const active = page.locator('.ch-hero-slide.ch-active');
+    const pause = page.locator('.ch-hero .ch-hero-pause');
+    await expect(pause).toHaveAttribute('aria-pressed', 'false');
+    await expect(pause).toHaveAttribute('aria-label', 'Pause the automatic rotation');
+    // Reachable by touch: a target of 24 CSS pixels at least (WCAG 2.5.8).
+    const box = await pause.boundingBox();
+    expect(Math.min(box?.width ?? 0, box?.height ?? 0)).toBeGreaterThanOrEqual(24);
+
+    await pause.focus();
+    await page.keyboard.press('Enter');
+    await expect(pause).toHaveAttribute('aria-pressed', 'true');
+    await expect(pause.locator('.material-icons')).toHaveText('play_arrow');
+    await leaveHero(page);
+    const held = await active.getAttribute('data-id');
+    await page.waitForTimeout(1600);
+    // Read once: an assertion that retries would pass when the rotation comes round to the same slide.
+    expect(await active.getAttribute('data-id')).toBe(held);
+
+    // The web client wiped the container, the hero is rendered again: still stopped.
+    await page.evaluate(() => document.querySelector('.ch-hero')?.remove());
+    await expect(pause).toHaveAttribute('aria-pressed', 'true');
+    await leaveHero(page);
+    const rebuilt = await active.getAttribute('data-id');
+    await page.waitForTimeout(1600);
+    expect(await active.getAttribute('data-id')).toBe(rebuilt);
+
+    await pause.click();
+    await expect(pause).toHaveAttribute('aria-pressed', 'false');
+    await expect(pause.locator('.material-icons')).toHaveText('pause');
+    await leaveHero(page);
+    await expect(active).not.toHaveAttribute('data-id', rebuilt ?? '', { timeout: 3000 });
+});
+
+test('no pause button when nothing rotates on its own', async ({ page }) => {
+    await openHome(page, { layout: layout(hero({ IntervalSeconds: 0 })), enableIntegratedSections: true, heroItems: HERO_ITEMS });
+    await expect(page.locator('.ch-hero-dot')).toHaveCount(3);
+    await expect(page.locator('.ch-hero-pause')).toHaveCount(0);
+
+    await page.emulateMedia({ reducedMotion: 'reduce' });
+    await openHome(page, { layout: layout(hero({ IntervalSeconds: 5 })), enableIntegratedSections: true, heroItems: HERO_ITEMS });
+    await expect(page.locator('.ch-hero-dot')).toHaveCount(3);
+    await expect(page.locator('.ch-hero-pause')).toHaveCount(0);
+});
+
+test('hero buttons show the keyboard focus although the web client removes the outline of its buttons', async ({ page }) => {
+    await openHome(page, { layout: layout(hero({ IntervalSeconds: 5 })), enableIntegratedSections: true, heroItems: HERO_ITEMS });
+    await expect(page.locator('.ch-hero-slide.ch-active .ch-hero-play')).toBeVisible();
+    // What the emby-button element does when the web client upgrades it; the fixture holds its "outline: none !important".
+    await page.evaluate(() => document.querySelectorAll('.ch-hero [is="emby-button"], .ch-hero [is="emby-linkbutton"]').forEach((node) => node.classList.add('emby-button')));
+
+    const controls = ['.ch-hero-slide.ch-active .ch-hero-play', '.ch-hero-slide.ch-active .ch-hero-more', '.ch-hero-slide.ch-active .ch-hero-favorite', '.ch-hero-pause', '.ch-hero-dot'];
+    for (const selector of controls) {
+        const control = page.locator(selector).first();
+        // Reached with the keyboard: a focus set by a script alone may not count as visible.
+        await control.focus();
+        await page.keyboard.press('Shift+Tab');
+        await page.keyboard.press('Tab');
+        await expect(control).toBeFocused();
+        await expect(control).toHaveCSS('outline-style', 'solid');
+        await expect(control).toHaveCSS('outline-color', 'rgb(0, 164, 220)');
+    }
+});
+
+test('the header gets its background back on the Favorites tab, and lets the hero through again on the Home tab', async ({ page }) => {
+    await openHome(page, { layout: layout(hero()), enableIntegratedSections: true, heroItems: HERO_ITEMS });
+    const root = page.locator('html');
+    await expect(root).toHaveClass(/ch-hero-under-header/);
+
+    // What maintabsmanager.js of the web client does on "beforetabchange": no view event, nothing that bubbles.
+    const selectTab = (id: string): Promise<void> => page.evaluate((active) => {
+        document.querySelectorAll('#indexPage > .pageTabContent').forEach((panel) => panel.classList.toggle('is-active', panel.id === active));
+    }, id);
+
+    await selectTab('favoritesTab');
+    await expect(page.locator('.ch-hero')).toBeHidden();
+    await expect(root).not.toHaveClass(/ch-hero-under-header/);
+    await expect(page.locator('.skinHeader')).toHaveCSS('background-color', 'rgb(32, 32, 32)');
+
+    await selectTab('homeTab');
+    await expect(root).toHaveClass(/ch-hero-under-header/);
+    const box = await page.locator('.ch-hero').evaluate((node) => ({ top: node.getBoundingClientRect().top + window.scrollY, left: node.getBoundingClientRect().left }));
+    expect(box.top).toBeCloseTo(0, 0);
+    expect(box.left).toBeCloseTo(0, 0);
 });
