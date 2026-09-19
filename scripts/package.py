@@ -89,18 +89,18 @@ def target_abi(jellyfin_version: str) -> str:
     return f"{jellyfin_version}.0"
 
 
-def check_jellyfin_references(build_dir: pathlib.Path, project: pathlib.Path, jellyfin_version: str) -> None:
-    """Fails when NuGet resolved another Jellyfin version than the one the targetAbi is derived from."""
-    deps_path = build_dir / f"{project.stem}.deps.json"
-    deps = json.loads(deps_path.read_text(encoding="utf-8"))
-    found: dict = {}
-    for libraries in deps.get("targets", {}).values():
-        for name, library in libraries.items():
-            if name.split("/")[0] == project.stem:
-                found = {key: value for key, value in library.get("dependencies", {}).items() if key.startswith("Jellyfin.")}
-    if not found:
-        raise RuntimeError(f"no Jellyfin dependency found in {deps_path}")
-    wrong = {key: value for key, value in found.items() if value != jellyfin_version}
+def check_jellyfin_references(project: pathlib.Path, jellyfin_version: str) -> None:
+    """Fails when NuGet resolved another Jellyfin version than the one the targetAbi is derived from.
+
+    Reads the restore result (obj/project.assets.json): the .deps.json of the build output does not list
+    packages whose runtime assets are excluded with every SDK.
+    """
+    assets_path = project.parent / "obj" / "project.assets.json"
+    assets = json.loads(assets_path.read_text(encoding="utf-8"))
+    found = dict(name.split("/", 1) for name in assets.get("libraries", {}) if name.startswith("Jellyfin."))
+    if "Jellyfin.Controller" not in found or "Jellyfin.Model" not in found:
+        raise RuntimeError(f"Jellyfin packages not found in {assets_path}: {found}")
+    wrong = {name: version for name, version in found.items() if version != jellyfin_version}
     if wrong:
         raise RuntimeError(f"built against {wrong}, expected {jellyfin_version}: the declared targetAbi would be wrong")
 
@@ -152,7 +152,7 @@ def main() -> int:
     # Keep stdout for the JSON summary only: the compiler output goes to stderr.
     subprocess.run(cmd, check=True, stdout=sys.stderr)
     try:
-        check_jellyfin_references(build_dir, project, jellyfin)
+        check_jellyfin_references(project, jellyfin)
     except (OSError, ValueError, RuntimeError) as error:
         print(error, file=sys.stderr)
         return 1
