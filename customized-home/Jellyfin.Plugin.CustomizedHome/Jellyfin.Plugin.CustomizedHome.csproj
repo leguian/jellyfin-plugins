@@ -42,6 +42,11 @@
   </ItemGroup>
 
   <ItemGroup>
+    <!-- Test seams (internal constructors and overloads) stay out of the public surface and of the DI container. -->
+    <InternalsVisibleTo Include="Jellyfin.Plugin.CustomizedHome.Tests" />
+  </ItemGroup>
+
+  <ItemGroup>
     <None Remove="Configuration\configPage.html" />
     <None Remove="Web\customized-home.js" />
     <None Remove="Web\customized-home.css" />

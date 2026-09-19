@@ -46,6 +46,7 @@ public class CustomizedHomeController : ControllerBase
     private readonly WebInjectionService _injection;
     private readonly IUserManager _userManager;
     private readonly IUserViewManager _userViewManager;
+    private readonly Func<PluginConfiguration> _configuration;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="CustomizedHomeController"/> class.
@@ -56,15 +57,32 @@ public class CustomizedHomeController : ControllerBase
     /// <param name="userManager">The user manager.</param>
     /// <param name="userViewManager">The user view manager.</param>
     public CustomizedHomeController(LayoutStore store, GenreImageStore genreImages, WebInjectionService injection, IUserManager userManager, IUserViewManager userViewManager)
+        : this(store, genreImages, injection, userManager, userViewManager, () => Plugin.Instance?.Configuration ?? new PluginConfiguration())
+    {
+    }
+
+    /// <summary>
+    /// Initializes a new instance of the <see cref="CustomizedHomeController"/> class with its own configuration source.
+    /// Test seam: the plugin instance is a process wide singleton that only a running server creates. Being internal,
+    /// this constructor is invisible to the dependency injection container, which only considers public constructors.
+    /// </summary>
+    /// <param name="store">The layout store.</param>
+    /// <param name="genreImages">The genre thumbnail store.</param>
+    /// <param name="injection">The web injection service.</param>
+    /// <param name="userManager">The user manager.</param>
+    /// <param name="userViewManager">The user view manager.</param>
+    /// <param name="configuration">Gets the current plugin configuration.</param>
+    internal CustomizedHomeController(LayoutStore store, GenreImageStore genreImages, WebInjectionService injection, IUserManager userManager, IUserViewManager userViewManager, Func<PluginConfiguration> configuration)
     {
         _store = store;
         _injection = injection;
         _userManager = userManager;
         _userViewManager = userViewManager;
         _genreImages = genreImages;
+        _configuration = configuration;
     }
 
-    private static PluginConfiguration Configuration => Plugin.Instance?.Configuration ?? new PluginConfiguration();
+    private PluginConfiguration Configuration => _configuration();
 
     /// <summary>
     /// Serves the client script injected into the web client.
@@ -213,7 +231,6 @@ public class CustomizedHomeController : ControllerBase
     [HttpGet("DefaultLayout")]
     [Authorize(Policy = Policies.RequiresElevation)]
     [ProducesResponseType(StatusCodes.Status200OK)]
-    [SuppressMessage("Performance", "CA1822:Mark members as static", Justification = "MVC action method.")]
     public ActionResult<HomeLayout> GetDefaultLayout()
     {
         return Configuration.DefaultLayout;

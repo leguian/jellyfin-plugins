@@ -35,7 +35,13 @@ public sealed partial class WebInjectionService : IHostedService, IDisposable
     private const string FileTransformationAssemblyName = "Jellyfin.Plugin.FileTransformation";
     private const string FileTransformationInterface = "Jellyfin.Plugin.FileTransformation.PluginInterface";
 
+    private const int FastAttempts = 5;
+    private static readonly TimeSpan FastRetryDelay = TimeSpan.FromSeconds(2);
+    private static readonly TimeSpan SlowRetryDelay = TimeSpan.FromSeconds(10);
+
     private readonly ILogger<WebInjectionService> _logger;
+    private readonly Func<Assembly?> _findFileTransformation;
+    private readonly Func<int, TimeSpan> _retryDelay;
     private readonly object _lock = new();
     private CancellationTokenSource? _cts;
 
@@ -44,8 +50,23 @@ public sealed partial class WebInjectionService : IHostedService, IDisposable
     /// </summary>
     /// <param name="logger">The logger.</param>
     public WebInjectionService(ILogger<WebInjectionService> logger)
+        : this(logger, FindFileTransformation, attempt => attempt <= FastAttempts ? FastRetryDelay : SlowRetryDelay)
+    {
+    }
+
+    /// <summary>
+    /// Initializes a new instance of the <see cref="WebInjectionService"/> class with its own assembly lookup and pace.
+    /// Test seam: File Transformation cannot be loaded in a unit test and the real retry delays last minutes. Being
+    /// internal, this constructor is invisible to the dependency injection container.
+    /// </summary>
+    /// <param name="logger">The logger.</param>
+    /// <param name="findFileTransformation">Finds the loaded File Transformation assembly, <c>null</c> when there is none.</param>
+    /// <param name="retryDelay">Gives the delay to wait after a failed attempt (1 based).</param>
+    internal WebInjectionService(ILogger<WebInjectionService> logger, Func<Assembly?> findFileTransformation, Func<int, TimeSpan> retryDelay)
     {
         _logger = logger;
+        _findFileTransformation = findFileTransformation;
+        _retryDelay = retryDelay;
     }
 
     /// <summary>
@@ -86,10 +107,7 @@ public sealed partial class WebInjectionService : IHostedService, IDisposable
             Status.LastAttemptUtc = DateTime.UtcNow;
             Status.Error = null;
 
-            Assembly? assembly = AssemblyLoadContext.All
-                .SelectMany(context => context.Assemblies)
-                .FirstOrDefault(candidate => string.Equals(candidate.GetName().Name, FileTransformationAssemblyName, StringComparison.Ordinal));
-
+            Assembly? assembly = _findFileTransformation();
             if (assembly is null)
             {
                 Status.FileTransformationDetected = false;
@@ -149,6 +167,13 @@ public sealed partial class WebInjectionService : IHostedService, IDisposable
         }
     }
 
+    private static Assembly? FindFileTransformation()
+    {
+        return AssemblyLoadContext.All
+            .SelectMany(context => context.Assemblies)
+            .FirstOrDefault(candidate => string.Equals(candidate.GetName().Name, FileTransformationAssemblyName, StringComparison.Ordinal));
+    }
+
     private static string BuildPayloadJson()
     {
         return JsonSerializer.Serialize(new
@@ -205,7 +230,7 @@ public sealed partial class WebInjectionService : IHostedService, IDisposable
                     LogIncompatible(Status.Error);
                     return;
                 case RegistrationOutcome.NotInstalled:
-                    if (attempt == 5)
+                    if (attempt == FastAttempts)
                     {
                         LogNotInstalled();
                     }
@@ -218,7 +243,7 @@ public sealed partial class WebInjectionService : IHostedService, IDisposable
 
             try
             {
-                await Task.Delay(TimeSpan.FromSeconds(attempt < 6 ? 2 : 10), token).ConfigureAwait(false);
+                await Task.Delay(_retryDelay(attempt), token).ConfigureAwait(false);
             }
             catch (TaskCanceledException)
             {

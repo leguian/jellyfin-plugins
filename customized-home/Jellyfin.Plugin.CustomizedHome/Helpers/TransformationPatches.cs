@@ -32,8 +32,20 @@ public static class TransformationPatches
             return contents;
         }
 
-        string root = GetRootPath();
-        string cacheKey = GetCacheKey();
+        return InjectAssets(contents, GetRootPath(), GetCacheKey());
+    }
+
+    /// <summary>
+    /// Inserts the stylesheet and script tags into an HTML document, for a given root path and cache key.
+    /// Test seam: the callback reads both from the plugin instance, which only a running server creates.
+    /// Deliberately not an overload of <see cref="IndexHtml"/>: File Transformation looks the callback up by name.
+    /// </summary>
+    /// <param name="contents">The HTML document.</param>
+    /// <param name="root">The base URL prefix ("" or "/prefix").</param>
+    /// <param name="cacheKey">The cache-busting key of the client assets.</param>
+    /// <returns>The patched document.</returns>
+    internal static string InjectAssets(string contents, string root, string cacheKey)
+    {
         string link = string.Format(
             CultureInfo.InvariantCulture,
             "<link rel=\"stylesheet\" href=\"{0}/CustomizedHome/customized-home.css?v={1}\" {2} />",
@@ -58,7 +70,16 @@ public static class TransformationPatches
     /// <returns>The root path without trailing slash.</returns>
     public static string GetRootPath()
     {
-        string? baseUrl = Plugin.Instance?.ServerConfigurationManager.GetNetworkConfiguration().BaseUrl;
+        return NormalizeRootPath(Plugin.Instance?.ServerConfigurationManager.GetNetworkConfiguration().BaseUrl);
+    }
+
+    /// <summary>
+    /// Turns the base URL of the network configuration into a prefix usable in front of an absolute path.
+    /// </summary>
+    /// <param name="baseUrl">The configured base URL, with or without slashes around it.</param>
+    /// <returns>"" or "/prefix", without trailing slash.</returns>
+    internal static string NormalizeRootPath(string? baseUrl)
+    {
         if (string.IsNullOrWhiteSpace(baseUrl))
         {
             return string.Empty;
