@@ -18,7 +18,7 @@ Le fichier `manifest.json` est mis à jour par la CI à chaque release (`scripts
 
 ## Release
 
-Monter la version dans `<plugin>/build.yaml` (et le `<Version>` du csproj), fusionner dans `main` : le workflow `release.yml` crée le tag `<plugin>-v<version>`, construit les zips (Jellyfin 12.x et 10.11.x), publie la release GitHub et met à jour `manifest.json`. Rien n'est publié tant que tous les jobs de `build.yml` (deux builds, tests unitaires sur les deux cibles, tests navigateur) ne sont pas verts. « Run workflow » sur `main` relance la release de la version courante si elle n'existe pas encore.
+Monter la version dans `<plugin>/build.yaml` (et le `<Version>` du csproj), fusionner dans `main` : le workflow `release.yml` crée le tag `<plugin>-v<version>`, construit les zips (Jellyfin 12.x et 10.11.x), publie la release GitHub et met à jour `manifest.json`. Rien n'est publié tant que tous les jobs de `build.yml` (deux builds, tests unitaires sur les deux cibles, tests navigateur) ne sont pas verts. « Run workflow » sur `main` termine la version courante : publication si la release n'existe pas encore, réparation de `manifest.json` à partir des zips publiés si seule cette étape avait échoué.
 
 Les zips sont compilés contre le plus ancien serveur de chaque ligne (10.11.0 et 12.0.0, `JELLYFIN_FLOORS` dans `scripts/package.py`) et déclarent ce même `targetAbi` : un serveur refuse un plugin dont les références Jellyfin sont plus récentes que ses propres assemblies.
 

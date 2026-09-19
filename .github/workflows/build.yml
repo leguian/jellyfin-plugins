@@ -51,11 +51,16 @@ jobs:
           dotnet-version: |
             9.0.x
             10.0.x
-      - name: Run unit tests against the oldest server of the line
+      - name: Package, then run the unit tests against the oldest server of the line and against that package
         env:
           JELLYFIN_LINE: ${{ matrix.jellyfin }}
+          PYTHONDONTWRITEBYTECODE: "1"
         run: |
-          VERSION=$(python3 -c "import os, sys; sys.path.insert(0, 'scripts'); from package import resolve_jellyfin; print(resolve_jellyfin(os.environ['JELLYFIN_LINE']))")
+          set -o pipefail
+          python3 scripts/package.py customized-home --jellyfin "${JELLYFIN_LINE}" --output artifacts > summary.json
+          CUSTOMIZED_HOME_PACKAGE="${GITHUB_WORKSPACE}/$(python3 -c "import json; print(json.load(open('summary.json'))['file'])")"
+          export CUSTOMIZED_HOME_PACKAGE
+          VERSION=$(python3 -c "import json; print(json.load(open('summary.json'))['jellyfin'])")
           dotnet test customized-home/Jellyfin.Plugin.CustomizedHome.Tests/Jellyfin.Plugin.CustomizedHome.Tests.csproj --nologo -p:JellyfinVersion="${VERSION}"
 
   browser-tests:

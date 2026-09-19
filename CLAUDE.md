@@ -61,8 +61,9 @@ Avant tout push : build + `dotnet test` + `node --check` + `npm test` + `npm run
 - 1 évolution = 1 branche (`feat/…`, `fix/…`, `chore/…`), Conventional Commits en anglais.
 - **Après chaque merge dans `main` : supprimer la branche mergée, en local et sur GitHub, systématiquement** (`git branch -d` puis `git push origin --delete`). Vérifier d'abord qu'elle est bien mergée.
 - **Release = changement de `version` dans `customized-home/build.yaml` mergé dans `main`.** Le workflow `release.yml` crée le tag `customized-home-v<version>`, construit les deux zips, publie la release et met à jour `manifest.json`. Sans changement de version, rien n'est publié.
-- **Toujours compiler contre le plus ancien serveur de chaque ligne** (`JELLYFIN_FLOORS` dans `scripts/package.py` : 10.11.0 et 12.0.0) : un serveur refuse un plugin dont les références Jellyfin sont plus récentes que ses assemblies. Le `targetAbi` déclaré est exactement la version de compilation ; `PluginAssemblyTests` et `package.py` le contrôlent.
-- La release attend tous les jobs de `build.yml` (appelé par `release.yml`) : un test rouge bloque la publication.
+- **Toujours compiler contre le plus ancien serveur de chaque ligne** (`JELLYFIN_FLOORS` dans `scripts/package.py` : 10.11.0 et 12.0.0) : un serveur refuse un plugin dont les références Jellyfin sont plus récentes que ses assemblies. Le `targetAbi` déclaré est exactement la version de compilation ; `package.py` contrôle les paquets restaurés et, en CI, `PluginAssemblyTests` compare le `meta.json` du zip produit aux références de la DLL qu'il contient (variable `CUSTOMIZED_HOME_PACKAGE`).
+- La release attend tous les jobs de `build.yml` (appelé par `release.yml`) : un test rouge bloque la publication. Si la release est publiée mais que l'étape manifest a échoué : « Run workflow » sur `main`, le manifest est réparé à partir des zips publiés.
+- Ne jamais `git add -A` : lister les fichiers (des caches `__pycache__` ont déjà été commités par erreur).
 - À chaque bump, aligner : `build.yaml` (`version`, `changelog`), `<Version>` du csproj, `const VERSION` du JS.
 - Ne jamais merger dans `main` ni publier sans demande explicite : une release est irréversible.
 - Après un merge : attendre les workflows, puis vérifier tag + manifest **dans git** (`git show origin/main:manifest.json`). `raw.githubusercontent.com` a ~5 min de cache.

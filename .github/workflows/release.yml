@@ -2,8 +2,9 @@ name: Release plugin
 
 # A release is a version bump of <plugin>/build.yaml merged into main.
 # Tag and release name: <plugin-folder>-v<version>, e.g. customized-home-v1.0.0.0.
-# "Run workflow" (on main) releases the current version when it has no release yet, e.g. after a failed run.
 # Order matters: plan -> every build and test job -> package -> release (creates the tag) -> manifest.
+# "Run workflow" (on main) finishes the current version: it publishes the release when it is missing, and
+# repairs manifest.json from the published zips when only the manifest step failed.
 on:
   push:
     branches: [main]
@@ -17,6 +18,9 @@ concurrency:
 permissions:
   contents: read
 
+env:
+  PYTHONDONTWRITEBYTECODE: "1"
+
 jobs:
   plan:
     runs-on: ubuntu-latest
@@ -25,6 +29,7 @@ jobs:
       version: ${{ steps.meta.outputs.version }}
       tag: ${{ steps.meta.outputs.tag }}
       release: ${{ steps.meta.outputs.release }}
+      published: ${{ steps.meta.outputs.published }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -34,33 +39,54 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
+          set -o pipefail
           if [ "${GITHUB_REF}" != "refs/heads/main" ]; then
             echo "releases are only made from main (got ${GITHUB_REF})"
             exit 1
           fi
           # The plugin whose build.yaml changed in this push (default: customized-home).
-          PLUGIN=$(git diff --name-only HEAD^ HEAD -- '*/build.yaml' 2>/dev/null | head -1 | cut -d/ -f1)
+          CHANGED=$(git diff --name-only HEAD^ HEAD -- '*/build.yaml' 2>/dev/null || true)
+          PLUGIN=$(printf '%s\n' "${CHANGED}" | sed -n '1p' | cut -d/ -f1)
           PLUGIN="${PLUGIN:-customized-home}"
           VERSION=$(sed -n 's/^version: *"\(.*\)"/\1/p' "${PLUGIN}/build.yaml")
           TAG="${PLUGIN}-v${VERSION}"
-          if ! printf '%s' "${TAG}" | grep -Eq '^[a-z0-9]+(-[a-z0-9]+)*-v[0-9]+(\.[0-9]+){3}$'; then
+          # Here-strings rather than pipes: with pipefail, "grep -q" closing a pipe early reads as a failure.
+          if ! grep -Eq '^[a-z0-9]+(-[a-z0-9]+)*-v[0-9]+(\.[0-9]+){3}$' <<< "${TAG}"; then
             echo "invalid tag: ${TAG}"
             exit 1
           fi
           echo "plugin=${PLUGIN}" >> "$GITHUB_OUTPUT"
           echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
           echo "tag=${TAG}" >> "$GITHUB_OUTPUT"
-          if gh release view "${TAG}" --repo "${GITHUB_REPOSITORY}" >/dev/null 2>&1; then
-            echo "release ${TAG} already exists, nothing to do"
+
+          # Only "not found" means there is no release: any other error stops the run.
+          if OUT=$(gh api "repos/${GITHUB_REPOSITORY}/releases/tags/${TAG}" --jq .tag_name 2>&1); then
+            PUBLISHED=true
+          elif grep -q "HTTP 404" <<< "${OUT}"; then
+            PUBLISHED=false
+          else
+            echo "could not query the release ${TAG}: ${OUT}"
+            exit 1
+          fi
+          echo "published=${PUBLISHED}" >> "$GITHUB_OUTPUT"
+
+          git fetch --depth 1 origin main
+          MANIFEST=$(git show FETCH_HEAD:manifest.json)
+          if [ "${PUBLISHED}" = "true" ] && grep -q "/releases/download/${TAG}/" <<< "${MANIFEST}"; then
+            echo "release ${TAG} is published and listed in manifest.json, nothing to do"
             echo "release=false" >> "$GITHUB_OUTPUT"
             exit 0
           fi
-          # A tag without a release (interrupted run) is only reused when it points at this very commit.
-          TAG_SHA=$(git ls-remote origin "refs/tags/${TAG}^{}" | cut -f1)
-          [ -n "${TAG_SHA}" ] || TAG_SHA=$(git ls-remote origin "refs/tags/${TAG}" | cut -f1)
-          if [ -n "${TAG_SHA}" ] && [ "${TAG_SHA}" != "${GITHUB_SHA}" ]; then
-            echo "tag ${TAG} exists on ${TAG_SHA} without a release, but this run builds ${GITHUB_SHA}: delete the tag or bump the version"
-            exit 1
+
+          if [ "${PUBLISHED}" = "false" ]; then
+            # A tag without a release (interrupted run, tag made by hand) is only reused when it points at this very commit.
+            TAG_REFS=$(git ls-remote origin "refs/tags/${TAG}" "refs/tags/${TAG}^{}")
+            TAG_SHA=$(printf '%s\n' "${TAG_REFS}" | awk '$2 ~ /\^\{\}$/ { print $1 }')
+            [ -n "${TAG_SHA}" ] || TAG_SHA=$(printf '%s\n' "${TAG_REFS}" | awk 'NF { print $1; exit }')
+            if [ -n "${TAG_SHA}" ] && [ "${TAG_SHA}" != "${GITHUB_SHA}" ]; then
+              echo "tag ${TAG} exists on ${TAG_SHA} without a release, but this run builds ${GITHUB_SHA}: delete the tag or bump the version"
+              exit 1
+            fi
           fi
           echo "release=true" >> "$GITHUB_OUTPUT"
 
@@ -79,45 +105,50 @@ jobs:
       PLUGIN: ${{ needs.plan.outputs.plugin }}
       VERSION: ${{ needs.plan.outputs.version }}
       TAG: ${{ needs.plan.outputs.tag }}
+      PUBLISHED: ${{ needs.plan.outputs.published }}
+      GH_TOKEN: ${{ github.token }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-dotnet@v4
         with:
           dotnet-version: "10.0.x"
+      # Also on a repair run: the summaries carry the manifest texts, the checksums come from the published zips.
       - name: Package for Jellyfin 12
         run: python3 scripts/package.py "${PLUGIN}" --jellyfin 12 --version "${VERSION}" --output artifacts > summary-12.json
       - name: Package for Jellyfin 10.11
         run: python3 scripts/package.py "${PLUGIN}" --jellyfin 10.11 --version "${VERSION}" --output artifacts > summary-10.11.json
       - name: Create GitHub release
-        env:
-          GH_TOKEN: ${{ github.token }}
+        if: env.PUBLISHED != 'true'
         run: |
           # The zips are uploaded to a draft that is published last; the tag is created with the release.
           python3 -c "import json; print(json.load(open('summary-12.json'))['changelog'])" > release-notes.txt
           gh release create "${TAG}" artifacts/*.zip --repo "${GITHUB_REPOSITORY}" --target "${GITHUB_SHA}" --title "${TAG}" --notes-file release-notes.txt
+      - name: Fetch the published zips (repair run)
+        if: env.PUBLISHED == 'true'
+        run: gh release download "${TAG}" --repo "${GITHUB_REPOSITORY}" --pattern "*.zip" --dir artifacts --clobber
       - name: Update manifest.json on main
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           # The manifest lives on main (the URL users add in Jellyfin). Someone may push in the meantime: start again from the new main.
           for attempt in 1 2 3; do
-            git fetch origin main
-            git checkout -B main origin/main
-            python3 scripts/update-manifest.py --manifest manifest.json \
-              --base-url "https://github.com/${GITHUB_REPOSITORY}/releases/download/${TAG}" \
-              --image-url-base "https://raw.githubusercontent.com/${GITHUB_REPOSITORY}/main" \
-              summary-12.json summary-10.11.json
-            git add manifest.json
-            if git diff --cached --quiet; then
-              echo "manifest already up to date"
-              exit 0
+            if git fetch origin main && git checkout -B main origin/main; then
+              python3 scripts/update-manifest.py --manifest manifest.json --zip-dir artifacts \
+                --base-url "https://github.com/${GITHUB_REPOSITORY}/releases/download/${TAG}" \
+                --image-url-base "https://raw.githubusercontent.com/${GITHUB_REPOSITORY}/main" \
+                summary-12.json summary-10.11.json
+              git add manifest.json
+              if git diff --cached --quiet; then
+                echo "manifest already up to date"
+                exit 0
+              fi
+              git commit -m "manifest: ${TAG}"
+              if git push origin main; then
+                exit 0
+              fi
             fi
-            git commit -m "manifest: ${TAG}"
-            if git push origin main; then
-              exit 0
-            fi
-            echo "push rejected (attempt ${attempt}), retrying"
+            echo "attempt ${attempt} failed, retrying"
             sleep 5
           done
-          echo "could not push manifest.json"
+          echo "could not update manifest.json: run this workflow again from main to repair it"
           exit 1
