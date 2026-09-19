@@ -9,6 +9,22 @@
     "imageUrl": "https://raw.githubusercontent.com/leguian/jellyfin-plugins/main/customized-home/logo.png",
     "versions": [
       {
+        "version": "1.8.2.1",
+        "changelog": "Compatibility fix: the plugin is now compiled against the oldest server of each line (10.11.0 and 12.0.0). Earlier packages only loaded on Jellyfin 10.11.11+ and 12.1.0+ and were disabled by older servers. No functional change. The project is now licensed under GPL-3.0.",
+        "targetAbi": "12.0.0.0",
+        "sourceUrl": "https://github.com/leguian/jellyfin-plugins/releases/download/customized-home-v1.8.2.1/customized-home_1.8.2.1_jellyfin-12.zip",
+        "checksum": "1fb3a3c7355780259ae37430ce5ac2f2",
+        "timestamp": "2026-09-19T07:35:04Z"
+      },
+      {
+        "version": "1.8.2.1",
+        "changelog": "Compatibility fix: the plugin is now compiled against the oldest server of each line (10.11.0 and 12.0.0). Earlier packages only loaded on Jellyfin 10.11.11+ and 12.1.0+ and were disabled by older servers. No functional change. The project is now licensed under GPL-3.0.",
+        "targetAbi": "10.11.0.0",
+        "sourceUrl": "https://github.com/leguian/jellyfin-plugins/releases/download/customized-home-v1.8.2.1/customized-home_1.8.2.1_jellyfin-10.11.zip",
+        "checksum": "68797db63229f802f3581638efb44651",
+        "timestamp": "2026-09-19T07:35:04Z"
+      },
+      {
         "version": "1.8.2.0",
         "changelog": "Hero banner: the automatic rotation delay is now chosen among 3 s, 5 s, 10 s and manual.",
         "targetAbi": "12.1.0.0",
