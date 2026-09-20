@@ -13,7 +13,7 @@
         return;
     }
 
-    const VERSION = '1.8.4.2';
+    const VERSION = '1.8.5.0';
     const API = 'CustomizedHome';
     const ORDER_STEP = 1000;
     const ORDER_UNLISTED_BASE = 1000000000;
@@ -130,6 +130,8 @@
             noTitles: 'no card titles',
             heroTitle: 'Hero banner',
             heroHint: 'Carousel of featured media at the top of the home page',
+            heroRoleCarousel: 'carousel',
+            heroRoleSlide: 'slide',
             heroEnable: 'Turn the hero on',
             heroDisable: 'Turn the hero off',
             heroSettings: 'Hero settings',
@@ -271,6 +273,8 @@
             noTitles: 'sans titres de cartes',
             heroTitle: 'Bannière « hero »',
             heroHint: "Carrousel de médias à la une, en haut de l'accueil",
+            heroRoleCarousel: 'carrousel',
+            heroRoleSlide: 'diapositive',
             heroEnable: 'Activer le hero',
             heroDisable: 'Désactiver le hero',
             heroSettings: 'Réglages du hero',
@@ -1685,7 +1689,7 @@
         const ids = ' data-id="' + escapeHtml(item.Id) + '" data-serverid="' + escapeHtml(serverId) + '"';
 
         // The native click handler of the items container reads the item from these attributes.
-        let html = '<div class="ch-hero-slide' + (active ? ' ch-active' : '') + '" role="group" aria-roledescription="slide" aria-label="' + escapeHtml(t('heroPosition', index + 1, total)) + '"'
+        let html = '<div class="ch-hero-slide' + (active ? ' ch-active' : '') + '" role="group" aria-roledescription="' + escapeHtml(t('heroRoleSlide')) + '" aria-label="' + escapeHtml(t('heroPosition', index + 1, total)) + '"'
             + (active ? '' : ' aria-hidden="true"') + ids
             + ' data-type="' + escapeHtml(item.Type || '') + '" data-isfolder="' + (item.IsFolder ? 'true' : 'false') + '"'
             + (item.MediaType ? ' data-mediatype="' + escapeHtml(item.MediaType) + '"' : '')
@@ -2046,7 +2050,7 @@
         removeHero(container);
         const node = el('div', 'ch-hero');
         node.setAttribute('role', 'region');
-        node.setAttribute('aria-roledescription', 'carousel');
+        node.setAttribute('aria-roledescription', t('heroRoleCarousel'));
         node.setAttribute('aria-label', t('heroTitle'));
         let html = '<div is="emby-itemscontainer" class="ch-hero-slides" data-multiselect="false">' + items.map(function (item, index) {
             return heroSlideHtml(item, index, items.length, index === startIndex);

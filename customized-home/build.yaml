@@ -1,7 +1,7 @@
 ---
 name: "Customized Home"
 guid: "7c99a4bf-cd3b-4bc8-b941-7ddccd816f3c"
-version: "1.8.4.2"
+version: "1.8.5.0"
 targetAbi: "12.0.0.0"
 framework: "net10.0"
 overview: "Easily edit and organize the sections on your homepage"
@@ -22,5 +22,9 @@ owner: "leguian"
 artifacts:
 - "Jellyfin.Plugin.CustomizedHome.dll"
 changelog: >
-  Readability of the administration page on a light dashboard: secondary text and the buttons of the
-  destructive actions now meet the WCAG AA contrast minimum on both a light and a dark dashboard.
+  The administration page now follows your Jellyfin display language: it is available in French and in
+  English, like the editor (English for the other languages). Its Save button for the default layout
+  moved up next to Clear, in the card header. Readability on a light dashboard: the filled buttons, the
+  checked switches, the focused fields and the thumbnail outlines now meet the WCAG AA contrast minimum
+  on both a light and a dark dashboard. The hero announces its role to screen readers in the language of
+  the interface.

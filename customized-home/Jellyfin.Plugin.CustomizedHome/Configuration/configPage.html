@@ -9,7 +9,20 @@
         <style>
             /* Scoped to the plugin page. Surfaces derive from currentColor so both dashboard themes work. */
             #CustomizedHomeConfigPage {
+                /* The Jellyfin brand blue, as the dashboard itself paints it. Kept exactly as it is, and used only
+                   where it is a tint, a border or a text colour mixed into currentColor: never as a fill under
+                   white, which it cannot carry (white on it is 2.86:1, under the 4.5:1 of WCAG AA). */
                 --cha-accent: #00a4dc;
+                /* The same blue as a fill behind white: identical hue and saturation, lightness 43% -> 32%. This
+                   is the value that satisfies both sides of a narrow window at once -- white on it is 4.87:1, and
+                   it is its own boundary at 3.17:1 or better against every surface of the page on both dashboards
+                   (the brand blue is 2.10:1 against a light one). Lighter and the label fails, darker and the fill
+                   disappears into a dark dashboard, so the token cannot simply be the accent darkened further. */
+                --cha-accent-fill: #007aa3;
+                /* Hover shifts the hue and lifts the lightness three points, like --cha-danger-fill-hover: the
+                   window above leaves no room to darken (#00739a is 2.88:1 on a dark dashboard) nor to lighten
+                   (#0085b3 carries white at only 4.20:1). 4.55:1 for the label, 3.35:1 for the boundary. */
+                --cha-accent-fill-hover: #0d7fa8;
                 --cha-surface: color-mix(in srgb, currentColor 5%, transparent);
                 --cha-surface-strong: color-mix(in srgb, currentColor 10%, transparent);
                 --cha-border: color-mix(in srgb, currentColor 14%, transparent);
@@ -31,7 +44,10 @@
                    on a light dashboard, so the ring is derived from the text colour (5.4:1 or better on both). */
                 --cha-focus: color-mix(in srgb, currentColor 70%, transparent);
                 /* For the filled buttons only, which override `color` and so cannot use --cha-focus: a fixed
-                   tint, dark enough for a light dashboard and light enough for a dark one (3.3:1 or better). */
+                   tint, dark enough for a light dashboard and light enough for a dark one (4.0:1 or better). It
+                   is offset onto the surface behind the button, so it is measured against that surface and not
+                   against the fill it surrounds -- which is why --cha-accent-fill being a near neighbour of it
+                   costs nothing. One ring for both filled buttons, as 1.8.4.2 left it. */
                 --cha-focus-filled: #0b7fb0;
             }
 
@@ -56,8 +72,12 @@
                 width: 2.6em;
                 height: 2.6em;
                 border-radius: 0.6em;
+                /* The tint stays the accent: it is a background, and it is what makes the page read as Jellyfin
+                   blue. The glyph on it cannot, at 2.14:1 on a light dashboard. Like the status badges, it is
+                   pulled half way toward the painted text colour, which darkens it on a light dashboard (5.13:1)
+                   and lightens it on a dark one (7.31:1) from one declaration, without guessing the theme. */
                 background: color-mix(in srgb, var(--cha-accent) 18%, transparent);
-                color: var(--cha-accent);
+                color: color-mix(in srgb, var(--cha-accent) 50%, currentColor);
                 flex-shrink: 0;
             }
 
@@ -127,8 +147,10 @@
                 outline-offset: 1px;
             }
 
+            /* White on the fill token: the accent carries white at 2.86:1, and the selected tab sits on the tab
+               track, the strongest surface of the page, where the accent is only 2.10:1 on a light dashboard. */
             #CustomizedHomeConfigPage .cha-tab[aria-selected="true"] {
-                background: var(--cha-accent);
+                background: var(--cha-accent-fill);
                 color: #fff;
             }
 
@@ -305,9 +327,11 @@
                 transition: left 0.15s ease, opacity 0.15s ease, background 0.15s ease;
             }
 
+            /* A checked switch is a fill with a white knob on it: the same case as a filled button, so the same
+               token. The accent reached 1.38:1 against a light dashboard, under the 3:1 a control boundary owes. */
             #CustomizedHomeConfigPage .cha-switch:checked {
-                background: var(--cha-accent);
-                border-color: var(--cha-accent);
+                background: var(--cha-accent-fill);
+                border-color: var(--cha-accent-fill);
             }
 
             #CustomizedHomeConfigPage .cha-switch:checked::after {
@@ -350,14 +374,17 @@
                 font-size: 1.15em;
             }
 
+            /* The fill token, not the accent: this button carries a white label and is its own boundary against
+               the page. The border follows the fill so hovering does not leave a lighter ring around it. */
             #CustomizedHomeConfigPage .cha-btn-primary {
-                background: var(--cha-accent);
-                border-color: var(--cha-accent);
+                background: var(--cha-accent-fill);
+                border-color: var(--cha-accent-fill);
                 color: #fff;
             }
 
             #CustomizedHomeConfigPage .cha-btn-primary:hover {
-                background: #0288b8;
+                background: var(--cha-accent-fill-hover);
+                border-color: var(--cha-accent-fill-hover);
             }
 
             /* A filled button sets its own colour, so --cha-focus (built on currentColor) would resolve to the
@@ -408,8 +435,12 @@
                 width: 2.2em;
                 height: 2.2em;
                 border-radius: 50%;
+                /* Same treatment as the header icon: the accent tint stays, the initial on it is mixed into the
+                   text colour (2.06:1 as the raw accent on a light dashboard, 4.59:1 mixed; 6.16:1 on a dark
+                   one). The mix is 50% and not the 55% of the badges: on a light dashboard currentColor carries
+                   an alpha of 0.87, so the mix comes out translucent and lands lower than the nominal value. */
                 background: color-mix(in srgb, var(--cha-accent) 22%, transparent);
-                color: var(--cha-accent);
+                color: color-mix(in srgb, var(--cha-accent) 50%, currentColor);
                 display: inline-flex;
                 align-items: center;
                 justify-content: center;
@@ -444,9 +475,12 @@
                 min-width: 12em;
             }
 
+            /* The border that marks a focused field is a control boundary: 3:1 against what surrounds it. The
+               accent is 2.31:1 on a light dashboard, so this one takes the fill token, which is 3.95:1 there and
+               3.57:1 on a dark one. Same blue, only darker. */
             #CustomizedHomeConfigPage .cha-input:focus {
                 outline: none;
-                border-color: var(--cha-accent);
+                border-color: var(--cha-accent-fill);
             }
 
             #CustomizedHomeConfigPage .cha-specs {
@@ -466,10 +500,12 @@
                 padding: 0.6em 0.8em;
             }
 
+            /* The outline that shows the shape of a thumbnail is the whole graphic: 3:1 or it is not there. The
+               accent is 2.11:1 against a light dashboard, the fill token 3.58:1 (3.17:1 on a dark one). */
             #CustomizedHomeConfigPage .cha-spec-shape {
                 flex-shrink: 0;
                 height: 2.4em;
-                border: 2px solid var(--cha-accent);
+                border: 2px solid var(--cha-accent-fill);
                 border-radius: 0.2em;
             }
 
@@ -642,20 +678,20 @@
                     <span class="cha-header-icon"><span class="material-icons" aria-hidden="true">other_houses</span></span>
                     <div>
                         <h1 class="cha-title">Customized Home</h1>
-                        <p class="cha-subtitle">Easily edit and organize the sections on your homepage</p>
+                        <p class="cha-subtitle" data-cha-i18n="subtitle">Easily edit and organize the sections on your homepage</p>
                     </div>
                     <span class="cha-version" id="chVersion"></span>
                 </header>
 
                 <div class="cha-tabs" role="tablist" aria-label="Customized Home">
                     <button type="button" class="cha-tab" role="tab" id="chTabOptions" aria-controls="chPanelOptions" aria-selected="true" data-index="0">
-                        <span class="material-icons" aria-hidden="true">tune</span>Options
+                        <span class="material-icons" aria-hidden="true">tune</span><span data-cha-i18n="tabOptions">Options</span>
                     </button>
                     <button type="button" class="cha-tab" role="tab" id="chTabLayouts" aria-controls="chPanelLayouts" aria-selected="false" data-index="1" tabindex="-1">
-                        <span class="material-icons" aria-hidden="true">dashboard_customize</span>Layouts
+                        <span class="material-icons" aria-hidden="true">dashboard_customize</span><span data-cha-i18n="tabLayouts">Layouts</span>
                     </button>
                     <button type="button" class="cha-tab" role="tab" id="chTabGenres" aria-controls="chPanelGenres" aria-selected="false" data-index="2" tabindex="-1">
-                        <span class="material-icons" aria-hidden="true">category</span>Genres
+                        <span class="material-icons" aria-hidden="true">category</span><span data-cha-i18n="tabGenres">Genres</span>
                     </button>
                 </div>
 
@@ -663,70 +699,70 @@
                 <section class="chTab" data-tab="0" id="chPanelOptions" role="tabpanel" aria-labelledby="chTabOptions">
                     <div class="cha-card">
                         <div class="cha-card-head">
-                            <h2 class="cha-card-title">Status</h2>
-                            <span id="chStatusBadge" class="cha-badge cha-badge-warn">Checking</span>
+                            <h2 class="cha-card-title" data-cha-i18n="status">Status</h2>
+                            <span id="chStatusBadge" class="cha-badge cha-badge-warn" data-cha-i18n="checking">Checking</span>
                             <span class="cha-spacer"></span>
                             <button type="button" id="chRetryRegistration" class="cha-btn">
-                                <span class="material-icons" aria-hidden="true">refresh</span>Retry registration
+                                <span class="material-icons" aria-hidden="true">refresh</span><span data-cha-i18n="retryRegistration">Retry registration</span>
                             </button>
                         </div>
-                        <p id="chStatus" class="cha-status-text">Loading…</p>
+                        <p id="chStatus" class="cha-status-text" data-cha-i18n="loading">Loading…</p>
                         <div class="cha-stats">
-                            <div class="cha-stat"><div class="cha-stat-value" id="chStatFt">–</div><div class="cha-stat-label">File Transformation</div></div>
-                            <div class="cha-stat"><div class="cha-stat-value" id="chStatUsers">–</div><div class="cha-stat-label">Users with their own layout</div></div>
-                            <div class="cha-stat"><div class="cha-stat-value" id="chStatDefault">–</div><div class="cha-stat-label">Sections in the default layout</div></div>
+                            <div class="cha-stat"><div class="cha-stat-value" id="chStatFt">–</div><div class="cha-stat-label" data-cha-i18n="statFt">File Transformation</div></div>
+                            <div class="cha-stat"><div class="cha-stat-value" id="chStatUsers">–</div><div class="cha-stat-label" data-cha-i18n="statUsers">Users with their own layout</div></div>
+                            <div class="cha-stat"><div class="cha-stat-value" id="chStatDefault">–</div><div class="cha-stat-label" data-cha-i18n="statDefault">Sections in the default layout</div></div>
                         </div>
                     </div>
 
                     <form id="CustomizedHomeConfigForm">
                         <div class="cha-card">
-                            <div class="cha-card-head"><h2 class="cha-card-title">Users</h2></div>
+                            <div class="cha-card-head"><h2 class="cha-card-title" data-cha-i18n="users">Users</h2></div>
                             <label class="cha-option">
                                 <span class="cha-option-text">
-                                    <span class="cha-option-label">Force the default layout for everybody</span>
-                                    <span class="cha-option-help">Everybody gets the default layout and nobody can customize: the two options below and the user entry points are turned off. Saved user layouts are kept and used again when this option is turned off.</span>
+                                    <span class="cha-option-label"><span data-cha-i18n="forceDefault">Force the default layout for everybody</span></span>
+                                    <span class="cha-option-help"><span data-cha-i18n="forceDefaultHelp">Everybody gets the default layout and nobody can customize: the two options below and the user entry points are turned off. Saved user layouts are kept and used again when this option is turned off.</span></span>
                                 </span>
                                 <input id="chForceDefaultLayout" class="cha-switch" type="checkbox" role="switch" />
                             </label>
                             <label class="cha-option">
                                 <span class="cha-option-text">
-                                    <span class="cha-option-label">Allow users to customize their own home page</span>
-                                    <span class="cha-option-help">When disabled, every user gets the default layout. Administrators can always customize their own page.</span>
+                                    <span class="cha-option-label"><span data-cha-i18n="allowCustomization">Allow users to customize their own home page</span></span>
+                                    <span class="cha-option-help"><span data-cha-i18n="allowCustomizationHelp">When disabled, every user gets the default layout. Administrators can always customize their own page.</span></span>
                                 </span>
                                 <input id="chAllowUserCustomization" class="cha-switch" type="checkbox" role="switch" />
                             </label>
                         </div>
 
                         <div class="cha-card">
-                            <div class="cha-card-head"><h2 class="cha-card-title">Interface</h2></div>
+                            <div class="cha-card-head"><h2 class="cha-card-title" data-cha-i18n="interface">Interface</h2></div>
                             <label class="cha-option">
                                 <span class="cha-option-text">
-                                    <span class="cha-option-label">"Customize home" button at the bottom of the home page</span>
-                                    <span class="cha-option-help">Adds a round "Customize home" button below the last section of the home page (scroll to the very bottom). It opens the same editor as the user menu entry.</span>
+                                    <span class="cha-option-label"><span data-cha-i18n="showButton">"Customize home" button at the bottom of the home page</span></span>
+                                    <span class="cha-option-help"><span data-cha-i18n="showButtonHelp">Adds a round "Customize home" button below the last section of the home page (scroll to the very bottom). It opens the same editor as the user menu entry.</span></span>
                                 </span>
                                 <input id="chShowCustomizeButtonOnHome" class="cha-switch" type="checkbox" role="switch" />
                             </label>
                             <label class="cha-option">
                                 <span class="cha-option-text">
-                                    <span class="cha-option-label">"Customize home" entry in the user menu</span>
+                                    <span class="cha-option-label"><span data-cha-i18n="showMenuEntry">"Customize home" entry in the user menu</span></span>
                                 </span>
                                 <input id="chShowUserMenuEntry" class="cha-switch" type="checkbox" role="switch" />
                             </label>
                             <label class="cha-option">
                                 <span class="cha-option-text">
-                                    <span class="cha-option-label">Offer the sections rendered by this plugin</span>
-                                    <span class="cha-option-help">Continue Watching / Next Up (combined), Latest Movies and Shows by release date, Collections, Watch Again, Because You Watched, Genre. Users enable them in the editor; no other plugin required.</span>
+                                    <span class="cha-option-label"><span data-cha-i18n="integratedSections">Offer the sections rendered by this plugin</span></span>
+                                    <span class="cha-option-help"><span data-cha-i18n="integratedSectionsHelp">Continue Watching / Next Up (combined), Latest Movies and Shows by release date, Collections, Watch Again, Because You Watched, Genre. Users enable them in the editor; no other plugin required.</span></span>
                                 </span>
                                 <input id="chEnableIntegratedSections" class="cha-switch" type="checkbox" role="switch" />
                             </label>
                         </div>
 
                         <div class="cha-card">
-                            <div class="cha-card-head"><h2 class="cha-card-title">Advanced</h2></div>
+                            <div class="cha-card-head"><h2 class="cha-card-title" data-cha-i18n="advanced">Advanced</h2></div>
                             <label class="cha-option">
                                 <span class="cha-option-text">
-                                    <span class="cha-option-label">Developer mode</span>
-                                    <span class="cha-option-help">Client assets are never cached. Leave off in production.</span>
+                                    <span class="cha-option-label"><span data-cha-i18n="developerMode">Developer mode</span></span>
+                                    <span class="cha-option-help"><span data-cha-i18n="developerModeHelp">Client assets are never cached. Leave off in production.</span></span>
                                 </span>
                                 <input id="chDeveloperMode" class="cha-switch" type="checkbox" role="switch" />
                             </label>
@@ -734,7 +770,7 @@
 
                         <div class="cha-actions">
                             <button type="submit" class="cha-btn cha-btn-primary">
-                                <span class="material-icons" aria-hidden="true">save</span>Save options
+                                <span class="material-icons" aria-hidden="true">save</span><span data-cha-i18n="saveOptions">Save options</span>
                             </button>
                         </div>
                     </form>
@@ -744,19 +780,24 @@
                 <section class="chTab hide" data-tab="1" id="chPanelLayouts" role="tabpanel" aria-labelledby="chTabLayouts">
                     <div class="cha-card">
                         <div class="cha-card-head">
-                            <h2 class="cha-card-title">Default layout</h2>
+                            <h2 class="cha-card-title" data-cha-i18n="defaultLayout">Default layout</h2>
                             <span class="cha-spacer"></span>
                             <button type="button" id="chClearDefault" class="cha-btn cha-btn-danger">
-                                <span class="material-icons" aria-hidden="true">delete_sweep</span>Clear
+                                <span class="material-icons" aria-hidden="true">delete_sweep</span><span data-cha-i18n="clear">Clear</span>
+                            </button>
+                            <!-- The editor owns the saving (request, disabled state, toast): this only forwards the
+                                 click to its own button, which the embedded editor keeps at the bottom of the card. -->
+                            <button type="button" id="chSaveDefault" class="cha-btn cha-btn-primary">
+                                <span class="material-icons" aria-hidden="true">save</span><span data-cha-i18n="save">Save</span>
                             </button>
                         </div>
-                        <p class="cha-card-desc" id="chDefaultSummary">Loading…</p>
+                        <p class="cha-card-desc" id="chDefaultSummary" data-cha-i18n="loading">Loading…</p>
                         <div id="chDefaultEditor"></div>
                     </div>
 
                     <div class="cha-card">
-                        <div class="cha-card-head"><h2 class="cha-card-title">User layouts</h2></div>
-                        <p class="cha-card-desc">Users that saved their own layout. Resetting a user sends them back to the default layout.</p>
+                        <div class="cha-card-head"><h2 class="cha-card-title" data-cha-i18n="userLayouts">User layouts</h2></div>
+                        <p class="cha-card-desc" data-cha-i18n="userLayoutsHelp">Users that saved their own layout. Resetting a user sends them back to the default layout.</p>
                         <div id="chUserLayouts"></div>
                     </div>
                 </section>
@@ -765,16 +806,16 @@
                 <section class="chTab hide" data-tab="2" id="chPanelGenres" role="tabpanel" aria-labelledby="chTabGenres">
                     <div class="cha-card">
                         <div class="cha-card-head">
-                            <h2 class="cha-card-title">Genre thumbnails</h2>
+                            <h2 class="cha-card-title" data-cha-i18n="genreThumbnails">Genre thumbnails</h2>
                             <span class="cha-spacer"></span>
-                            <input type="search" id="chGenreFilter" class="cha-input" placeholder="Filter genres" aria-label="Filter genres" />
+                            <input type="search" id="chGenreFilter" class="cha-input" placeholder="Filter genres" aria-label="Filter genres" data-cha-i18n-placeholder="filterGenres" data-cha-i18n-aria="filterGenres" />
                         </div>
-                        <p class="cha-card-desc">
+                        <p class="cha-card-desc" data-cha-i18n="genreThumbnailsHelp">
                             Thumbnails used by the "All genres" section when its cards are set to "Custom images" (format button of the section, in the editor).
                             One image per card shape: the section picks the one matching its shape, else another uploaded one (cropped), else the collage of four posters.
                         </p>
                         <div class="cha-specs" id="chGenreSpecs"></div>
-                        <p class="cha-card-desc cha-specs-note">PNG, JPEG or WebP, 5 MB maximum. Larger images are fine, smaller ones look blurry on high density screens.</p>
+                        <p class="cha-card-desc cha-specs-note"><span data-cha-i18n="imageSpecs">PNG, JPEG or WebP, 5 MB maximum. Larger images are fine, smaller ones look blurry on high density screens.</span></p>
                         <input type="file" id="chGenreFile" accept="image/png,image/jpeg,image/webp" class="hide" />
                         <div id="chGenres" class="cha-genres"></div>
                     </div>
@@ -783,6 +824,210 @@
         </div>
         <script type="text/javascript">
             (function () {
+                // The administration page carries its own table: it must stay readable when the client script
+                // is missing, which is exactly the failure it is there to report. The client keeps its own in
+                // customized-home.js.
+                var I18N = {
+                    en: {
+                        subtitle: 'Easily edit and organize the sections on your homepage',
+                        tabOptions: 'Options',
+                        tabLayouts: 'Layouts',
+                        tabGenres: 'Genres',
+                        status: 'Status',
+                        checking: 'Checking',
+                        retryRegistration: 'Retry registration',
+                        loading: 'Loading\u2026',
+                        statFt: 'File Transformation',
+                        statUsers: 'Users with their own layout',
+                        statDefault: 'Sections in the default layout',
+                        users: 'Users',
+                        forceDefault: 'Force the default layout for everybody',
+                        forceDefaultHelp: 'Everybody gets the default layout and nobody can customize: the two options below and the user entry points are turned off. Saved user layouts are kept and used again when this option is turned off.',
+                        allowCustomization: 'Allow users to customize their own home page',
+                        allowCustomizationHelp: 'When disabled, every user gets the default layout. Administrators can always customize their own page.',
+                        interface: 'Interface',
+                        showButton: '"Customize home" button at the bottom of the home page',
+                        showButtonHelp: 'Adds a round "Customize home" button below the last section of the home page (scroll to the very bottom). It opens the same editor as the user menu entry.',
+                        showMenuEntry: '"Customize home" entry in the user menu',
+                        integratedSections: 'Offer the sections rendered by this plugin',
+                        integratedSectionsHelp: 'Continue Watching / Next Up (combined), Latest Movies and Shows by release date, Collections, Watch Again, Because You Watched, Genre. Users enable them in the editor; no other plugin required.',
+                        advanced: 'Advanced',
+                        developerMode: 'Developer mode',
+                        developerModeHelp: 'Client assets are never cached. Leave off in production.',
+                        saveOptions: 'Save options',
+                        defaultLayout: 'Default layout',
+                        clear: 'Clear',
+                        save: 'Save',
+                        userLayouts: 'User layouts',
+                        userLayoutsHelp: 'Users that saved their own layout. Resetting a user sends them back to the default layout.',
+                        genreThumbnails: 'Genre thumbnails',
+                        genreThumbnailsHelp: 'Thumbnails used by the "All genres" section when its cards are set to "Custom images" (format button of the section, in the editor). One image per card shape: the section picks the one matching its shape, else another uploaded one (cropped), else the collage of four posters.',
+                        filterGenres: 'Filter genres',
+                        optimalSize: 'Optimal size: {0}',
+                        imageSpecs: 'PNG, JPEG or WebP, 5 MB maximum. Larger images are fine, smaller ones look blurry on high density screens.',
+                        badgeMissing: 'File Transformation missing',
+                        badgeActive: 'Active',
+                        badgeFailed: 'Registration failed',
+                        badgeUnavailable: 'Unavailable',
+                        statusMissing: 'Install the File Transformation plugin (repository https://www.iamparadox.dev/jellyfin/plugins/manifest.json) and restart the server: it injects the client script into the web client.',
+                        statusActive: 'The client script is injected into the web client. After an update, users may need to refresh their browser once (Ctrl+F5).',
+                        statusFailed: 'File Transformation was detected but the registration failed: {0}',
+                        statusUnknownError: 'unknown error',
+                        statusRootPath: ' Base URL prefix: {0}.',
+                        statusUnreadable: 'Could not read the plugin status.',
+                        ftDetected: 'detected',
+                        ftNotInstalled: 'not installed',
+                        noDefaultLayout: 'No default layout yet: the home page is left untouched for users without a layout of their own.',
+                        defaultLayoutSummary: '{0} section(s), {1} hidden. Replaces the default home page for users without a layout of their own.',
+                        noUserLayout: 'No user has saved a custom layout yet.',
+                        userLayoutsUnreadable: 'Could not list the user layouts.',
+                        userMeta: '{0} section(s) \u00b7 saved {1}',
+                        reset: 'Reset',
+                        scriptMissing: 'The client script is not loaded on this page. Check the status in the Options tab and refresh the page (Ctrl+F5).',
+                        shapePortrait: 'Poster',
+                        shapeLandscape: 'Landscape',
+                        shapeSquare: 'Square',
+                        noGenreMatch: 'No genre matches.',
+                        noGenreFound: 'No genre found in the libraries.',
+                        genresUnreadable: 'Could not load the genres.',
+                        uploadThumb: 'Upload the {0} thumbnail of "{1}"',
+                        replaceThumb: 'Replace the {0} thumbnail of "{1}"',
+                        upload: 'Upload',
+                        replace: 'Replace',
+                        removeThumb: 'Remove the {0} thumbnail of "{1}"',
+                        remove: 'Remove',
+                        badImageType: 'Unsupported image: use PNG, JPEG or WebP.',
+                        imageTooLarge: 'Image is larger than 5 MB.',
+                        uploadFailed: 'The thumbnail could not be uploaded.',
+                        cancel: 'Cancel',
+                        askRemoveThumbTitle: 'Remove this thumbnail?',
+                        askRemoveThumbText: 'The {0} thumbnail of "{1}" is deleted from the server. The "All genres" section falls back to another uploaded shape, or to the collage of four posters. You can upload it again at any time.',
+                        askClearTitle: 'Clear the default layout?',
+                        askClearText: 'The default layout is emptied and cannot be recovered. Users without a layout of their own get the untouched home page of Jellyfin again. Layouts saved by users are not affected.',
+                        askResetTitle: 'Reset {0} to the default layout?',
+                        askResetText: 'The layout saved by {0} is deleted and cannot be recovered. Their home page falls back to the default layout, and they can customize it again.'
+                    },
+                    fr: {
+                        subtitle: "Organisez facilement les sections de votre page d'accueil",
+                        tabOptions: 'Options',
+                        tabLayouts: 'Dispositions',
+                        tabGenres: 'Genres',
+                        status: '\u00c9tat',
+                        checking: 'V\u00e9rification',
+                        retryRegistration: "Relancer l'enregistrement",
+                        loading: 'Chargement\u2026',
+                        statFt: 'File Transformation',
+                        statUsers: 'Utilisateurs ayant leur propre disposition',
+                        statDefault: 'Sections dans la disposition par d\u00e9faut',
+                        users: 'Utilisateurs',
+                        forceDefault: 'Imposer la disposition par d\u00e9faut \u00e0 tout le monde',
+                        forceDefaultHelp: "Tout le monde re\u00e7oit la disposition par d\u00e9faut et personne ne peut la personnaliser : les deux options ci-dessous et les points d'entr\u00e9e utilisateur sont d\u00e9sactiv\u00e9s. Les dispositions enregistr\u00e9es par les utilisateurs sont conserv\u00e9es et r\u00e9utilis\u00e9es si cette option est d\u00e9sactiv\u00e9e.",
+                        allowCustomization: "Autoriser les utilisateurs \u00e0 personnaliser leur page d'accueil",
+                        allowCustomizationHelp: "Si d\u00e9sactiv\u00e9, chaque utilisateur re\u00e7oit la disposition par d\u00e9faut. Les administrateurs peuvent toujours personnaliser la leur.",
+                        interface: 'Interface',
+                        showButton: "Bouton \u00ab Personnaliser l'accueil \u00bb en bas de la page d'accueil",
+                        showButtonHelp: "Ajoute un bouton rond \u00ab Personnaliser l'accueil \u00bb sous la derni\u00e8re section de la page d'accueil (faites d\u00e9filer tout en bas). Il ouvre le m\u00eame \u00e9diteur que l'entr\u00e9e du menu utilisateur.",
+                        showMenuEntry: "Entr\u00e9e \u00ab Personnaliser l'accueil \u00bb dans le menu utilisateur",
+                        integratedSections: 'Proposer les sections rendues par ce plugin',
+                        integratedSectionsHelp: "Continuer \u00e0 regarder / \u00c0 suivre (combin\u00e9es), Derniers films et s\u00e9ries par date de sortie, Collections, Regarder \u00e0 nouveau, Parce que vous avez regard\u00e9, Genre. Les utilisateurs les activent dans l'\u00e9diteur ; aucun autre plugin n'est requis.",
+                        advanced: 'Avanc\u00e9',
+                        developerMode: 'Mode d\u00e9veloppeur',
+                        developerModeHelp: "Les ressources client ne sont jamais mises en cache. \u00c0 laisser d\u00e9sactiv\u00e9 en production.",
+                        saveOptions: 'Enregistrer les options',
+                        defaultLayout: 'Disposition par d\u00e9faut',
+                        clear: 'Vider',
+                        save: 'Enregistrer',
+                        userLayouts: 'Dispositions des utilisateurs',
+                        userLayoutsHelp: "Utilisateurs ayant enregistr\u00e9 leur propre disposition. R\u00e9initialiser un utilisateur le ram\u00e8ne \u00e0 la disposition par d\u00e9faut.",
+                        genreThumbnails: 'Miniatures des genres',
+                        genreThumbnailsHelp: "Miniatures utilis\u00e9es par la section \u00ab Tous les genres \u00bb quand ses cartes sont r\u00e9gl\u00e9es sur \u00ab Images personnalis\u00e9es \u00bb (bouton de format de la section, dans l'\u00e9diteur). Une image par forme de carte : la section prend celle qui correspond \u00e0 sa forme, sinon une autre image envoy\u00e9e (recadr\u00e9e), sinon le collage de quatre affiches.",
+                        filterGenres: 'Filtrer les genres',
+                        optimalSize: 'Taille optimale : {0}',
+                        imageSpecs: "PNG, JPEG ou WebP, 5 Mo maximum. Les images plus grandes conviennent, les plus petites paraissent floues sur les \u00e9crans \u00e0 haute densit\u00e9.",
+                        badgeMissing: 'File Transformation absent',
+                        badgeActive: 'Actif',
+                        badgeFailed: "\u00c9chec de l'enregistrement",
+                        badgeUnavailable: 'Indisponible',
+                        statusMissing: "Installez le plugin File Transformation (d\u00e9p\u00f4t https://www.iamparadox.dev/jellyfin/plugins/manifest.json) et red\u00e9marrez le serveur : c'est lui qui injecte le script client dans le client web.",
+                        statusActive: "Le script client est inject\u00e9 dans le client web. Apr\u00e8s une mise \u00e0 jour, les utilisateurs peuvent avoir \u00e0 rafra\u00eechir leur navigateur une fois (Ctrl+F5).",
+                        statusFailed: "File Transformation a \u00e9t\u00e9 d\u00e9tect\u00e9 mais l'enregistrement a \u00e9chou\u00e9 : {0}",
+                        statusUnknownError: 'erreur inconnue',
+                        statusRootPath: " Pr\u00e9fixe d'URL de base : {0}.",
+                        statusUnreadable: "Impossible de lire l'\u00e9tat du plugin.",
+                        ftDetected: 'd\u00e9tect\u00e9',
+                        ftNotInstalled: 'non install\u00e9',
+                        noDefaultLayout: "Aucune disposition par d\u00e9faut : la page d'accueil reste inchang\u00e9e pour les utilisateurs sans disposition personnelle.",
+                        defaultLayoutSummary: "{0} section(s), {1} masqu\u00e9e(s). Remplace la page d'accueil par d\u00e9faut pour les utilisateurs sans disposition personnelle.",
+                        noUserLayout: "Aucun utilisateur n'a encore enregistr\u00e9 de disposition personnalis\u00e9e.",
+                        userLayoutsUnreadable: 'Impossible de lister les dispositions des utilisateurs.',
+                        userMeta: '{0} section(s) \u00b7 enregistr\u00e9e le {1}',
+                        reset: 'R\u00e9initialiser',
+                        scriptMissing: "Le script client n'est pas charg\u00e9 sur cette page. V\u00e9rifiez l'\u00e9tat dans l'onglet Options et rafra\u00eechissez la page (Ctrl+F5).",
+                        shapePortrait: 'Affiche',
+                        shapeLandscape: 'Paysage',
+                        shapeSquare: 'Carr\u00e9',
+                        noGenreMatch: 'Aucun genre ne correspond.',
+                        noGenreFound: 'Aucun genre trouv\u00e9 dans les m\u00e9diath\u00e8ques.',
+                        genresUnreadable: 'Impossible de charger les genres.',
+                        uploadThumb: 'Envoyer la miniature {0} de \u00ab {1} \u00bb',
+                        replaceThumb: 'Remplacer la miniature {0} de \u00ab {1} \u00bb',
+                        upload: 'Envoyer',
+                        replace: 'Remplacer',
+                        removeThumb: 'Supprimer la miniature {0} de \u00ab {1} \u00bb',
+                        remove: 'Supprimer',
+                        badImageType: 'Image non prise en charge : utilisez PNG, JPEG ou WebP.',
+                        imageTooLarge: "L'image d\u00e9passe 5 Mo.",
+                        uploadFailed: "La miniature n'a pas pu \u00eatre envoy\u00e9e.",
+                        cancel: 'Annuler',
+                        askRemoveThumbTitle: 'Supprimer cette miniature ?',
+                        askRemoveThumbText: "La miniature {0} de \u00ab {1} \u00bb est supprim\u00e9e du serveur. La section \u00ab Tous les genres \u00bb se rabat sur une autre forme envoy\u00e9e, ou sur le collage de quatre affiches. Vous pourrez la renvoyer \u00e0 tout moment.",
+                        askClearTitle: 'Vider la disposition par d\u00e9faut ?',
+                        askClearText: "La disposition par d\u00e9faut est vid\u00e9e et ne peut pas \u00eatre r\u00e9cup\u00e9r\u00e9e. Les utilisateurs sans disposition personnelle retrouvent la page d'accueil Jellyfin intacte. Les dispositions enregistr\u00e9es par les utilisateurs ne sont pas touch\u00e9es.",
+                        askResetTitle: 'R\u00e9initialiser {0} \u00e0 la disposition par d\u00e9faut ?',
+                        askResetText: "La disposition enregistr\u00e9e par {0} est supprim\u00e9e et ne peut pas \u00eatre r\u00e9cup\u00e9r\u00e9e. Sa page d'accueil revient \u00e0 la disposition par d\u00e9faut, et il pourra la personnaliser de nouveau."
+                    }
+                };
+
+                // Same source as the client script: the display language of the Jellyfin user, else the document.
+                function currentLanguage() {
+                    var lang = '';
+                    try {
+                        var userId = ApiClient && ApiClient.getCurrentUserId && ApiClient.getCurrentUserId();
+                        if (userId) {
+                            lang = localStorage.getItem(userId + '-language') || '';
+                        }
+                    } catch (e) {
+                        lang = '';
+                    }
+                    if (!lang) {
+                        lang = document.documentElement.lang || navigator.language || 'en';
+                    }
+                    return String(lang).toLowerCase();
+                }
+
+                var STRINGS = I18N[currentLanguage().split('-')[0]] || I18N.en;
+
+                function t(key) {
+                    var text = STRINGS[key] || I18N.en[key] || key;
+                    for (var i = 1; i < arguments.length; i++) {
+                        text = text.replace('{' + (i - 1) + '}', arguments[i]);
+                    }
+                    return text;
+                }
+
+                // Applies the table to everything the markup tagged, so the English written inline is only a fallback.
+                function translatePage(root) {
+                    Array.prototype.forEach.call(root.querySelectorAll('[data-cha-i18n]'), function (node) {
+                        node.textContent = t(node.getAttribute('data-cha-i18n'));
+                    });
+                    Array.prototype.forEach.call(root.querySelectorAll('[data-cha-i18n-placeholder]'), function (node) {
+                        node.placeholder = t(node.getAttribute('data-cha-i18n-placeholder'));
+                    });
+                    Array.prototype.forEach.call(root.querySelectorAll('[data-cha-i18n-aria]'), function (node) {
+                        node.setAttribute('aria-label', t(node.getAttribute('data-cha-i18n-aria')));
+                    });
+                }
+
                 var pluginId = '7c99a4bf-cd3b-4bc8-b941-7ddccd816f3c';
                 var page = document.querySelector('#CustomizedHomeConfigPage');
                 var fields = ['AllowUserCustomization', 'ForceDefaultLayout', 'ShowCustomizeButtonOnHome', 'ShowUserMenuEntry', 'EnableIntegratedSections', 'DeveloperMode'];
@@ -813,11 +1058,12 @@
                         '<h2 class="cha-ask-title" id="chAskTitle"></h2></div>' +
                         '<p class="cha-ask-text" id="chAskText"></p>' +
                         '<div class="cha-ask-actions">' +
-                        '<button type="button" class="cha-btn cha-ask-no">Cancel</button>' +
+                        '<button type="button" class="cha-btn cha-ask-no"></button>' +
                         '<button type="button" class="cha-btn cha-btn-danger cha-ask-yes"></button>' +
                         '</div></div>';
                     backdrop.querySelector('.cha-ask-title').textContent = title;
                     backdrop.querySelector('.cha-ask-text').textContent = question;
+                    backdrop.querySelector('.cha-ask-no').textContent = t('cancel');
                     backdrop.querySelector('.cha-ask-yes').textContent = confirmLabel;
                     // The dashboard paints the page background on <body>: the card copies it to stay opaque.
                     backdrop.querySelector('.cha-ask').style.setProperty('--cha-ask-surface', getComputedStyle(document.body).backgroundColor);
@@ -883,7 +1129,7 @@
                 function describeLayout(layout) {
                     var items = (layout && layout.Items) || [];
                     if (!items.length) {
-                        return 'No default layout yet: the home page is left untouched for users without a layout of their own.';
+                        return t('noDefaultLayout');
                     }
                     var hidden = 0;
                     items.forEach(function (item) {
@@ -894,7 +1140,7 @@
                             }
                         });
                     });
-                    return countSections(layout) + ' section(s), ' + hidden + ' hidden. Replaces the default home page for users without a layout of their own.';
+                    return t('defaultLayoutSummary', countSections(layout), hidden);
                 }
 
                 function updateDefaultSummary(layout) {
@@ -904,7 +1150,9 @@
 
                 function formatDate(value) {
                     try {
-                        return new Date(value).toLocaleString();
+                        // The display language of the Jellyfin user, not the one of the browser: the rest of the
+                        // page follows the former, and a French page showing "9/12/2026, 10:14:00 PM" would not.
+                        return new Date(value).toLocaleString(currentLanguage());
                     } catch (e) {
                         return value;
                     }
@@ -920,28 +1168,28 @@
                     var inj = status.Injection || {};
                     var text;
                     if (!inj.FileTransformationDetected) {
-                        setBadge('warn', 'File Transformation missing');
-                        text = 'Install the File Transformation plugin (repository https://www.iamparadox.dev/jellyfin/plugins/manifest.json) and restart the server: it injects the client script into the web client.';
+                        setBadge('warn', t('badgeMissing'));
+                        text = t('statusMissing');
                     } else if (inj.Registered) {
-                        setBadge('ok', 'Active');
-                        text = 'The client script is injected into the web client. After an update, users may need to refresh their browser once (Ctrl+F5).';
+                        setBadge('ok', t('badgeActive'));
+                        text = t('statusActive');
                     } else {
-                        setBadge('error', 'Registration failed');
-                        text = 'File Transformation was detected but the registration failed: ' + (inj.Error || 'unknown error');
+                        setBadge('error', t('badgeFailed'));
+                        text = t('statusFailed', inj.Error || t('statusUnknownError'));
                     }
                     if (status.RootPath) {
-                        text += ' Base URL prefix: ' + status.RootPath + '.';
+                        text += t('statusRootPath', status.RootPath);
                     }
                     page.querySelector('#chStatus').textContent = text;
                     page.querySelector('#chVersion').textContent = 'v' + status.PluginVersion;
-                    page.querySelector('#chStatFt').textContent = inj.FileTransformationDetected ? (inj.FileTransformationVersion || 'detected') : 'not installed';
+                    page.querySelector('#chStatFt').textContent = inj.FileTransformationDetected ? (inj.FileTransformationVersion || t('ftDetected')) : t('ftNotInstalled');
                     page.querySelector('#chStatUsers').textContent = String(status.UserLayoutCount);
                 }
 
                 function loadStatus() {
                     return ApiClient.getJSON(ApiClient.getUrl('CustomizedHome/Status')).then(renderStatus).catch(function () {
-                        setBadge('error', 'Unavailable');
-                        page.querySelector('#chStatus').textContent = 'Could not read the plugin status.';
+                        setBadge('error', t('badgeUnavailable'));
+                        page.querySelector('#chStatus').textContent = t('statusUnreadable');
                     });
                 }
 
@@ -949,7 +1197,7 @@
                     var container = page.querySelector('#chUserLayouts');
                     return ApiClient.getJSON(ApiClient.getUrl('CustomizedHome/UserLayouts')).then(function (list) {
                         if (!list.length) {
-                            container.innerHTML = '<div class="cha-empty">No user has saved a custom layout yet.</div>';
+                            container.innerHTML = '<div class="cha-empty">' + escapeHtml(t('noUserLayout')) + '</div>';
                             return;
                         }
                         container.innerHTML = list.map(function (info) {
@@ -958,14 +1206,14 @@
                                 '<span class="cha-avatar" aria-hidden="true">' + escapeHtml(String(name).charAt(0)) + '</span>' +
                                 '<div class="cha-user-text">' +
                                 '<div class="cha-user-name">' + escapeHtml(name) + '</div>' +
-                                '<div class="cha-user-meta">' + info.SectionCount + ' section(s) · saved ' + escapeHtml(formatDate(info.ModifiedUtc)) + '</div>' +
+                                '<div class="cha-user-meta">' + escapeHtml(t('userMeta', info.SectionCount, formatDate(info.ModifiedUtc))) + '</div>' +
                                 '</div>' +
                                 '<button type="button" class="cha-btn cha-btn-danger chResetUser" data-userid="' + escapeHtml(info.UserId) + '">' +
-                                '<span class="material-icons" aria-hidden="true">restart_alt</span>Reset</button>' +
+                                '<span class="material-icons" aria-hidden="true">restart_alt</span>' + escapeHtml(t('reset')) + '</button>' +
                                 '</div>';
                         }).join('');
                     }).catch(function () {
-                        container.innerHTML = '<div class="cha-empty">Could not list the user layouts.</div>';
+                        container.innerHTML = '<div class="cha-empty">' + escapeHtml(t('userLayoutsUnreadable')) + '</div>';
                     });
                 }
 
@@ -984,7 +1232,7 @@
                 function openDefaultEditor() {
                     var container = page.querySelector('#chDefaultEditor');
                     if (!window.CustomizedHome || !window.CustomizedHome.openEditor) {
-                        container.innerHTML = '<div class="cha-empty">The client script is not loaded on this page. Check the status in the Options tab and refresh the page (Ctrl+F5).</div>';
+                        container.innerHTML = '<div class="cha-empty">' + escapeHtml(t('scriptMissing')) + '</div>';
                         return;
                     }
                     editorOpened = true;
@@ -1017,9 +1265,9 @@
 
                 // Card shapes and the image size that fills the widest card at double pixel density.
                 var GENRE_SHAPES = [
-                    { id: 'portrait', label: 'Poster', ratio: '2 / 3', ratioText: '2:3', size: '600 × 900 px' },
-                    { id: 'landscape', label: 'Landscape', ratio: '16 / 9', ratioText: '16:9', size: '960 × 540 px' },
-                    { id: 'square', label: 'Square', ratio: '1 / 1', ratioText: '1:1', size: '600 × 600 px' }
+                    { id: 'portrait', label: t('shapePortrait'), ratio: '2 / 3', ratioText: '2:3', size: '600 × 900 px' },
+                    { id: 'landscape', label: t('shapeLandscape'), ratio: '16 / 9', ratioText: '16:9', size: '960 × 540 px' },
+                    { id: 'square', label: t('shapeSquare'), ratio: '1 / 1', ratioText: '1:1', size: '600 × 600 px' }
                 ];
 
                 function genreImageUrl(entry) {
@@ -1035,7 +1283,7 @@
                         return '<div class="cha-spec">' +
                             '<span class="cha-spec-shape" style="aspect-ratio:' + shape.ratio + '" aria-hidden="true"></span>' +
                             '<div><div class="cha-spec-title">' + shape.label + ' · ' + shape.ratioText + '</div>' +
-                            '<div class="cha-spec-size">Optimal size: ' + shape.size + '</div></div>' +
+                            '<div class="cha-spec-size">' + escapeHtml(t('optimalSize', shape.size)) + '</div></div>' +
                             '</div>';
                     }).join('');
                 }
@@ -1047,7 +1295,7 @@
                         return !filter || name.toLowerCase().indexOf(filter) >= 0;
                     });
                     if (!genres.length) {
-                        container.innerHTML = '<div class="cha-empty">' + (genreState.genres.length ? 'No genre matches.' : 'No genre found in the libraries.') + '</div>';
+                        container.innerHTML = '<div class="cha-empty">' + escapeHtml(t(genreState.genres.length ? 'noGenreMatch' : 'noGenreFound')) + '</div>';
                         return;
                     }
                     container.innerHTML = genres.map(function (name) {
@@ -1058,8 +1306,8 @@
                                 '<div class="cha-slot-label">' + shape.label + ' · ' + shape.size + '</div>' +
                                 '<div class="cha-genre-thumb' + (image ? ' cha-has-image' : '') + '"' + style + '>' + (image ? '' : shape.ratioText) + '</div>' +
                                 '<div class="cha-genre-actions">' +
-                                '<button type="button" class="cha-btn cha-btn-icon chGenreUpload" aria-label="' + (image ? 'Replace' : 'Upload') + ' the ' + shape.label.toLowerCase() + ' thumbnail of ' + escapeHtml(name) + '" title="' + (image ? 'Replace' : 'Upload') + ' (' + shape.size + ')"><span class="material-icons" aria-hidden="true">upload</span></button>' +
-                                (image ? '<button type="button" class="cha-btn cha-btn-danger cha-btn-icon chGenreRemove" aria-label="Remove the ' + shape.label.toLowerCase() + ' thumbnail of ' + escapeHtml(name) + '" title="Remove"><span class="material-icons" aria-hidden="true">delete</span></button>' : '') +
+                                '<button type="button" class="cha-btn cha-btn-icon chGenreUpload" aria-label="' + escapeHtml(t(image ? 'replaceThumb' : 'uploadThumb', shape.label.toLowerCase(), name)) + '" title="' + escapeHtml(t(image ? 'replace' : 'upload')) + ' (' + shape.size + ')"><span class="material-icons" aria-hidden="true">upload</span></button>' +
+                                (image ? '<button type="button" class="cha-btn cha-btn-danger cha-btn-icon chGenreRemove" aria-label="' + escapeHtml(t('removeThumb', shape.label.toLowerCase(), name)) + '" title="' + escapeHtml(t('remove')) + '"><span class="material-icons" aria-hidden="true">delete</span></button>' : '') +
                                 '</div></div>';
                         }).join('');
                         return '<div class="cha-genre" data-genre="' + escapeHtml(name) + '">' +
@@ -1088,7 +1336,7 @@
                         });
                         renderGenres();
                     }).catch(function () {
-                        page.querySelector('#chGenres').innerHTML = '<div class="cha-empty">Could not load the genres.</div>';
+                        page.querySelector('#chGenres').innerHTML = '<div class="cha-empty">' + escapeHtml(t('genresUnreadable')) + '</div>';
                     });
                 }
 
@@ -1108,11 +1356,11 @@
 
                 function uploadGenreImage(name, shape, file) {
                     if (ALLOWED_IMAGE_TYPES.indexOf(file.type) < 0) {
-                        Dashboard.alert('Unsupported image: use PNG, JPEG or WebP.');
+                        Dashboard.alert(t('badImageType'));
                         return Promise.resolve();
                     }
                     if (file.size > MAX_IMAGE_BYTES) {
-                        Dashboard.alert('Image is larger than 5 MB.');
+                        Dashboard.alert(t('imageTooLarge'));
                         return Promise.resolve();
                     }
                     Dashboard.showLoadingMsg();
@@ -1128,7 +1376,7 @@
                         genreState.images[imageKey(name, shape)] = entry;
                         renderGenres();
                     }).catch(function () {
-                        Dashboard.alert('The thumbnail could not be uploaded.');
+                        Dashboard.alert(t('uploadFailed'));
                     }).then(function () {
                         Dashboard.hideLoadingMsg();
                     });
@@ -1155,9 +1403,9 @@
                             return entry.id === shape;
                         })[0] || { label: shape }).label.toLowerCase();
                         askInPage(
-                            'Remove this thumbnail?',
-                            'The ' + shapeLabel + ' thumbnail of "' + name + '" is deleted from the server. The "All genres" section falls back to another uploaded shape, or to the collage of four posters. You can upload it again at any time.',
-                            'Remove',
+                            t('askRemoveThumbTitle'),
+                            t('askRemoveThumbText', shapeLabel, name),
+                            t('remove'),
                             function () {
                                 ApiClient.ajax({ type: 'DELETE', url: ApiClient.getUrl('CustomizedHome/GenreImages', { name: name, shape: shape }) }).then(function () {
                                     delete genreState.images[imageKey(name, shape)];
@@ -1219,6 +1467,7 @@
                 page.querySelector('#chForceDefaultLayout').addEventListener('change', syncForcedOptions);
 
                 page.addEventListener('pageshow', function () {
+                    translatePage(page);
                     editorOpened = false;
                     loadConfig();
                     loadStatus();
@@ -1243,11 +1492,19 @@
                     ApiClient.ajax({ type: 'POST', url: ApiClient.getUrl('CustomizedHome/Status/Retry'), dataType: 'json' }).then(renderStatus).catch(loadStatus);
                 });
 
+                page.querySelector('#chSaveDefault').addEventListener('click', function () {
+                    // The footer button of the embedded editor: absent until the editor is mounted.
+                    var save = page.querySelector('#chDefaultEditor .ch-dialog-footer .ch-save');
+                    if (save) {
+                        save.click();
+                    }
+                });
+
                 page.querySelector('#chClearDefault').addEventListener('click', function () {
                     askInPage(
-                        'Clear the default layout?',
-                        'The default layout is emptied and cannot be recovered. Users without a layout of their own get the untouched home page of Jellyfin again. Layouts saved by users are not affected.',
-                        'Clear',
+                        t('askClearTitle'),
+                        t('askClearText'),
+                        t('clear'),
                         function () {
                             ApiClient.ajax({
                                 type: 'POST',
@@ -1272,9 +1529,9 @@
                     var row = button.closest('.cha-user');
                     var userName = (row && row.querySelector('.cha-user-name').textContent) || 'this user';
                     askInPage(
-                        'Reset ' + userName + ' to the default layout?',
-                        'The layout saved by ' + userName + ' is deleted and cannot be recovered. Their home page falls back to the default layout, and they can customize it again.',
-                        'Reset',
+                        t('askResetTitle', userName),
+                        t('askResetText', userName),
+                        t('reset'),
                         function () {
                             ApiClient.ajax({ type: 'DELETE', url: ApiClient.getUrl('CustomizedHome/Layout', { userId: button.getAttribute('data-userid') }) }).then(function () {
                                 loadUserLayouts();

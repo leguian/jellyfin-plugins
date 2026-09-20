@@ -3,9 +3,21 @@
 > **English**: the user guide (supported clients, installation order, first use, administrator page, troubleshooting, privacy, uninstall, known limits) is in **[README.en.md](README.en.md)**. This document is the French technical reference.
 
 <!--
-Captures d'écran : à ajouter par le mainteneur à partir d'un serveur Jellyfin réel (éditeur, hero, page d'administration).
-Ne pas utiliser les captures de « npm run screenshots » : elles montrent la page d'accueil simulée des tests.
+Captures d'écran : `screenshots/homepage-hero.jpg` et `all-genres-*.jpg` viennent d'un serveur Jellyfin réel.
+Les trois `admin-*.png` sont produites depuis la page d'administration elle-même (voir tests/) : elles montrent
+l'interface en français. Ne pas utiliser les captures de « npm run screenshots » : elles montrent la page
+d'accueil simulée des tests.
 -->
+
+## Aperçu
+
+| | |
+| --- | --- |
+| ![Accueil avec la bannière hero](screenshots/homepage-hero.jpg) | **Accueil** : bannière « hero » en tête, puis les sections dans l'ordre choisi. |
+| ![Onglet Options de la page d'administration](screenshots/admin-options.png) | **Administration, onglet Options** : état de l'injection et réglages globaux. |
+| ![Onglet Dispositions](screenshots/admin-layouts.png) | **Administration, onglet Dispositions** : la disposition par défaut s'édite avec l'éditeur utilisateur, embarqué dans la page. |
+| ![Onglet Genres](screenshots/admin-genres-thumbs.jpg) | **Administration, onglet Genres** : une miniature par forme de carte pour la section « Tous les genres ». |
+| ![Section Tous les genres](screenshots/all-genres-posters.jpg) | **Section « Tous les genres »**, cartes en affiches du genre. |
 
 Plugin Jellyfin qui permet de réorganiser la page d'accueil du client web :
 
@@ -20,7 +32,7 @@ Plugin Jellyfin qui permet de réorganiser la page d'accueil du client web :
 | Sections intégrées | Sans autre plugin : Continuer à regarder / À suivre (combiné), Derniers films et Dernières séries (date de sortie), Collections, Regarder à nouveau, Parce que vous avez regardé…, Genre, Tous les genres |
 | Format par section | Forme des cartes (par défaut, affiche, paysage, carré), taille (petite, normale, grande), titre de la section et titres des cartes affichés ou non |
 | Hero | Bannière à la une en tête d'accueil : carrousel de médias avec lecture, reprise, bande-annonce, favori, vu (voir [Hero](#hero-bannière-à-la-une)) |
-| Langues | Éditeur en français et en anglais selon la langue d'affichage de l'utilisateur Jellyfin (anglais pour les autres langues) ; page d'administration en anglais |
+| Langues | Éditeur **et page d'administration** en français et en anglais selon la langue d'affichage de l'utilisateur Jellyfin (anglais pour les autres langues) |
 
 ## Compatibilité
 

@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test';
-import { openEditor, openHome, recordedRequests, showHomeAgain, updateMock, type HeroItem, type HeroSettings, type HeroSource, type Layout } from './support';
+import { HOME_FIXTURE_URL, injectPlugin, openEditor, openHome, recordedRequests, showHomeAgain, updateMock, type HeroItem, type HeroSettings, type HeroSource, type Layout } from './support';
 
 const TICKS_PER_MINUTE = 600_000_000;
 
@@ -627,4 +627,23 @@ test('a click lands on the dot whose hit area it falls in, including on the tran
     // Just outside the painted dot, inside the 24px hit area: the overlay must take the click.
     await page.mouse.click(box.x + box.width / 2, box.y + box.height / 2 + (MIN_TARGET_PX / 2 - 2));
     await expect(third).toHaveClass(/ch-active/);
+});
+
+// aria-roledescription replaces the role announced by a screen reader: left in English it is read out as such in
+// the middle of a French interface, where every other label of the hero is translated.
+test('the roles announced by a screen reader follow the language of the interface', async ({ page }) => {
+    await page.goto(HOME_FIXTURE_URL);
+    await page.evaluate(() => document.documentElement.setAttribute('lang', 'fr'));
+    await injectPlugin(page, { layout: layout(hero()), enableIntegratedSections: true, heroItems: HERO_ITEMS });
+    await page.waitForSelector('#homeTab .sections.ch-container .ch-hero');
+
+    await expect(page.locator('.ch-hero')).toHaveAttribute('aria-roledescription', 'carrousel');
+    await expect(page.locator('.ch-hero-slide').first()).toHaveAttribute('aria-roledescription', 'diapositive');
+});
+
+test('the same roles stay in English on an English interface', async ({ page }) => {
+    await openHome(page, { layout: layout(hero()), enableIntegratedSections: true, heroItems: HERO_ITEMS });
+
+    await expect(page.locator('.ch-hero')).toHaveAttribute('aria-roledescription', 'carousel');
+    await expect(page.locator('.ch-hero-slide').first()).toHaveAttribute('aria-roledescription', 'slide');
 });

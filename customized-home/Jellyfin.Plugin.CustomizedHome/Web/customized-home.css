@@ -837,6 +837,12 @@ button.ch-handle:focus-visible {
     display: none;
 }
 
+/* The administration page carries its own Save in the card header, beside Clear: the toolbar copy that the
+   embedded editor shows by default would be a second one, a line below it. */
+.ch-embedded .ch-save-top {
+    display: none;
+}
+
 .ch-embedded .ch-dialog-body {
     overflow: visible;
     padding: 0;

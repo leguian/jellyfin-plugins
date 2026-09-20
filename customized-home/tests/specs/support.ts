@@ -268,9 +268,13 @@ export async function openEditor(page: Page): Promise<void> {
 }
 
 /** Renders the administration page standalone (body of configPage.html) with the plugin script available. */
-export async function openAdminPage(page: Page, options: MockOptions = {}): Promise<void> {
+export async function openAdminPage(page: Page, options: MockOptions = {}, language?: string): Promise<void> {
     await page.goto(HOME_FIXTURE_URL);
     await page.evaluate(() => document.querySelector('#indexPage')?.remove());
+    // Before the page script runs: it reads the language once, when it builds its string table.
+    if (language) {
+        await page.evaluate((code) => document.documentElement.setAttribute('lang', code), language);
+    }
     await injectPlugin(page, options);
     const html = readFileSync(CONFIG_PAGE_PATH, 'utf8');
     const body = /<body>([\s\S]*)<\/body>/.exec(html)?.[1] ?? '';
