@@ -28,19 +28,21 @@ test('layouts tab embeds the default layout editor, limited to 1100px, with a sa
 
     expect(await rowTitles(page, `${EDITOR} .ch-list`)).toEqual(['My Media', 'Next Up']);
     expect(await rowTitles(page, `${EDITOR} .ch-unlisted`)).toContain('Live TV');
-    await expect(page.locator(`${EDITOR} .ch-save-top`)).toBeVisible();
+    // The editor's own top button is hidden here: the card header carries the Save, beside Clear.
+    await expect(page.locator(`${EDITOR} .ch-save-top`)).toBeHidden();
+    await expect(page.locator('#chSaveDefault')).toBeVisible();
 
     const width = await page.locator('.cha-shell').evaluate((node) => node.getBoundingClientRect().width);
     expect(width).toBeLessThanOrEqual(1100);
     expect(width).toBeGreaterThan(960);
 });
 
-test('top save button stores the default layout and keeps the editor open', async ({ page }) => {
+test('the card header save button stores the default layout and keeps the editor open', async ({ page }) => {
     await openAdminPage(page, { defaultLayout: DEFAULT_LAYOUT });
     await page.click('#chTabLayouts');
     await page.waitForSelector(`${EDITOR} .ch-list .ch-row`);
     await page.locator(`${EDITOR} .ch-list .ch-row`, { hasText: 'Next Up' }).locator('.ch-act-visibility').click();
-    await page.click(`${EDITOR} .ch-save-top`);
+    await page.click('#chSaveDefault');
 
     await expect.poll(async () => (await recordedRequests(page)).some((request) => request.method === 'POST' && request.path === 'CustomizedHome/DefaultLayout')).toBe(true);
     const post = (await recordedRequests(page)).find((request) => request.method === 'POST' && request.path === 'CustomizedHome/DefaultLayout');
@@ -457,7 +459,7 @@ for (const theme of ['light', 'dark'] as const) {
         if (theme === 'light') {
             await page.addStyleTag({ content: LIGHT_DASHBOARD_STYLE });
         }
-        const accent = await page.locator('#CustomizedHomeConfigPage .cha-btn-primary').evaluate((node) => getComputedStyle(node).backgroundColor);
+        const accent = await page.locator('#CustomizedHomeConfigPage .cha-btn-primary[type="submit"]').evaluate((node) => getComputedStyle(node).backgroundColor);
 
         for (const { selector, open } of DANGER_BUTTONS) {
             await open(page);
@@ -493,3 +495,178 @@ for (const theme of ['light', 'dark'] as const) {
         }
     });
 }
+
+/* ---- The accent used as a fill behind white, and as a boundary ---- */
+
+/** The Jellyfin brand blue. It is a tint and a border colour here, never a fill under a white label. */
+const BRAND_ACCENT = 'rgb(0, 164, 220)';
+
+/**
+ * Every place the page paints a fill and puts white on it. The label needs 4.5:1, the fill itself 3:1 against
+ * the surface behind it. The raw accent gives 2.86:1 and 2.10:1, which is the failure this covers.
+ */
+const WHITE_ON_ACCENT: { name: string; selector: string; open?: (page: Page) => Promise<void> }[] = [
+    { name: 'primary button', selector: '.cha-btn-primary' },
+    { name: 'active tab', selector: '.cha-tab[aria-selected="true"]' },
+    {
+        name: 'active tab on another panel',
+        selector: '.cha-tab[aria-selected="true"]',
+        open: async (page) => {
+            await page.click('#chTabGenres');
+        }
+    }
+];
+
+for (const theme of ['light', 'dark'] as const) {
+    test(`white on the accent fill passes AA on a ${theme} dashboard`, async ({ page }) => {
+        await openAdminPage(page, { defaultLayout: DEFAULT_LAYOUT });
+        if (theme === 'light') {
+            await page.addStyleTag({ content: LIGHT_DASHBOARD_STYLE });
+        }
+        for (const { name, selector, open } of WHITE_ON_ACCENT) {
+            await open?.(page);
+            const target = page.locator(`#CustomizedHomeConfigPage ${selector}`).first();
+            await target.waitFor();
+            const where = `${name} on a ${theme} dashboard`;
+
+            // The label is white: the fill has to carry it as normal size text.
+            await expect(target, `${where}: label is white`).toHaveCSS('color', 'rgb(255, 255, 255)');
+            expect(await textContrast(target), `${where}: white label`).toBeGreaterThanOrEqual(MIN_CONTRAST);
+            // The fill is the boundary of the component against the surface it sits on.
+            expect(await surfaceContrast(target, 'backgroundColor'), `${where}: fill`).toBeGreaterThanOrEqual(MIN_UI_CONTRAST);
+            // The failure this replaces: the raw brand blue cannot be the fill under white.
+            await expect(target, `${where}: not the raw accent`).not.toHaveCSS('background-color', BRAND_ACCENT);
+        }
+    });
+
+    test(`the primary button keeps its contrast while hovered on a ${theme} dashboard`, async ({ page }) => {
+        await openAdminPage(page, { defaultLayout: DEFAULT_LAYOUT });
+        if (theme === 'light') {
+            await page.addStyleTag({ content: LIGHT_DASHBOARD_STYLE });
+        }
+        const button = page.locator('#CustomizedHomeConfigPage .cha-btn-primary[type="submit"]');
+        const resting = await button.evaluate((node) => getComputedStyle(node).backgroundColor);
+
+        await button.hover();
+        // Playwright reads the computed style mid-transition otherwise, and a blended value proves nothing.
+        await expect
+            .poll(async () => button.evaluate((node) => getComputedStyle(node).backgroundColor))
+            .not.toBe(resting);
+
+        const where = `hovered primary button on a ${theme} dashboard`;
+        expect(await textContrast(button), `${where}: white label`).toBeGreaterThanOrEqual(MIN_CONTRAST);
+        expect(await surfaceContrast(button, 'backgroundColor'), `${where}: fill`).toBeGreaterThanOrEqual(MIN_UI_CONTRAST);
+        // The border follows the fill, so hovering leaves no lighter ring around the button.
+        expect(await surfaceContrast(button, 'borderTopColor'), `${where}: border`).toBeGreaterThanOrEqual(MIN_UI_CONTRAST);
+        await expect(button, `${where}: not the raw accent`).not.toHaveCSS('background-color', BRAND_ACCENT);
+    });
+
+    test(`the focus ring of the primary button stays a boundary on a ${theme} dashboard`, async ({ page }) => {
+        await openAdminPage(page, { defaultLayout: DEFAULT_LAYOUT });
+        if (theme === 'light') {
+            await page.addStyleTag({ content: LIGHT_DASHBOARD_STYLE });
+        }
+        const button = page.locator('#CustomizedHomeConfigPage .cha-btn-primary[type="submit"]');
+        await focusWithKeyboard(page, button);
+        // Offset onto the surface behind the button, so it is measured against that surface, not against the fill.
+        await expect(button).toHaveCSS('outline-offset', '2px');
+        expect(await surfaceContrast(button, 'outlineColor'), `primary focus ring on a ${theme} dashboard`).toBeGreaterThanOrEqual(MIN_UI_CONTRAST);
+    });
+}
+
+/**
+ * A checked switch is a fill with a white knob on it, and the outline of a thumbnail shape and the border of a
+ * focused field are graphics that carry the whole meaning: 3:1 against what is behind them. The raw accent gives
+ * 1.38:1, 2.11:1 and 2.31:1 on a light dashboard.
+ */
+for (const theme of ['light', 'dark'] as const) {
+    test(`the accent used as a control boundary passes AA on a ${theme} dashboard`, async ({ page }) => {
+        await openAdminPage(page, { defaultLayout: DEFAULT_LAYOUT, genreImages: [{ Name: 'Comedy', Shape: 'portrait', Version: 1 }] });
+        if (theme === 'light') {
+            await page.addStyleTag({ content: LIGHT_DASHBOARD_STYLE });
+        }
+
+        const toggle = page.locator('#CustomizedHomeConfigPage .cha-switch').first();
+        const off = await toggle.evaluate((node) => getComputedStyle(node).backgroundColor);
+        await toggle.evaluate((node: HTMLInputElement) => {
+            node.checked = true;
+        });
+        // The switch transitions its background: poll until it settles, or the reading is a blend of both states.
+        await expect.poll(async () => toggle.evaluate((node) => getComputedStyle(node).backgroundColor)).not.toBe(off);
+        await expect
+            .poll(async () => surfaceContrast(toggle, 'backgroundColor'))
+            .toBeGreaterThanOrEqual(MIN_UI_CONTRAST);
+        await expect(toggle, 'checked switch: not the raw accent').not.toHaveCSS('background-color', BRAND_ACCENT);
+
+        await page.click('#chTabGenres');
+        const shape = page.locator('#CustomizedHomeConfigPage .cha-spec-shape').first();
+        await shape.waitFor();
+        expect(await surfaceContrast(shape, 'borderTopColor'), `thumbnail shape outline on a ${theme} dashboard`).toBeGreaterThanOrEqual(MIN_UI_CONTRAST);
+        await expect(shape, 'thumbnail shape: not the raw accent').not.toHaveCSS('border-top-color', BRAND_ACCENT);
+
+        const field = page.locator('#CustomizedHomeConfigPage .cha-input').first();
+        await field.focus();
+        expect(await surfaceContrast(field, 'borderTopColor'), `focused field border on a ${theme} dashboard`).toBeGreaterThanOrEqual(MIN_UI_CONTRAST);
+        await expect(field, 'focused field: not the raw accent').not.toHaveCSS('border-top-color', BRAND_ACCENT);
+    });
+
+    /**
+     * The other family: the accent as a *text* colour on a tint of itself. The tint stays the brand blue, which
+     * is what keeps the page recognisable; the glyph on it is mixed into the painted text colour like the status
+     * badges, because the raw accent reads 2.14:1 and 2.06:1 on a light dashboard.
+     */
+    test(`accent glyphs on their own tint pass AA on a ${theme} dashboard`, async ({ page }) => {
+        await openAdminPage(page, {
+            defaultLayout: DEFAULT_LAYOUT,
+            userLayouts: USERS_WITH_LAYOUTS
+        });
+        if (theme === 'light') {
+            await page.addStyleTag({ content: LIGHT_DASHBOARD_STYLE });
+        }
+        const icon = page.locator('#CustomizedHomeConfigPage .cha-header-icon');
+        expect(await textContrast(icon), `header icon glyph on a ${theme} dashboard`).toBeGreaterThanOrEqual(MIN_CONTRAST);
+        await expect(icon, 'header icon: the glyph is not the raw accent').not.toHaveCSS('color', BRAND_ACCENT);
+        // The tint behind it is still the brand blue: that is what is not being repainted.
+        await expect(icon).toHaveCSS('background-color', 'color(srgb 0 0.643137 0.862745 / 0.18)');
+
+        await page.click('#chTabLayouts');
+        const avatar = page.locator('#CustomizedHomeConfigPage .cha-avatar').first();
+        await avatar.waitFor();
+        expect(await textContrast(avatar), `user initial on a ${theme} dashboard`).toBeGreaterThanOrEqual(MIN_CONTRAST);
+        await expect(avatar, 'avatar: the initial is not the raw accent').not.toHaveCSS('color', BRAND_ACCENT);
+        await expect(avatar).toHaveCSS('background-color', 'color(srgb 0 0.643137 0.862745 / 0.22)');
+    });
+}
+
+/** The page must still read as Jellyfin blue: the brand value itself is untouched and still painted. */
+test('the brand blue is still the accent token and still painted on the page', async ({ page }) => {
+    await openAdminPage(page, { defaultLayout: DEFAULT_LAYOUT });
+    const accent = await page.locator('#CustomizedHomeConfigPage').evaluate((node) => getComputedStyle(node).getPropertyValue('--cha-accent').trim());
+    expect(accent).toBe('#00a4dc');
+    // The header tint is the brand blue, undiluted: darkening the token globally would have repainted it.
+    await expect(page.locator('#CustomizedHomeConfigPage .cha-header-icon')).toHaveCSS('background-color', 'color(srgb 0 0.643137 0.862745 / 0.18)');
+});
+
+// The administration page carries its own table (the client script may not be loaded, which is exactly the
+// failure this page reports): the English written in the markup is only a fallback.
+test('the administration page follows the display language of the user', async ({ page }) => {
+    await openAdminPage(page, { defaultLayout: DEFAULT_LAYOUT }, 'fr');
+
+    await expect(page.locator('#chTabLayouts [data-cha-i18n]')).toHaveText('Dispositions');
+    await expect(page.locator('#CustomizedHomeConfigPage .cha-subtitle')).toHaveText("Organisez facilement les sections de votre page d'accueil");
+    await expect(page.locator('#chSaveDefault')).toContainText('Enregistrer');
+
+    await page.click('#chTabLayouts');
+    // Built by the script rather than tagged in the markup.
+    await expect(page.locator('#chDefaultSummary')).toContainText('masqu\u00e9e(s)');
+    await expect(page.locator('#chUserLayouts')).toContainText("Aucun utilisateur n'a encore enregistr\u00e9");
+});
+
+test('the administration page stays in English for an English user', async ({ page }) => {
+    await openAdminPage(page, { defaultLayout: DEFAULT_LAYOUT });
+
+    await expect(page.locator('#chTabLayouts [data-cha-i18n]')).toHaveText('Layouts');
+    await expect(page.locator('#chSaveDefault')).toContainText('Save');
+    await page.click('#chTabLayouts');
+    await expect(page.locator('#chDefaultSummary')).toContainText('hidden');
+});

@@ -24,7 +24,7 @@ Plugins Jellyfin, un sous-dossier par plugin. Actuellement : `customized-home/`.
 - **File Transformation** : enregistrement par réflexion, clé de pipeline `index.html` (chaîne exacte partagée avec les autres plugins, sinon un seul pipeline s'exécute). Le callback doit laisser intact tout contenu sans `</body>`.
 - **Le CSS du dashboard plafonne `form` à 54em** : toute page admin doit le surcharger explicitement.
 - C# : `TreatWarningsAsErrors`, analyzers actifs. Logs via `[LoggerMessage]`. API : `[Authorize]` partout sauf assets client, admin via `Policies.RequiresElevation`. Toute entrée client est validée et normalisée côté serveur (`LayoutValidator`).
-- Textes UI du client : FR + EN dans la table `I18N` du JS. Page admin : anglais.
+- Textes UI : FR + EN. Le client a sa table `I18N` dans le JS ; la page admin a la sienne dans le `<script>` de `configPage.html` (elle doit rester lisible quand le script client n'est pas chargé, c'est justement la panne qu'elle signale). Le balisage de la page admin porte l'anglais en repli et des attributs `data-cha-i18n` appliqués par `translatePage`.
 
 ## Commandes
 

@@ -25,37 +25,40 @@ Do not use the captures produced by "npm run screenshots": they show the simulat
 
 ## What it does, and what it does not
 
-| It does | It does not |
-| --- | --- |
-| Reorder the home sections by drag and drop (mouse and touch) or from the keyboard | Change anything in clients that do not run the Jellyfin web client (see below) |
-| Hide a section without losing its place, or remove it from the page | Modify files on disk: the script is injected on the fly by the File Transformation plugin |
-| Set a format per section: card shape (default, poster, landscape, square), card size (small, normal, large), section title and card titles on or off | Replace the Jellyfin home settings (Settings, Home): both can be used, see [Known limits](#known-limits) |
-| Add sections rendered by the plugin, with no other plugin: Continue Watching / Next Up (combined), Latest Movies and Latest Shows by release date, Collections, Watch Again, Because You Watched, Genre, All genres | Play media itself: playback always goes through the web client |
-| Show an optional hero banner: a carousel of featured media with play, resume, trailer, favorite and watched actions | |
-| Store one layout per user on the server (it follows the user on every browser and device) and one default layout set by the administrator | |
-| Handle sections added by other plugins (Home Screen Sections, and any plugin that adds a titled row to the home page) | |
+
+| It does                                                                                                                                                                                                             | It does not                                                                                             |
+| ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------- |
+| Reorder the home sections by drag and drop (mouse and touch) or from the keyboard                                                                                                                                   | Change anything in clients that do not run the Jellyfin web client (see below)                          |
+| Hide a section without losing its place, or remove it from the page                                                                                                                                                 | Modify files on disk: the script is injected on the fly by the File Transformation plugin               |
+| Set a format per section: card shape (default, poster, landscape, square), card size (small, normal, large), section title and card titles on or off                                                                | Replace the Jellyfin home settings (Settings, Home): both can be used, see[Known limits](#known-limits) |
+| Add sections rendered by the plugin, with no other plugin: Continue Watching / Next Up (combined), Latest Movies and Latest Shows by release date, Collections, Watch Again, Because You Watched, Genre, All genres | Play media itself: playback always goes through the web client                                          |
+| Show an optional hero banner: a carousel of featured media with play, resume, trailer, favorite and watched actions                                                                                                 |                                                                                                         |
+| Store one layout per user on the server (it follows the user on every browser and device) and one default layout set by the administrator                                                                           |                                                                                                         |
+| Handle sections added by other plugins (Home Screen Sections, and any plugin that adds a titled row to the home page)                                                                                               |                                                                                                         |
 
 The interface of the editor is available in English and French and follows the display language of the Jellyfin user; other languages fall back to English. The administrator page is in English.
 
 ## Supported versions and clients
 
-| Jellyfin server | Supported |
-| --- | --- |
-| 12.x | Yes, from 12.0.0 |
-| 10.11.x | Yes, from 10.11.0 |
-| 10.10.x and older | No |
+
+| Jellyfin server   | Supported         |
+| ----------------- | ----------------- |
+| 12.x              | Yes, from 12.0.0  |
+| 10.11.x           | Yes, from 10.11.0 |
+| 10.10.x and older | No                |
 
 Plugin versions up to 1.8.2.0 only load on Jellyfin 10.11.11 or later and 12.1.0 or later. Use 1.8.2.1 or later on older 10.11.x and 12.0.x servers.
 
 The plugin works by adding a script to the Jellyfin **web client**. A client is covered only when it displays that web client.
 
-| Client | Covered |
-| --- | --- |
-| Web browsers (desktop and mobile) | Yes |
-| Official Jellyfin apps for Android and iOS (they display the web client of the server) | Yes |
-| Jellyfin Media Player / Jellyfin Desktop (versions that display the web client of the server) | Yes |
-| Android TV, Fire TV, Swiftfin, Kodi, Roku, Findroid, Infuse and every other native app | **No**: these apps draw their own home screen and never load the script |
-| Other apps built on the web client (smart TV apps…) | Not tested. They can only be covered when they load the web client from your server, not a copy bundled in the app |
+
+| Client                                                                                        | Covered                                                                                                            |
+| --------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------ |
+| Web browsers (desktop and mobile)                                                             | Yes                                                                                                                |
+| Official Jellyfin apps for Android and iOS (they display the web client of the server)        | Yes                                                                                                                |
+| Jellyfin Media Player / Jellyfin Desktop (versions that display the web client of the server) | Yes                                                                                                                |
+| Android TV, Fire TV, Swiftfin, Kodi, Roku, Findroid, Infuse and every other native app        | **No**: these apps draw their own home screen and never load the script                                            |
+| Other apps built on the web client (smart TV apps…)                                          | Not tested. They can only be covered when they load the web client from your server, not a copy bundled in the app |
 
 ## Installation
 
@@ -68,14 +71,12 @@ Install in this order:
    ```
    https://www.iamparadox.dev/jellyfin/plugins/manifest.json
    ```
-
 2. **Install File Transformation** from the catalog. It needs no configuration.
 3. **Add this repository** the same way:
 
    ```
    https://raw.githubusercontent.com/leguian/jellyfin-plugins/main/manifest.json
    ```
-
 4. **Install Customized Home** from the catalog.
 5. **Restart Jellyfin.** One restart after both installs is enough.
 6. **Check the status.** Dashboard, Plugins, Customized Home (also in the Dashboard side menu): the status badge of the Options tab must read **Active**.
@@ -91,69 +92,77 @@ Open the editor with the **Customize home** button at the bottom of the home pag
 
 The editor has two columns (stacked on a narrow screen):
 
-| Column | Content |
-| --- | --- |
-| **Customized home page** (left) | Your layout: the sections shown on your home page, in this order |
-| **Sections not in the layout** (right) | Everything else that exists on the server and can be added |
+
+| Column                                 | Content                                                          |
+| -------------------------------------- | ---------------------------------------------------------------- |
+| **Customized home page** (left)        | Your layout: the sections shown on your home page, in this order |
+| **Sections not in the layout** (right) | Everything else that exists on the server and can be added       |
 
 **The rule to remember: a layout that is not empty replaces the default home page.** As soon as the left column holds one section, only the sections of that column are displayed, in that order. An empty left column leaves the Jellyfin home page untouched.
 
-| To do this | Do that |
-| --- | --- |
-| Add a section | In the right column, press **Add to the customized home page** (icon `add_circle_outline`): the section lands at the top of the layout. Or drag it to the left column |
-| Reorder | Drag the handle (icon `drag_indicator`) of a row. Without a pointer: focus the handle and press the up / down arrows, or activate it (Enter, tap, screen reader) for a **Move up** / **Move down** menu. The new position is announced to screen readers |
-| Hide or show a section while keeping its place | **Hide** / **Show** (icons `visibility` / `visibility_off`) |
-| Remove a section from the home page | **Remove from the customized home page** (icon `close`), or drag the row to the right column |
-| Change the format | **Display format (shape, size, titles)** (icon `aspect_ratio`). The menu stays open while you choose; click outside or press Escape to close it |
-| Find a section | **Search a section** filters both columns. While searching, drag and drop is off and a **Move this section to the very top** button appears on the rows of the layout |
-| See sections that are not on the page right now | Tick **Also list the Jellyfin sections that are not displayed right now** (sections turned off in the Jellyfin home settings, for example) |
-| Save | **Save**. **Cancel**, the close button, Escape or a click outside the dialog discard the changes; when there are any, the editor first asks whether to keep editing or drop them. **Reset** asks the same way |
-| Go back to the default layout | **Reset** (shown once you saved a layout of your own) |
+
+| To do this                                      | Do that                                                                                                                                                                                                                                                 |
+| ----------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Add a section                                   | In the right column, press**Add to the customized home page** (icon `add_circle_outline`): the section lands at the top of the layout. Or drag it to the left column                                                                                    |
+| Reorder                                         | Drag the handle (icon`drag_indicator`) of a row. Without a pointer: focus the handle and press the up / down arrows, or activate it (Enter, tap, screen reader) for a **Move up** / **Move down** menu. The new position is announced to screen readers |
+| Hide or show a section while keeping its place  | **Hide** / **Show** (icons `visibility` / `visibility_off`)                                                                                                                                                                                             |
+| Remove a section from the home page             | **Remove from the customized home page** (icon `close`), or drag the row to the right column                                                                                                                                                            |
+| Change the format                               | **Display format (shape, size, titles)** (icon `aspect_ratio`). The menu stays open while you choose; click outside or press Escape to close it                                                                                                         |
+| Find a section                                  | **Search a section** filters both columns. While searching, drag and drop is off and a **Move this section to the very top** button appears on the rows of the layout                                                                                   |
+| See sections that are not on the page right now | Tick**Also list the Jellyfin sections that are not displayed right now** (sections turned off in the Jellyfin home settings, for example)                                                                                                               |
+| Save                                            | **Save**. **Cancel**, the close button, Escape or a click outside the dialog discard the changes; when there are any, the editor first asks whether to keep editing or drop them. **Reset** asks the same way                                           |
+| Go back to the default layout                   | **Reset** (shown once you saved a layout of your own)                                                                                                                                                                                                   |
 
 The icon at the start of a row tells where the section comes from: a house for a section rendered by Customized Home, the Jellyfin logo for a default section of the web client, a puzzle piece for a section added by another plugin. The line under the title repeats the origin and says **not displayed right now** when the section is known but not currently on the home page.
 
 ### Formats
 
-| Setting | Values |
-| --- | --- |
-| **Card shape** | Default, Poster, Landscape, Square |
-| **Card size** | Small, Normal, Large |
-| **Show the section title** | on / off |
-| **Show the card titles** | on / off |
+
+| Setting                    | Values                             |
+| -------------------------- | ---------------------------------- |
+| **Card shape**             | Default, Poster, Landscape, Square |
+| **Card size**              | Small, Normal, Large               |
+| **Show the section title** | on / off                           |
+| **Show the card titles**   | on / off                           |
 
 On a section rendered by Jellyfin or by another plugin the shape is applied with CSS: the existing image is cropped. Sections rendered by Customized Home load the image that fits the shape.
 
 ### Genre sections
 
-| Section | What it shows | Settings (format button) |
-| --- | --- | --- |
-| **Genre: …** | One row of media per genre | **Genres**: tick the genres you want. With none ticked the choice is **Automatic (from your watch history)**: two genres |
+
+| Section        | What it shows                                                    | Settings (format button)                                                                                                                                                                                                  |
+| -------------- | ---------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Genre: …**  | One row of media per genre                                       | **Genres**: tick the genres you want. With none ticked the choice is **Automatic (from your watch history)**: two genres                                                                                                  |
 | **All genres** | One card per genre; a card opens the list of media of that genre | **Genre cards**: **Posters of the genre** (a collage of four posters, the default), **Custom images** (thumbnails uploaded by the administrator, collage for genres without an image) or **Names on colored backgrounds** |
 
 ### When the layout is not applied or the home page is empty
 
 A message at the top of the home page explains what happens. It offers a **Customize home** button when you are allowed to customize, and **Hide this message**, which lasts until the page is loaded again.
 
-| Message | Cause | Home page shown |
-| --- | --- | --- |
-| **The home layout is not applied** | None of the sections of the layout exists on this home page any more (Jellyfin update, plugin removed, Jellyfin home settings), checked five seconds after the page opens | The default home page |
-| **The home layout is not applied** | The layout only holds sections rendered by Customized Home and the administrator turned them off | The default home page |
-| **Nothing to show on the home page** | Every section of the layout is hidden | Nothing: the layout stays in charge |
-| **Nothing to show on the home page** | The sections exist but are empty for now (nothing in progress, empty library), and there is no hero | Nothing: the layout stays in charge |
+
+| Message                              | Cause                                                                                                                                                                     | Home page shown                     |
+| ------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------- |
+| **The home layout is not applied**   | None of the sections of the layout exists on this home page any more (Jellyfin update, plugin removed, Jellyfin home settings), checked five seconds after the page opens | The default home page               |
+| **The home layout is not applied**   | The layout only holds sections rendered by Customized Home and the administrator turned them off                                                                          | The default home page               |
+| **Nothing to show on the home page** | Every section of the layout is hidden                                                                                                                                     | Nothing: the layout stays in charge |
+| **Nothing to show on the home page** | The sections exist but are empty for now (nothing in progress, empty library), and there is no hero                                                                       | Nothing: the layout stays in charge |
 
 Fix: open the editor and show or add sections, or reset the layout. When the layout is managed by the administrator, the message says to ask them.
 
 ## Hero banner
 
+![Home page with the hero banner](screenshots/homepage-hero.jpg)
+
 The hero is a carousel of featured media at the top of the home page. It is set in the editor, in the pinned **Hero banner** row above the left column: a switch turns it on, **Hero settings** (icon `tune`) opens its menu. It is saved with the layout, so each user has their own, and the administrator can put one in the default layout. A layout may hold the hero alone: it is then displayed above the unchanged Jellyfin home page.
 
-| Setting | Values | Default |
-| --- | --- | --- |
-| **Sources (combined)** | Random, Recently added movies, Recently added shows, Latest movies (release date), Latest shows (release date) | Recently added movies and shows when the hero is first turned on |
-| **Number of media** | 1 to 12 | 6 |
-| **Automatic rotation** | 3 s, 5 s, 10 s, manual | 10 s |
-| **Skip media already watched** | on / off | on |
-| **Only media with a backdrop image** | on / off | on |
+
+| Setting                              | Values                                                                                                         | Default                                                          |
+| ------------------------------------ | -------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------- |
+| **Sources (combined)**               | Random, Recently added movies, Recently added shows, Latest movies (release date), Latest shows (release date) | Recently added movies and shows when the hero is first turned on |
+| **Number of media**                  | 1 to 12                                                                                                        | 6                                                                |
+| **Automatic rotation**               | 3 s, 5 s, 10 s, manual                                                                                         | 10 s                                                             |
+| **Skip media already watched**       | on / off                                                                                                       | on                                                               |
+| **Only media with a backdrop image** | on / off                                                                                                       | on                                                               |
 
 Each slide shows the backdrop, the logo (or the title), year, runtime, rating, community and critic scores, genres and the synopsis, with these actions: **Play** or **Resume** (plus **From the beginning**), **Trailer**, **Favorite**, **Watched**, **More info**. Unticking the last source turns the hero off. Rotation pauses while the pointer or the keyboard focus is on the hero and while the tab is hidden; a pause / play button sits next to the dots, each of which has a hit area of at least 24px; rotation is disabled when the system asks for reduced motion.
 
@@ -161,20 +170,28 @@ The hero needs the administrator option **Offer the sections rendered by this pl
 
 ## Administrator page
 
-Dashboard, Plugins, Customized Home. Three tabs.
+Dashboard, Plugins, Customized Home. Three tabs. The page follows your Jellyfin display language (French and
+English; English for the other languages), like the editor.
+
+![Options tab](screenshots/admin-options.png)
+
+![Layouts tab](screenshots/admin-layouts.png)
+
+![Genres tab](screenshots/admin-genres-thumbs.jpg)
 
 ### Options tab
 
 The **Status** card shows a badge, an explanation and three figures (File Transformation version, users with their own layout, sections in the default layout), plus a **Retry registration** button.
 
-| Option | Default | Effect |
-| --- | --- | --- |
-| **Force the default layout for everybody** | off | Everybody gets the default layout and nobody can customize, administrators included. The two user entry points below and **Allow users…** are turned off and locked. Saved user layouts are kept and used again when the option is turned off |
-| **Allow users to customize their own home page** | on | When off, every user gets the default layout. Administrators can always customize their own page |
-| **"Customize home" button at the bottom of the home page** | on | The round button below the last section |
-| **"Customize home" entry in the user menu** | on | The entry in the user menu |
-| **Offer the sections rendered by this plugin** | on | Makes the plugin sections and the hero available in the editor |
-| **Developer mode** | off | The client script and stylesheet are never cached. Leave off in production |
+
+| Option                                                     | Default | Effect                                                                                                                                                                                                                                        |
+| ---------------------------------------------------------- | ------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Force the default layout for everybody**                 | off     | Everybody gets the default layout and nobody can customize, administrators included. The two user entry points below and**Allow users…** are turned off and locked. Saved user layouts are kept and used again when the option is turned off |
+| **Allow users to customize their own home page**           | on      | When off, every user gets the default layout. Administrators can always customize their own page                                                                                                                                              |
+| **"Customize home" button at the bottom of the home page** | on      | The round button below the last section                                                                                                                                                                                                       |
+| **"Customize home" entry in the user menu**                | on      | The entry in the user menu                                                                                                                                                                                                                    |
+| **Offer the sections rendered by this plugin**             | on      | Makes the plugin sections and the hero available in the editor                                                                                                                                                                                |
+| **Developer mode**                                         | off     | The client script and stylesheet are never cached. Leave off in production                                                                                                                                                                    |
 
 **Save options** applies the changes.
 
@@ -189,11 +206,12 @@ If the editor area says that the client script is not loaded, the script injecti
 
 Thumbnails for the **All genres** section when its cards are set to **Custom images**. One image per card shape:
 
-| Shape | Ratio | Best size |
-| --- | --- | --- |
-| Poster | 2:3 | 600 × 900 px |
-| Landscape | 16:9 | 960 × 540 px |
-| Square | 1:1 | 600 × 600 px |
+
+| Shape     | Ratio | Best size     |
+| --------- | ----- | ------------- |
+| Poster    | 2:3   | 600 × 900 px |
+| Landscape | 16:9  | 960 × 540 px |
+| Square    | 1:1   | 600 × 600 px |
 
 PNG, JPEG or WebP, 5 MB maximum. The section picks the thumbnail that matches the shape of its cards, else another uploaded one (cropped), else the collage of posters.
 
@@ -201,12 +219,13 @@ PNG, JPEG or WebP, 5 MB maximum. The section picks the thumbnail that matches th
 
 Start with the status badge of the **Options** tab.
 
-| Badge | Meaning | What to do |
-| --- | --- | --- |
-| **Active** | The script is injected into the web client | If the home page does not change, the browser or a proxy serves an old page: see below |
-| **File Transformation missing** | The File Transformation plugin is not installed, disabled, or failed to load | Install it (see [Installation](#installation)), check that it is **Active** in Dashboard, Plugins, then restart Jellyfin |
-| **Registration failed** | File Transformation is there but refused the registration; the error is displayed | Update File Transformation and Customized Home, restart, then **Retry registration**. If it persists, open an issue with the error text |
-| **Unavailable** | The page could not read the status | Reload the page; check the Jellyfin log |
+
+| Badge                           | Meaning                                                                           | What to do                                                                                                                             |
+| ------------------------------- | --------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------- |
+| **Active**                      | The script is injected into the web client                                        | If the home page does not change, the browser or a proxy serves an old page: see below                                                 |
+| **File Transformation missing** | The File Transformation plugin is not installed, disabled, or failed to load      | Install it (see[Installation](#installation)), check that it is **Active** in Dashboard, Plugins, then restart Jellyfin                |
+| **Registration failed**         | File Transformation is there but refused the registration; the error is displayed | Update File Transformation and Customized Home, restart, then**Retry registration**. If it persists, open an issue with the error text |
+| **Unavailable**                 | The page could not read the status                                                | Reload the page; check the Jellyfin log                                                                                                |
 
 **Nothing changes on the home page although the badge is Active:**
 
@@ -233,22 +252,24 @@ Start with the status badge of the **Options** tab.
 
 What the plugin stores, all of it on the Jellyfin server, under `plugins/configurations/` in the Jellyfin data directory (`/config/plugins/configurations/` in the official Docker image, `/var/lib/jellyfin/plugins/configurations/` with the Linux packages, `C:\ProgramData\Jellyfin\Server\plugins\configurations\` with the Windows installer):
 
-| Path | Content |
-| --- | --- |
-| `Jellyfin.Plugin.CustomizedHome.xml` | The administrator options and the default layout |
+
+| Path                                                  | Content                                                                                                                                                                                                                                                                                                                                                                                                       |
+| ----------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `Jellyfin.Plugin.CustomizedHome.xml`                  | The administrator options and the default layout                                                                                                                                                                                                                                                                                                                                                              |
 | `Jellyfin.Plugin.CustomizedHome/users/<user id>.json` | One file per user who saved a layout, deleted with that user (and, at server start, for users deleted while the plugin was not running): section keys, display labels (the label of a Jellyfin "recently added in a library" row is never stored; a row that could only be identified by its title keeps that title), order, visibility, formats, hero settings and chosen genres. No watch history, no media |
-| `Jellyfin.Plugin.CustomizedHome/genres/` | The genre thumbnails uploaded by the administrator and their index (`index.json`) |
+| `Jellyfin.Plugin.CustomizedHome/genres/`              | The genre thumbnails uploaded by the administrator and their index (`index.json`)                                                                                                                                                                                                                                                                                                                             |
 
 In the browser, the plugin keeps the collapsed or expanded state of layout folders in `localStorage`. Nothing is sent to any third party: the script only talks to your Jellyfin server. The one outgoing link is the **Trailer** button of the hero when a media has only a remote trailer: it opens that `http(s)` address, taken from the metadata of the media, in a new tab.
 
 Access control:
 
-| Endpoint | Access |
-| --- | --- |
-| `GET /CustomizedHome/customized-home.js`, `customized-home.css` | Anonymous: static client assets, the same for everybody, with no user data |
-| `GET /CustomizedHome/GenreImages/Image` | Anonymous, like every Jellyfin image: serves only the genre thumbnails uploaded by the administrator |
-| Layout, catalog and list of genre thumbnails | Signed-in user; a user reads and writes only their own layout |
-| Default layout, status, user layouts, thumbnail upload and removal | Administrator |
+
+| Endpoint                                                           | Access                                                                                               |
+| ------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------- |
+| `GET /CustomizedHome/customized-home.js`, `customized-home.css`    | Anonymous: static client assets, the same for everybody, with no user data                           |
+| `GET /CustomizedHome/GenreImages/Image`                            | Anonymous, like every Jellyfin image: serves only the genre thumbnails uploaded by the administrator |
+| Layout, catalog and list of genre thumbnails                       | Signed-in user; a user reads and writes only their own layout                                        |
+| Default layout, status, user layouts, thumbnail upload and removal | Administrator                                                                                        |
 
 Every layout sent by a client is validated and normalized by the server, and uploads are size limited (2 MB for a layout, 5 MB for a thumbnail). Thumbnails are identified from their bytes, never from the declared type; SVG is refused; files are named from a hash, never from user input. The default layout is written by an administrator who sees every library: before it is sent to a user, the server removes the "recently added" sections of libraries that user cannot access and sends no library name.
 
