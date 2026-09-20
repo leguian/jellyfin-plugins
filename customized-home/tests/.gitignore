@@ -1,3 +1,6 @@
 node_modules/
 test-results/
 playwright-report/
+
+# Local contrast measurement script: prints MEAS lines, asserts nothing, so it has no place in CI.
+specs/edt_measure.spec.ts
