@@ -1,0 +1,74 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <title>Mock jellyfin-web</title>
+    <style>
+        body { background: #101010; color: #ddd; font-family: sans-serif; margin: 0; }
+        .hide { display: none !important; }
+        /* Same rule as jellyfin-web src/styles/site.scss: plugin pages must override it on purpose. */
+        @media all and (min-width: 50em) { form { max-width: 54em; } }
+        .skinHeader, .MuiAppBar-root { display: flex; gap: 0.5em; padding: 0.5em; background: #202020; }
+        .card { display: inline-block; width: 8em; height: 8em; background: #333; margin: 0.5em; border: 0; color: inherit; }
+        .cardScalable { position: relative; width: 100%; height: 100%; }
+    </style>
+</head>
+<body>
+    <!-- Legacy layout of jellyfin-web (scripts/libraryMenu.js): classes of the header and of the drawer. -->
+    <div class="skinHeader">
+        <button type="button" class="headerButton mainDrawerButton">menu</button>
+        <button type="button" class="headerButton headerSyncButton">sync</button>
+        <button type="button" class="headerButton headerCastButton">cast</button>
+        <button type="button" class="headerButton headerSearchButton">search</button>
+        <button type="button" class="headerButton headerUserButton">user</button>
+        <div class="headerTabs">
+            <button type="button" class="emby-tab-button" data-index="0">Home</button>
+            <button type="button" class="emby-tab-button" data-index="1">Favorites</button>
+        </div>
+    </div>
+    <div class="mainDrawer">
+        <a class="navMenuOption btnSettings" href="#">Settings</a>
+        <a class="navMenuOption btnLogout" href="#">Sign out</a>
+        <a class="navMenuOption btnSelectServer" href="#">Select server</a>
+    </div>
+
+    <!-- Modern layout (apps/modern, MUI): only the stable hooks the plugin relies on. -->
+    <header class="MuiAppBar-root">
+        <button type="button" class="MuiIconButton-root"><svg data-testid="MenuIcon"></svg>drawer</button>
+        <a href="#/home?tab=1">Favorites</a>
+        <a href="#/movies?topParentId=lib-movies&amp;collectionType=movies">Movies</a>
+        <button type="button" aria-controls="app-sync-play-menu">syncplay</button>
+        <button type="button" aria-controls="app-remote-play-menu">remote</button>
+        <a href="#/search">search</a>
+        <button type="button" aria-controls="app-user-menu">user menu</button>
+    </header>
+    <ul id="app-user-menu">
+        <li><a href="#/userprofile?userId=user-1">Profile</a></li>
+        <li><a href="#/mypreferencesmenu">Settings</a></li>
+        <li class="MuiMenuItem-root"><svg data-testid="StorageIcon"></svg>Select server</li>
+        <li class="MuiMenuItem-root"><svg data-testid="LogoutIcon"></svg>Sign out</li>
+    </ul>
+    <div class="MuiDrawer-root">modern drawer</div>
+
+    <div id="indexPage" class="page homePage"><div id="homeTab"><div class="sections"><div class="verticalSection">Home</div></div></div></div>
+
+    <!-- Sign-in page (apps/legacy/controllers/session/login): cards and the manual form. -->
+    <div id="loginPage" class="page hide">
+        <form class="manualLoginForm hide">
+            <input id="txtManualName" required />
+            <input id="txtManualPassword" type="password" />
+            <input type="checkbox" class="chkRememberLogin" />
+            <button type="submit" class="button-submit">Sign in</button>
+        </form>
+        <div class="visualLoginForm">
+            <div id="divUsers" class="itemsContainer">
+                <button type="button" class="card"><div class="cardBox"><div class="cardScalable"><div class="cardContent" data-haspw="true" data-username="Tim" data-userid="tim-id"><div class="cardImageContainer" style="background-image:url('data:image/gif;base64,R0lGODlhAQABAAAAACw=');"></div></div></div><div class="cardText">Tim</div></div></button>
+                <button type="button" class="card"><div class="cardBox"><div class="cardScalable"><div class="cardContent" data-haspw="true" data-username="Will" data-userid="will-id"></div></div><div class="cardText">Will</div></div></button>
+                <button type="button" class="card"><div class="cardBox"><div class="cardScalable"><div class="cardContent" data-haspw="true" data-username="Parent" data-userid="parent-id"></div></div><div class="cardText">Parent</div></div></button>
+            </div>
+        </div>
+    </div>
+
+    <div id="adminHost"></div>
+</body>
+</html>

@@ -18,7 +18,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        plugin: [customized-home]
+        plugin: [customized-home, parental-control]
         # Server lines; scripts/package.py resolves each one to its oldest release (JELLYFIN_FLOORS).
         jellyfin: ["12", "10.11"]
     steps:
@@ -42,7 +42,11 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        jellyfin: ["12", "10.11"]
+        include:
+          - { plugin: customized-home, project: Jellyfin.Plugin.CustomizedHome, package-variable: CUSTOMIZED_HOME_PACKAGE, jellyfin: "12" }
+          - { plugin: customized-home, project: Jellyfin.Plugin.CustomizedHome, package-variable: CUSTOMIZED_HOME_PACKAGE, jellyfin: "10.11" }
+          - { plugin: parental-control, project: Jellyfin.Plugin.ParentalControl, package-variable: PARENTAL_CONTROL_PACKAGE, jellyfin: "12" }
+          - { plugin: parental-control, project: Jellyfin.Plugin.ParentalControl, package-variable: PARENTAL_CONTROL_PACKAGE, jellyfin: "10.11" }
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-dotnet@v4
@@ -54,20 +58,27 @@ jobs:
       - name: Package, then run the unit tests against the oldest server of the line and against that package
         env:
           JELLYFIN_LINE: ${{ matrix.jellyfin }}
+          PLUGIN: ${{ matrix.plugin }}
+          PROJECT: ${{ matrix.project }}
+          PACKAGE_VARIABLE: ${{ matrix.package-variable }}
           PYTHONDONTWRITEBYTECODE: "1"
         run: |
           set -o pipefail
-          python3 scripts/package.py customized-home --jellyfin "${JELLYFIN_LINE}" --output artifacts > summary.json
-          CUSTOMIZED_HOME_PACKAGE="${GITHUB_WORKSPACE}/$(python3 -c "import json; print(json.load(open('summary.json'))['file'])")"
-          export CUSTOMIZED_HOME_PACKAGE
+          python3 scripts/package.py "${PLUGIN}" --jellyfin "${JELLYFIN_LINE}" --output artifacts > summary.json
+          # The assembly tests read the produced zip from a variable named after the plugin.
+          export "${PACKAGE_VARIABLE}=${GITHUB_WORKSPACE}/$(python3 -c "import json; print(json.load(open('summary.json'))['file'])")"
           VERSION=$(python3 -c "import json; print(json.load(open('summary.json'))['jellyfin'])")
-          dotnet test customized-home/Jellyfin.Plugin.CustomizedHome.Tests/Jellyfin.Plugin.CustomizedHome.Tests.csproj --nologo -p:JellyfinVersion="${VERSION}"
+          dotnet test "${PLUGIN}/${PROJECT}.Tests/${PROJECT}.Tests.csproj" --nologo -p:JellyfinVersion="${VERSION}"
 
   browser-tests:
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        plugin: [customized-home, parental-control]
     defaults:
       run:
-        working-directory: customized-home/tests
+        working-directory: ${{ matrix.plugin }}/tests
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4

@@ -4,29 +4,38 @@
 
 ## Nature du dépôt
 
-Plugins Jellyfin, un sous-dossier par plugin. Actuellement : `customized-home/`.
+Plugins Jellyfin, un sous-dossier par plugin, même structure pour chacun :
 
-| Couche | Techno | Où |
+| Plugin | Dossier | Préfixes CSS (client / admin) | Variable CI du zip |
+|--------|---------|-------------------------------|--------------------|
+| Customized Home | `customized-home/` | `ch-` / `cha-` | `CUSTOMIZED_HOME_PACKAGE` |
+| Parental Control | `parental-control/` | `pc-` / `pca-` | `PARENTAL_CONTROL_PACKAGE` |
+
+| Couche | Techno | Où (`<plugin>/`) |
 |--------|--------|----|
-| Serveur | C# (.NET 10 pour Jellyfin 12.x, .NET 9 pour 10.11.x) | `customized-home/Jellyfin.Plugin.CustomizedHome/` |
-| Client | JavaScript vanilla + CSS, injectés dans jellyfin-web | `.../Web/customized-home.{js,css}` |
+| Serveur | C# (.NET 10 pour Jellyfin 12.x, .NET 9 pour 10.11.x) | `Jellyfin.Plugin.<Nom>/` |
+| Client | JavaScript vanilla + CSS, injectés dans jellyfin-web | `.../Web/<plugin>.{js,css}` |
 | Page admin | HTML + JS inline, embarquée en ressource | `.../Configuration/configPage.html` |
-| Tests | Playwright + TypeScript strict | `customized-home/tests/` |
+| Tests | xUnit (C#), Playwright + TypeScript strict | `Jellyfin.Plugin.<Nom>.Tests/`, `tests/` |
 | Outillage | Python (packaging, manifest), GitHub Actions | `scripts/`, `.github/workflows/` |
 
 ## Contraintes techniques (non négociables)
 
 - **JS client = vanilla, un seul fichier, pas de build, pas de dépendance.** Il est injecté tel quel dans jellyfin-web via le plugin File Transformation. Pas de TypeScript, pas de framework, pas d'import.
-- **CSS custom obligatoire** (pas de Tailwind). Classes préfixées `ch-` (client) et `cha-` (page admin). Couleurs de surface dérivées de `currentColor` via `color-mix` : le dashboard peut être clair ou sombre.
+- **CSS custom obligatoire** (pas de Tailwind). Classes préfixées par plugin (tableau ci-dessus). Couleurs de surface dérivées de `currentColor` via `color-mix` : le dashboard peut être clair ou sombre.
 - **Icônes : Material Icons** (police fournie par jellyfin-web), par nom (`other_houses`, `tune`…). Jamais de caractère unicode en guise d'icône.
 - **Ne jamais déplacer les sections de l'accueil dans le DOM.** L'ordre se fait par `order` CSS sur un conteneur flex : déplacer un `emby-itemscontainer` réinitialise ses données.
-- **Dépendance au DOM de jellyfin-web** : `#homeTab .sections`, `.verticalSection`, classes `sectionN`. À revérifier à chaque version majeure de Jellyfin.
+- **Dépendance au DOM de jellyfin-web** : `#homeTab .sections`, `.verticalSection`, classes `sectionN` (Customized Home) ; icônes MUI `svg[data-testid]`, `aria-controls` des menus, `#divUsers .card`, `.manualLoginForm`, `Dashboard.logout` (Parental Control). À revérifier à chaque version majeure de Jellyfin.
+- **Parental Control : la sécurité est côté serveur.** Filtrage = tags Jellyfin + `BlockedTags`/`AllowedTags` de la politique, horaires = `AccessSchedules`, temps d'écran = `ScreenTimeService`. Le script client (menus masqués, verrou, pavé PIN) n'est que du confort : ne jamais y mettre une restriction qui n'existe pas aussi côté serveur. Les tags sont écrits sur les descendants (saisons, épisodes, membres de collection) car 10.11 n'applique pas les tags des ancêtres. Ne jamais retirer un tag que le plugin n'a pas écrit (`tags.json`).
+- **API qui diffère entre 10.11 et 12.x** : `#if JELLYFIN_12` (constante définie par le csproj selon `JellyfinVersion`), regroupé dans `JellyfinCompat`.
 - **File Transformation** : enregistrement par réflexion, clé de pipeline `index.html` (chaîne exacte partagée avec les autres plugins, sinon un seul pipeline s'exécute). Le callback doit laisser intact tout contenu sans `</body>`.
 - **Le CSS du dashboard plafonne `form` à 54em** : toute page admin doit le surcharger explicitement.
-- C# : `TreatWarningsAsErrors`, analyzers actifs. Logs via `[LoggerMessage]`. API : `[Authorize]` partout sauf assets client, admin via `Policies.RequiresElevation`. Toute entrée client est validée et normalisée côté serveur (`LayoutValidator`).
-- Textes UI : FR + EN. Le client a sa table `I18N` dans le JS ; la page admin a la sienne dans le `<script>` de `configPage.html` (elle doit rester lisible quand le script client n'est pas chargé, c'est justement la panne qu'elle signale). Le balisage de la page admin porte l'anglais en repli et des attributs `data-cha-i18n` appliqués par `translatePage`.
+- C# : `TreatWarningsAsErrors`, analyzers actifs. Logs via `[LoggerMessage]`. API : `[Authorize]` partout sauf assets client, admin via `Policies.RequiresElevation`. Toute entrée client est validée et normalisée côté serveur (`LayoutValidator`, `ProfileValidator`).
+- Textes UI : FR + EN. Le client a sa table `I18N` dans le JS ; la page admin a la sienne dans le `<script>` de `configPage.html` (elle doit rester lisible quand le script client n'est pas chargé, c'est justement la panne qu'elle signale). Le balisage de la page admin porte l'anglais en repli et des attributs `data-cha-i18n` / `data-pca-i18n` appliqués par `translatePage`.
 
 ## Commandes
+
+Exemples pour `customized-home` ; même chose pour `parental-control` (projets `Jellyfin.Plugin.ParentalControl*`, script `Web/parental-control.js`).
 
 ```powershell
 # Build (le SDK .NET 9 local ne compile que la cible 10.11 ; la cible 12.x est validée par la CI)
@@ -48,20 +57,21 @@ npm run typecheck
 npm run screenshots   # captures dans test-results/screenshots, à regarder après tout changement d'UI
 ```
 
-Avant tout push : build + `dotnet test` + `node --check` + `npm test` + `npm run typecheck` + **packaging** (`python scripts/package.py customized-home --jellyfin 10.11 --output artifacts`). Le packaging est ce que la release exécute : l'oublier a déjà cassé une release (ajout d'un second `.csproj`). Après un changement d'UI : `npm run screenshots` et contrôle visuel des captures.
+Avant tout push, pour chaque plugin touché : build + `dotnet test` + `node --check` + `npm test` + `npm run typecheck` + **packaging** (`python scripts/package.py <plugin> --jellyfin 10.11 --output artifacts`). Le packaging est ce que la release exécute : l'oublier a déjà cassé une release (ajout d'un second `.csproj`). Après un changement d'UI : `npm run screenshots` et contrôle visuel des captures.
 
 ## Tests
 
 - DOM de l'accueil simulé (`tests/fixtures/home.html`) + `ApiClient` factice (`apiClientStub.js`). La fixture reproduit les règles CSS de jellyfin-web qui nous ont déjà piégés (plafond des `form`).
 - Toute nouvelle fonctionnalité du client ou de la page admin arrive avec son test. Un test doit échouer quand on retire le code qu'il couvre : le vérifier.
+- Parental Control a en plus des tests sur serveur réel (Linux, hors CI) : `parental-control/tests/server/` (`setup-env.sh`, `install-plugin.sh`, `restart-server.sh`, `api_test.py`). Ils vérifient que le serveur masque vraiment le contenu ; à relancer après tout changement du filtrage ou des tags.
 - Limite connue : ces tests ne détectent pas un changement de structure de jellyfin-web. Le dire quand c'est pertinent, ne pas présenter un test vert comme une validation sur serveur réel.
 
 ## Git et release
 
 - 1 évolution = 1 branche (`feat/…`, `fix/…`, `chore/…`), Conventional Commits en anglais.
 - **Après chaque merge dans `main` : supprimer la branche mergée, en local et sur GitHub, systématiquement** (`git branch -d` puis `git push origin --delete`). Vérifier d'abord qu'elle est bien mergée.
-- **Release = changement de `version` dans `customized-home/build.yaml` mergé dans `main`.** Le workflow `release.yml` crée le tag `customized-home-v<version>`, construit les deux zips, publie la release et met à jour `manifest.json`. Sans changement de version, rien n'est publié.
-- **Toujours compiler contre le plus ancien serveur de chaque ligne** (`JELLYFIN_FLOORS` dans `scripts/package.py` : 10.11.0 et 12.0.0) : un serveur refuse un plugin dont les références Jellyfin sont plus récentes que ses assemblies. Le `targetAbi` déclaré est exactement la version de compilation ; `package.py` contrôle les paquets restaurés et, en CI, `PluginAssemblyTests` compare le `meta.json` du zip produit aux références de la DLL qu'il contient (variable `CUSTOMIZED_HOME_PACKAGE`).
+- **Release = changement de `version` dans `<plugin>/build.yaml` mergé dans `main`.** Un seul plugin par push. Le workflow `release.yml` crée le tag `<plugin>-v<version>`, construit les deux zips, publie la release et met à jour `manifest.json`. Sans changement de version, rien n'est publié.
+- **Toujours compiler contre le plus ancien serveur de chaque ligne** (`JELLYFIN_FLOORS` dans `scripts/package.py` : 10.11.0 et 12.0.0) : un serveur refuse un plugin dont les références Jellyfin sont plus récentes que ses assemblies. Le `targetAbi` déclaré est exactement la version de compilation ; `package.py` contrôle les paquets restaurés et, en CI, `PluginAssemblyTests` compare le `meta.json` du zip produit aux références de la DLL qu'il contient (variable du tableau « Nature du dépôt »).
 - La release attend tous les jobs de `build.yml` (appelé par `release.yml`) : un test rouge bloque la publication. Si la release est publiée mais que l'étape manifest a échoué : « Run workflow » sur `main`, le manifest est réparé à partir des zips publiés.
 - Ne jamais `git add -A` : lister les fichiers (des caches `__pycache__` ont déjà été commités par erreur).
 - À chaque bump, aligner : `build.yaml` (`version`, `changelog`), `<Version>` du csproj, `const VERSION` du JS.
@@ -77,6 +87,6 @@ Avant tout push : build + `dotnet test` + `node --check` + `npm test` + `npm run
 
 ## Documentation
 
-- `customized-home/README.md` (français) : fonctionnement, sections, API, tests, points de vigilance. À mettre à jour dans le même commit que le code.
-- `customized-home/README.en.md` (guide utilisateur en anglais, lié depuis le README racine) : à mettre à jour dans le même commit dès qu'un libellé, une option, une valeur par défaut ou une limite qu'il cite change.
+- `<plugin>/README.md` (français) : fonctionnement, sections, API, tests, points de vigilance. À mettre à jour dans le même commit que le code.
+- `<plugin>/README.en.md` (guide utilisateur en anglais, lié depuis le README racine) : à mettre à jour dans le même commit dès qu'un libellé, une option, une valeur par défaut ou une limite qu'il cite change.
 - Signaler ce qui n'a pas été vérifié (serveur réel, cible 12.x en local, thème clair du dashboard).

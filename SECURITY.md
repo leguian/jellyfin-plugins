@@ -7,6 +7,7 @@ Only the latest release of each plugin receives security fixes. The latest versi
 | Plugin | Supported version |
 | --- | --- |
 | Customized Home | Latest release, on Jellyfin 10.11.x (from 10.11.0) and 12.x (from 12.0.0) |
+| Parental Control | Latest release, on Jellyfin 10.11.x (from 10.11.0) and 12.x (from 12.0.0) |
 
 Update the plugin before reporting: the problem may already be fixed.
 
@@ -38,6 +39,9 @@ Design notes that are not vulnerabilities by themselves:
 
 - The client script and stylesheet of Customized Home (`/CustomizedHome/customized-home.js`, `.css`) are served without authentication, like the Jellyfin web client itself. They are static and hold no user data.
 - Genre thumbnails uploaded by an administrator (`/CustomizedHome/GenreImages/Image`) are served without authentication, like every Jellyfin image.
+- The client script and stylesheet of Parental Control (`/ParentalControl/parental-control.js`, `.css`) are served without authentication for the same reason.
+- `/ParentalControl/SignIn` is anonymous: the sign-in page has nobody signed in. It lists only accounts the sign-in page already shows (not hidden, not disabled) that use a PIN pad, with the PIN length and whether the access schedule allows them right now, never the schedule itself.
+- The interface options of Parental Control (hidden menu elements, locked session) run in the web client and are not a security boundary: content filtering, access hours and the screen time limit are enforced by the server.
 - Administrators are trusted: an administrator can already change anything on the server.
 
-A way to read or change the layout of another user, to reach an administrator endpoint as a regular user, to learn about libraries a user cannot access, to store a file outside the plugin folder, or to run script in another user's session through data handled by the plugin is a vulnerability: please report it.
+A way to read or change the layout of another user, to reach an administrator endpoint as a regular user, to learn about libraries a user cannot access, to store a file outside the plugin folder, or to run script in another user's session through data handled by the plugin is a vulnerability: please report it. For Parental Control, so is a way for a controlled user to see content their profile hides, to change their own profile or screen time, or to get past the parent PIN attempt limit.
