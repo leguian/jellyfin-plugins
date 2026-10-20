@@ -297,5 +297,32 @@
         "timestamp": "2026-09-18T07:14:09Z"
       }
     ]
+  },
+  {
+    "guid": "2f93bc5b-aeb8-43f0-ba7f-7c89fd9d0afb",
+    "name": "Parental Control",
+    "description": "Parental Control turns the parental settings of Jellyfin into family profiles. For each child: show everything except what you hide, or only what you allow (titles, series, collections, genres, tags); labels you put on titles and keep there (new episodes and collection members included); age rating, libraries, access hours painted on a weekly grid and daily screen time with a warning, a stop at the end and extra time granted by a parent. Content filtering is enforced by the server through tags and the user policy, so it applies to every Jellyfin app, TV apps included. In the web client (browser, Jellyfin Desktop, the Android and iOS apps): elements of the menu hidden, a session locked by a parent PIN, a friendly screen when the time is up, the time left, and a big PIN pad on the sign-in page. Activity of the last days. The web client features need the File Transformation plugin.",
+    "overview": "Family profiles for children: hide or allow content, tags, screen time, simplified interface and PIN sign-in",
+    "owner": "leguian",
+    "category": "General",
+    "imageUrl": "https://raw.githubusercontent.com/leguian/jellyfin-plugins/main/parental-control/logo.png",
+    "versions": [
+      {
+        "version": "1.0.0.0",
+        "changelog": "First release: family profiles with hidden or allowed content (titles, series, collections, genres, tags), labels, age rating and libraries, access hours, daily screen time with extra time, interface elements hidden in the web client, locked session, PIN pad sign-in and activity of the last days.",
+        "targetAbi": "12.0.0.0",
+        "sourceUrl": "https://github.com/leguian/jellyfin-plugins/releases/download/parental-control-v1.0.0.0/parental-control_1.0.0.0_jellyfin-12.zip",
+        "checksum": "a16108cb12680a63731ba6fe7674cd75",
+        "timestamp": "2026-10-20T11:32:02Z"
+      },
+      {
+        "version": "1.0.0.0",
+        "changelog": "First release: family profiles with hidden or allowed content (titles, series, collections, genres, tags), labels, age rating and libraries, access hours, daily screen time with extra time, interface elements hidden in the web client, locked session, PIN pad sign-in and activity of the last days.",
+        "targetAbi": "10.11.0.0",
+        "sourceUrl": "https://github.com/leguian/jellyfin-plugins/releases/download/parental-control-v1.0.0.0/parental-control_1.0.0.0_jellyfin-10.11.zip",
+        "checksum": "d3eadfe3f722d1d30b4908af5b734a7f",
+        "timestamp": "2026-10-20T11:32:02Z"
+      }
+    ]
   }
 ]
