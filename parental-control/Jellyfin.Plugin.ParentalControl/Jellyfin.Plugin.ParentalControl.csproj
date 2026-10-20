@@ -1,0 +1,60 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <!--
+      Jellyfin server line to build against, always its OLDEST release: a server only loads plugins whose
+      Jellyfin references are not newer than its own assemblies (scripts/package.py, JELLYFIN_FLOORS).
+      12.x  -> net10.0 (default)
+      10.11 -> net9.0  (dotnet build -p:JellyfinVersion=10.11.0)
+    -->
+    <JellyfinVersion Condition="'$(JellyfinVersion)' == ''">12.0.0</JellyfinVersion>
+    <TargetFramework Condition="$(JellyfinVersion.StartsWith('10.11'))">net9.0</TargetFramework>
+    <TargetFramework Condition="$(JellyfinVersion.StartsWith('12.'))">net10.0</TargetFramework>
+    <!-- The few server APIs that changed between the two lines are switched on this symbol (Helpers/JellyfinCompat.cs). -->
+    <DefineConstants Condition="$(JellyfinVersion.StartsWith('12.'))">$(DefineConstants);JELLYFIN_12</DefineConstants>
+    <RootNamespace>Jellyfin.Plugin.ParentalControl</RootNamespace>
+    <AssemblyName>Jellyfin.Plugin.ParentalControl</AssemblyName>
+    <LangVersion>latest</LangVersion>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+    <AnalysisLevel>latest-recommended</AnalysisLevel>
+    <!-- CA1812: DI-instantiated classes; CA2227: settable collections are required by XmlSerializer. -->
+    <NoWarn>$(NoWarn);CA1812;CA2227</NoWarn>
+    <Version Condition="'$(Version)' == ''">1.0.0.0</Version>
+    <AssemblyVersion>$(Version)</AssemblyVersion>
+    <FileVersion>$(Version)</FileVersion>
+    <Authors>leguian</Authors>
+    <Description>Family profiles for children: hide or allow content, tags, screen time, simplified interface and PIN sign-in</Description>
+    <RepositoryUrl>https://github.com/leguian/jellyfin-plugins</RepositoryUrl>
+    <RepositoryType>git</RepositoryType>
+    <PackageLicenseExpression>GPL-3.0-only</PackageLicenseExpression>
+    <SatelliteResourceLanguages>en</SatelliteResourceLanguages>
+    <DebugType>portable</DebugType>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Jellyfin.Controller" Version="$(JellyfinVersion)">
+      <ExcludeAssets>runtime</ExcludeAssets>
+    </PackageReference>
+    <PackageReference Include="Jellyfin.Model" Version="$(JellyfinVersion)">
+      <ExcludeAssets>runtime</ExcludeAssets>
+    </PackageReference>
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- Test seams (internal constructors and overloads) stay out of the public surface and of the DI container. -->
+    <InternalsVisibleTo Include="Jellyfin.Plugin.ParentalControl.Tests" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Remove="Configuration\configPage.html" />
+    <None Remove="Web\parental-control.js" />
+    <None Remove="Web\parental-control.css" />
+    <EmbeddedResource Include="Configuration\configPage.html" />
+    <EmbeddedResource Include="Web\parental-control.js" />
+    <EmbeddedResource Include="Web\parental-control.css" />
+  </ItemGroup>
+
+</Project>

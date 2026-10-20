@@ -8,15 +8,15 @@ Thank you for helping. Bug reports, ideas and pull requests are welcome, in Engl
 
 ## Repository layout
 
-One folder per plugin. Today: `customized-home/`.
+One folder per plugin: `customized-home/` (Customized Home), `parental-control/` (Parental Control). Each one has the same layout (`<plugin>` is the folder, `<Project>` the C# project, for example `Jellyfin.Plugin.ParentalControl`).
 
 | Layer | Technology | Where |
 | --- | --- | --- |
-| Server | C# (.NET 10 for Jellyfin 12.x, .NET 9 for Jellyfin 10.11.x) | `customized-home/Jellyfin.Plugin.CustomizedHome/` |
-| Client | Vanilla JavaScript and CSS, injected into the Jellyfin web client | `customized-home/Jellyfin.Plugin.CustomizedHome/Web/` |
-| Administrator page | HTML with inline JavaScript, embedded resource | `customized-home/Jellyfin.Plugin.CustomizedHome/Configuration/configPage.html` |
-| Unit tests | xUnit | `customized-home/Jellyfin.Plugin.CustomizedHome.Tests/` |
-| Browser tests | Playwright, strict TypeScript | `customized-home/tests/` |
+| Server | C# (.NET 10 for Jellyfin 12.x, .NET 9 for Jellyfin 10.11.x) | `<plugin>/<Project>/` |
+| Client | Vanilla JavaScript and CSS, injected into the Jellyfin web client | `<plugin>/<Project>/Web/` |
+| Administrator page | HTML with inline JavaScript, embedded resource | `<plugin>/<Project>/Configuration/configPage.html` |
+| Unit tests | xUnit | `<plugin>/<Project>.Tests/` |
+| Browser tests | Playwright, strict TypeScript | `<plugin>/tests/` |
 | Tooling | Python (packaging, manifest), GitHub Actions | `scripts/`, `.github/workflows/` |
 
 ## Branches and commits
@@ -30,13 +30,13 @@ One folder per plugin. Today: `customized-home/`.
 ## Rules of the code
 
 - **The client script is one vanilla JavaScript file**: no build step, no dependency, no import, no TypeScript, no framework. It is injected as is into the Jellyfin web client.
-- **Custom CSS**, classes prefixed `ch-` (client) and `cha-` (administrator page). Surface colors derive from `currentColor` with `color-mix`: the dashboard may be light or dark.
+- **Custom CSS**, classes prefixed `ch-` / `cha-` (Customized Home client / administrator page) and `pc-` / `pca-` (Parental Control). Surface colors derive from `currentColor` with `color-mix`: the dashboard may be light or dark.
 - **Icons are Material Icons by name** (`other_houses`, `tune`…), the font shipped with the web client. Never a unicode character as an icon.
 - **Never move the home sections in the DOM.** Order is set with the CSS `order` property on a flex container: moving an `emby-itemscontainer` resets its data.
-- **User-facing strings of the client** go through the `I18N` table of the script, in English and French. The administrator page is in English.
+- **User-facing strings** go through the `I18N` table of the client script and the one of the administrator page, in English and French.
 - Identifiers, comments and log messages in English.
-- C#: warnings are errors and analyzers are on. Logs through `[LoggerMessage]`. Every endpoint carries `[Authorize]` except the client assets and the genre thumbnail image (served like any Jellyfin image, see `SECURITY.md`); administrator endpoints use `Policies.RequiresElevation`. Every input from a client is validated and normalized on the server (`LayoutValidator`).
-- Stay on Jellyfin APIs that exist in both 10.11.0 and 12.0.0: the plugin is compiled against the oldest server of each line.
+- C#: warnings are errors and analyzers are on. Logs through `[LoggerMessage]`. Every endpoint carries `[Authorize]` except the client assets and the few anonymous endpoints listed in `SECURITY.md`; administrator endpoints use `Policies.RequiresElevation`. Every input from a client is validated and normalized on the server (`LayoutValidator`, `ProfileValidator`).
+- Stay on Jellyfin APIs that exist in both 10.11.0 and 12.0.0: the plugin is compiled against the oldest server of each line. Where they differ, switch on the `JELLYFIN_12` symbol in one helper (see `parental-control/Jellyfin.Plugin.ParentalControl/Helpers/JellyfinCompat.cs`).
 - No unresolved `TODO`, no hardcoded magic values: use named constants.
 
 ## Tests
@@ -47,7 +47,7 @@ One folder per plugin. Today: `customized-home/`.
 
 ## Before you push
 
-Run all of it; the CI runs the same checks and a red job blocks a release.
+Run all of it for the plugin you changed (the commands below are for Customized Home; replace the folder and project names for Parental Control); the CI runs the same checks and a red job blocks a release.
 
 ```bash
 # 1. Build (warnings are errors). With the .NET 9 SDK only the 10.11 target builds locally; the CI builds 12.x.
@@ -77,7 +77,7 @@ After a change of the interface, also run `npm run screenshots` in `customized-h
 
 - Describe what changes for the user and why, and list what you ran with the results.
 - Say what you could not verify: a real Jellyfin server, the 12.x target locally, the light theme of the dashboard, a client you do not own.
-- Update the documentation in the same pull request: [`customized-home/README.md`](customized-home/README.md) (French technical reference) and [`customized-home/README.en.md`](customized-home/README.en.md) (English user guide) when the behavior described there changes.
+- Update the documentation in the same pull request: `<plugin>/README.md` (French technical reference) and `<plugin>/README.en.md` (English user guide) when the behavior described there changes.
 - The descriptive texts of the plugin stay aligned: `Plugin.cs` (`Description`), `build.yaml` (`overview`), the csproj (`<Description>`), the subtitle of `configPage.html` and the plugin table of the root [README.md](README.md).
 
 ## License

@@ -9,7 +9,7 @@ body:
         Thanks for taking the time to report a problem. English or French are both fine.
 
         Before you continue:
-        - The plugin only changes the Jellyfin **web client**: browsers, the official Android and iOS apps, Jellyfin Media Player. Android TV, Swiftfin, Kodi and other native apps are not affected, by design.
+        - Customized Home only changes the Jellyfin **web client**: browsers, the official Android and iOS apps, Jellyfin Media Player. Android TV, Swiftfin, Kodi and other native apps are not affected, by design. Parental Control filters content in every app, but its interface options only exist in the web client.
         - Read the [troubleshooting section](https://github.com/leguian/jellyfin-plugins/blob/main/customized-home/README.en.md#troubleshooting): File Transformation must be installed, and a hard refresh (Ctrl+F5) is needed after an install or an update.
         - A security problem must **not** be reported here: follow the [security policy](https://github.com/leguian/jellyfin-plugins/blob/main/SECURITY.md).
   - type: dropdown
@@ -18,6 +18,7 @@ body:
       label: Plugin
       options:
         - Customized Home
+        - Parental Control
     validations:
       required: true
   - type: input

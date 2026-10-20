@@ -9,6 +9,7 @@ Jellyfin plugins maintained in this repository, one folder per plugin, published
 | Plugin | Folder | Description | Documentation |
 | --- | --- | --- | --- |
 | Customized Home | [`customized-home/`](customized-home/) | Easily edit and organize the sections on your homepage: drag and drop order, hide or remove sections, display format per section, sections rendered by the plugin (combined continue watching / next up, latest by release date, collections, watch again, because you watched, genres), hero banner, administrator default layout. **Web client only**: browsers, the official Android and iOS apps and Jellyfin Media Player; Android TV, Swiftfin, Kodi and other native apps are not affected. | [English user guide](customized-home/README.en.md) · [Référence technique (français)](customized-home/README.md) |
+| Parental Control | [`parental-control/`](parental-control/) | Family profiles for children: hide or allow content, tags, screen time, simplified interface and PIN sign-in. Content filtering, access hours and screen time are enforced by the server, in **every** Jellyfin app; the interface options (hidden menu elements, locked session, end of time screen, PIN pad on the sign-in page) belong to the web client. | [English user guide](parental-control/README.en.md) · [Référence technique (français)](parental-control/README.md) |
 
 ## Add the repository to Jellyfin
 
@@ -18,7 +19,7 @@ In the Jellyfin Dashboard, open the plugin repositories (Dashboard, Plugins, Rep
 https://raw.githubusercontent.com/leguian/jellyfin-plugins/main/manifest.json
 ```
 
-The plugins then appear in the catalog. Customized Home needs the [File Transformation](https://github.com/IAmParadox27/jellyfin-plugin-file-transformation) plugin, installed first from its own repository: the [user guide](customized-home/README.en.md#installation) gives the order of the steps.
+The plugins then appear in the catalog. Customized Home needs the [File Transformation](https://github.com/IAmParadox27/jellyfin-plugin-file-transformation) plugin, installed first from its own repository: the [user guide](customized-home/README.en.md#installation) gives the order of the steps. Parental Control uses it too, for its web client features only ([user guide](parental-control/README.en.md#installation)).
 
 | Jellyfin server | Supported |
 | --- | --- |
@@ -29,7 +30,7 @@ The plugins then appear in the catalog. Customized Home needs the [File Transfor
 
 A release is a change of `version` in `<plugin>/build.yaml` merged into `main`. Nothing is published without it.
 
-1. Bump `version` and `changelog` in `<plugin>/build.yaml`, and keep the `<Version>` of the csproj and the `VERSION` constant of the client script aligned.
+1. Bump `version` and `changelog` in `<plugin>/build.yaml`, and keep the `<Version>` of the csproj and the `VERSION` constant of the client script aligned. One plugin per push to `main`: the workflow releases the plugin whose `build.yaml` changed.
 2. Merge into `main`. The `release.yml` workflow runs every job of `build.yml` first (both builds, unit tests on both targets, browser tests): a red test blocks the release.
 3. The workflow creates the tag `<plugin>-v<version>`, builds one zip per server line (Jellyfin 12.x on .NET 10, Jellyfin 10.11.x on .NET 9), publishes the GitHub release and updates `manifest.json` on `main` (`scripts/update-manifest.py`).
 4. "Run workflow" on `main` finishes the current version: it publishes the release when it does not exist yet, or repairs `manifest.json` from the published zips when only that step failed.
@@ -41,6 +42,7 @@ Each zip is compiled against the oldest server of its line (10.11.0 and 12.0.0, 
 Requirements: .NET SDK 10 (Jellyfin 12.x target) or .NET SDK 9 (Jellyfin 10.11.x target only), Python 3 for packaging, Node.js for the browser tests.
 
 ```bash
+# Same commands for each plugin: replace customized-home / CustomizedHome by parental-control / ParentalControl.
 # Build: Jellyfin 12.x (default target, .NET SDK 10)
 dotnet build customized-home/Jellyfin.Plugin.CustomizedHome/Jellyfin.Plugin.CustomizedHome.csproj -c Release
 # Build: Jellyfin 10.11.x (.NET SDK 9 or 10)
@@ -66,7 +68,7 @@ npm test
 npm run typecheck
 ```
 
-The browser tests run the client script against a simulated Jellyfin home page: they do not detect a change in the structure of the Jellyfin web client. After a major Jellyfin release, check on a real server.
+The browser tests run the client script against a simulated Jellyfin web client: they do not detect a change in the structure of the Jellyfin web client. After a major Jellyfin release, check on a real server (`parental-control/tests/server/` builds one from source and runs end-to-end checks against it).
 
 ## Contributing and security
 
@@ -80,9 +82,11 @@ The browser tests run the client script against a simulated Jellyfin home page: 
 
 ## En français
 
-Plugins Jellyfin maintenus dans ce dépôt, un sous-dossier par plugin. Actuellement : **Customized Home** ([`customized-home/`](customized-home/)), qui permet à chaque utilisateur de réorganiser la page d'accueil du client web (ordre par glisser-déposer, masquage, format par section, sections intégrées, bannière hero, disposition par défaut définie par l'administrateur).
+Plugins Jellyfin maintenus dans ce dépôt, un sous-dossier par plugin :
 
-- Documentation complète en français (fonctionnement, sections, API, tests, points de vigilance) : [customized-home/README.md](customized-home/README.md).
+- **Customized Home** ([`customized-home/`](customized-home/)) : chaque utilisateur réorganise la page d'accueil du client web (ordre par glisser-déposer, masquage, format par section, sections intégrées, bannière hero, disposition par défaut définie par l'administrateur). Documentation : [customized-home/README.md](customized-home/README.md).
+- **Parental Control** ([`parental-control/`](parental-control/)) : profils familiaux pour les enfants (contenus masqués ou autorisés, étiquettes, classification, horaires, temps d'écran, interface simplifiée, connexion par code). Le filtrage est appliqué par le serveur dans toutes les applis. Documentation : [parental-control/README.md](parental-control/README.md).
+
 - Dépôt de plugins à ajouter dans le tableau de bord Jellyfin (Plugins, Dépôts) :
 
   ```
